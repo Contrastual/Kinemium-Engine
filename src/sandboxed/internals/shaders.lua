@@ -1,0 +1,26 @@
+if zune.platform.os == "linux" then
+	return
+end
+local KinemiumShaderService = game:GetService("KinemiumShaderService")
+local fs = zune.fs
+
+local entries = fs.entries
+for _, shaderFolder in pairs(entries("./src/shaders")) do
+	local shader_path = "./src/shaders/" .. shaderFolder.name .. "/"
+
+	local fragment, vertex
+
+	for _, file in pairs(entries(shader_path)) do
+		local isFragment = file.name:match(".frag")
+		local isVertex = file.name:match(".vert")
+		local filePath = shader_path .. file.name
+
+		if isFragment then
+			fragment = filePath
+		elseif isVertex then
+			vertex = filePath
+		end
+		print(fragment, vertex)
+	end
+	KinemiumShaderService.LoadShader(shaderFolder.name, vertex, fragment)
+end
