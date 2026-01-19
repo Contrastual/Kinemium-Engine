@@ -5,7 +5,6 @@ local Enum = require("@EnumMap")
 local raylib = require("@raylib")
 local lib, const, structs = raylib.lib, raylib.const, raylib.structs
 local raycastlib = require("@raycastlib")
-local gizmo = require("@gizmo")
 local ffi = zune.ffi
 local arrows = {}
 
@@ -39,6 +38,8 @@ return {
 	class = "Handles",
 
 	callback = function(instance, renderer)
+		local gizmo = require("@gizmo")
+
 		instance.Changed:Connect(function(prop)
 			if prop == "Adornee" then
 				local part = instance.Adornee
