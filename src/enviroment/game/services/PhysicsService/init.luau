@@ -309,7 +309,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		context = 0,
 		queueJob = ffi.null, -- Use Jolt's default
 		queueJobs = ffi.null, -- Use Jolt's default
-		maxConcurrency = 18, -- Number of threads
+		maxConcurrency = 24, -- Number of threads
 		maxBarriers = 8, -- Max barriers
 	})
 	local jobSystem = lib.JPH_JobSystemThreadPool_Create(config)
@@ -526,7 +526,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	end)
 
 	table.insert(game.ShutdownCallbacks, propTable.Unload)
-	renderer_signal:Fire("PhysicsEngine", KinemiumPhysicsService)
 end
 
 return KinemiumPhysicsService

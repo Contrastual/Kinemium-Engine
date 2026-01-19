@@ -595,8 +595,7 @@ enumTable.CollisionFidelity = {
 }
 
 enumTable.AudioBackend = {
-	Raudio = 0,
-	FMOD = 1,
+	RAUDIO = 0,
 }
 
 enumTable.CameraType = {

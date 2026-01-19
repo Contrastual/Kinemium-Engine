@@ -2,6 +2,7 @@ local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
 local Workspace = Instance.new("Workspace")
 local Color3 = require("@Color3")
+local Enum = require("@EnumMap")
 local pool = {}
 
 local raylib = require("@raylib")
@@ -26,6 +27,8 @@ local allowed_to_render = {
 	["Model"] = "Model",
 }
 
+local groups = {}
+
 Workspace.InitRenderer = function(renderer, signal, game)
 	local proptable = {
 		Gravity = -9.81,
@@ -34,6 +37,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		AirTurbulenceIntensity = 0,
 		AirDensity = 0,
 		StreamingEnabled = false,
+
+		-- rendering
+		MAX_VIEW_DISTANCE = 150,
 
 		-- debugging
 		IsInPool = function(part)
@@ -83,23 +89,51 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	Workspace.DescendantAdded:Connect(function(v)
-		pool[#pool + 1] = v
+		pool[v.UniqueId] = v
 		if isRenderable(v) then
 			signal:Fire("UpdatePart", v)
+			pool[v.UniqueId]._renderable = true
 		end
 		print(`Added {v.Name} to render pool!`)
 	end)
 
-	--[[
 	Workspace.DescendantRemoving:Connect(function(v)
-		for i = #pool, 1, -1 do
-			if pool[i] == v then
-				table.remove(pool, i)
-				break
-			end
-		end
+		pool[v.UniqueId] = nil
 	end)
-	--]]
+
+	local function drawRaylib(part, model, mesh)
+		local data = loadedMaterials[part.Material.Value]
+		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
+			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+			part._lastCFrame = part.CFrame
+			part._lastSize = part.Size
+		end
+
+		local matrix = part._raylibMatrix
+
+		part._cfvec = part._cfvec or vector.create(0, 0, 0)
+		part._sizevec = part._sizevec or vector.create(0, 0, 0)
+
+		if part._lastCFrame ~= part.CFrame then
+			part._cfvec = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+			part._lastCFrame = part.CFrame
+		end
+
+		if part._lastSize ~= part.Size then
+			part._sizevec = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
+			part._lastSize = part.Size
+		end
+
+		local color
+
+		if model then
+			raylib.lib.DrawModel(model, part._cfvec, part.MeshScale or 1, raylib.const.WHITE)
+		elseif mesh and data then
+			raylib.lib.DrawMesh(mesh, data.material, matrix)
+		else
+			print(`  ERROR: Cannot draw - mesh={mesh}, data={data}`)
+		end
+	end
 
 	local function drawPart(part)
 		local preloadedData = preloadedMeshes[part.Shape.Value]
@@ -110,35 +144,22 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			return
 		end
 
-		local data = loadedMaterials[part.Material.Value]
-		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-
-		local cfvec = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-		local sizevec = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
-
-		if model then
-			raylib.lib.DrawModel(model, cfvec, part.MeshScale or 1, raylib.const.WHITE)
-		elseif mesh and data then
-			--r3d.lib.R3D_DrawMesh(mesh, defaultMaterial, matrix)
-			raylib.lib.DrawMesh(mesh, data.material, matrix)
-		else
-			print(`  ERROR: Cannot draw - mesh={mesh}, data={data}`)
+		local cam = Workspace.CurrentCamera
+		if cam then
+			drawRaylib(part, model, mesh)
 		end
-
-		signal:Fire("Rendered", part)
 	end
 
 	for _, child in pairs(Workspace:GetDescendants()) do
-		pool[#pool + 1] = child
+		pool[child.UniqueId] = child
 		if isRenderable(child) then
-			signal:Fire("UpdatePart", child)
+			pool[child.UniqueId]._renderable = true
 		end
 	end
 
 	local function drawParts()
-		for i = 1, #pool do
-			local object = pool[i]
-			if isRenderable(pool[i]) then
+		for id, object in pairs(pool) do
+			if object._renderable then
 				drawPart(object)
 
 				if object.Position.Y <= 300 then
@@ -162,32 +183,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		renderer.Signal:Fire("WorkspaceFinish")
 	end
 
-	local function renderShadows(shadowMaterial)
-		for i = 1, #pool do
-			local part = pool[i]
-			if isRenderable(part) then
-				local preloadedData = preloadedMeshes[part.Shape.Value]
-				local mesh = preloadedData and preloadedData[2]
-				local model = part._model
-
-				if mesh or model then -- Only drawing standard meshes for now
-					local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-
-					if model then
-						-- Model drawing with custom material is harder as Model has multiple materials
-						-- raylib.lib.DrawModel(model, ...) uses internal materials.
-						-- To force shadow material we might need to iterate model meshes or use a shader override override?
-						-- For now skip models or DrawModel normally (which won't use shadow shader)
-						-- Actually `DrawModel` might not support material override easily.
-						-- Assuming just Parts for now.
-					elseif mesh then
-						raylib.lib.DrawMesh(mesh, shadowMaterial, matrix)
-					end
-				end
-			end
-		end
-	end
-
 	proptable.DrawParts = drawParts
 	proptable.Draw = draw
 	proptable.RenderPart = drawPart
@@ -195,12 +190,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	proptable.Add3DStack = renderer.Add3DStack
 	proptable.Add2DStack = renderer.Add2DStack
 	Workspace:SetProperties(proptable)
-
-	signal:Connect(function(route, data)
-		if route == "workspace.DrawParts" then
-			drawParts()
-		end
-	end)
 
 	if not IsHeadless then
 		renderer.Add3DStack(draw)

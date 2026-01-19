@@ -260,6 +260,7 @@ local function step(time)
 		--lib.EndTextureMode()
 	end
 
+	lib.DrawFPS(10, 10)
 	lib.EndDrawing()
 	mainSignal:Fire("Heartbeat", delta)
 

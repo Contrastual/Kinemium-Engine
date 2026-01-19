@@ -6,16 +6,29 @@ function EnumItem:IsA(value)
 	return self.EnumType == value
 end
 
-function Enum.new(api)
+function EnumItem:__tostring()
+	return string.format("Enum.%s.%s", self.EnumType.Name, self.Name)
+end
+
+-- Optional: allow comparison by value
+function EnumItem:__eq(other)
+	if getmetatable(other) == EnumItem then
+		return self.EnumType == other.EnumType and self.Value == other.Value
+	end
+	return false
+end
+
+local function createEnum(api)
 	Enum._numberIndex = {}
 
-	-- api = table of { EnumName = { ItemName = value } }
 	for enumName, items in pairs(api) do
 		local enumType = {}
 		enumType.Name = enumName
 		enumType.__index = enumType
-		enumType.EnumType = enumType
-		enumType.type = "EnumItem"
+		enumType.type = "EnumType"
+
+		-- Store all EnumItems in order for GetEnumItems()
+		local itemList = {}
 
 		for itemName, itemValue in pairs(items) do
 			local item = setmetatable({}, EnumItem)
@@ -29,6 +42,16 @@ function Enum.new(api)
 			end
 
 			enumType[itemName] = item
+			table.insert(itemList, item)
+		end
+
+		function enumType:GetEnumItems()
+			-- Returns a copy of the item list
+			local copy = {}
+			for i, v in ipairs(itemList) do
+				copy[i] = v
+			end
+			return copy
 		end
 
 		Enum[enumName] = enumType
@@ -36,5 +59,7 @@ function Enum.new(api)
 
 	return Enum
 end
+
+Enum.new = createEnum
 
 return Enum
