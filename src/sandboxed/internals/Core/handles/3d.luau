@@ -1,4 +1,6 @@
 local ffi = game:GetService("KinemiumFFI")
+-- first time this service has ever been used in any script lmao
+
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local lib = raylib.lib
@@ -6,7 +8,12 @@ local const = raylib.const
 local structs = raylib.structs
 local renderer = rlservice.renderer
 local Selection = game:GetService("Selection")
--- first time this service has ever been used in any script lmao
+local os = zune.platform.os
+
+-- limit this to windows until gizmo.so
+if os ~= "windows" then
+	return
+end
 
 local StartCFrame
 local StartSize

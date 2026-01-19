@@ -477,12 +477,11 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 
 			local dt = data
-			local startTime = os.clock()
+			--	local startTime = os.clock()
 			local bodyCount = 0
 			for _ in pairs(bodiesMap) do
 				bodyCount += 1
 			end
-			print(string.format("[Physics] Starting update with %d bodies", bodyCount))
 
 			renderer_signal:Fire("PrePhysics")
 			lib.JPH_PhysicsSystem_Update(physicsSystem, dt, 1 * KinemiumPhysicsService.DeltatimeMultiplier, jobSystem)
@@ -532,6 +531,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					part.CFrame = cf
 				end
 			end
+			--[[
 			local loopEnd = os.clock()
 			local totalEnd = os.clock()
 			print(
@@ -542,6 +542,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					(totalEnd - startTime) * 1000
 				)
 			)
+				--]]
 		end
 	end)
 

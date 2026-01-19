@@ -1,6 +1,5 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local manifold = require("@manifold")
 
 local GeometryService = Instance.new("GeometryService")
 GeometryService.ExplorerHidden = true

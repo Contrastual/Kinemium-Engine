@@ -1,3 +1,5 @@
+--!optimize 2
+--!native
 local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
 local Workspace = Instance.new("Workspace")
