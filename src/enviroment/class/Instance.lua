@@ -38,6 +38,20 @@ function instance_mt.__eq(a, b)
 	return a._props.UniqueId == b._props.UniqueId
 end
 
+function instance_mt.__tostring(self)
+	if self.Destroyed then
+		return "Instance <destroyed>"
+	end
+
+	local props = rawget(self, "_props")
+	if not props then
+		return "Instance <invalid>"
+	end
+
+	-- Roblox-style, useful for debugging
+	return string.format('%s "%s" (%s)', props.ClassName or "Instance", props.Name or "?", self:GetFullName())
+end
+
 function instance_mt.__newindex(self, key, value)
 	local props = rawget(self, "_props")
 	if not props then

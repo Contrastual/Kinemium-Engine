@@ -27,7 +27,80 @@ local allowed_to_render = {
 	["Model"] = "Model",
 }
 
-local groups = {}
+--[[
+chunks = {
+  ["cx,cy,cz"] = {
+      parts = {},
+      aabbMin = Vector3,
+      aabbMax = Vector3
+  }
+}
+
+--]]
+
+local CHUNK_SIZE = 32
+local chunks = {}
+
+local function worldToChunk(pos)
+	return math.floor(pos.X / CHUNK_SIZE), math.floor(pos.Y / CHUNK_SIZE), math.floor(pos.Z / CHUNK_SIZE)
+end
+
+local function ShouldDrawPart(part, camera, cam_pos, cam_target, cam_fovy)
+	local cx, cy, cz = part.Position.X, part.Position.Y, part.Position.Z
+	local pos = vector.create(cx, cy, cz)
+
+	local sx, sy, sz = part.Size.X, part.Size.Y, part.Size.Z
+	local radius = vector.magnitude(vector.create(sx, sy, sz)) * 0.5
+
+	local toPart = pos - cam_pos
+	local dist = vector.magnitude(toPart)
+
+	if dist > radius * 2000 then
+		return false
+	end
+
+	if dist < radius then
+		return true
+	end
+
+	local forward = cam_target - cam_pos
+	local fwdLen = vector.magnitude(forward)
+	if fwdLen < 0.0001 then
+		return true
+	end
+	forward = forward / fwdLen
+
+	if vector.dot(forward, toPart) <= -radius then
+		return false
+	end
+
+	local screen = lib.GetWorldToScreen(pos, camera)
+	local w = lib.GetScreenWidth()
+	local h = lib.GetScreenHeight()
+
+	if screen.x >= -radius and screen.x <= w + radius and screen.y >= -radius and screen.y <= h + radius then
+		return true
+	end
+
+	local projected_size = radius / dist * (h / math.tan(math.rad(cam_fovy * 0.5)))
+
+	if projected_size >= 1 then
+		return true
+	end
+
+	return false
+end
+
+local function drawChunkWireframe(chunk)
+	local min = chunk.aabbMin
+	local max = chunk.aabbMax
+
+	local center = vector.create((min.X + max.X) * 0.5, (min.Y + max.Y) * 0.5, (min.Z + max.Z) * 0.5)
+
+	local size = Vector3.new(max.X - min.X, max.Y - min.Y, max.Z - min.Z)
+
+	raylib.lib.DrawCubeWires(center, size.X, size.Y, size.Z, raylib.const.RED)
+end
 
 Workspace.InitRenderer = function(renderer, signal, game)
 	local proptable = {
@@ -56,6 +129,42 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end,
 	}
 
+	local function addPart(part)
+		local cx, cy, cz = worldToChunk(part.Position)
+		local key = cx .. "," .. cy .. "," .. cz
+
+		local chunk = chunks[key]
+		if not chunk then
+			chunk = {
+				parts = {},
+				aabbMin = Vector3.new(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE),
+				aabbMax = Vector3.new((cx + 1) * CHUNK_SIZE, (cy + 1) * CHUNK_SIZE, (cz + 1) * CHUNK_SIZE),
+			}
+			chunks[key] = chunk
+		end
+
+		chunk.parts[#chunk.parts + 1] = part
+		part._chunk = chunk
+	end
+
+	local function chunkVisible(chunk, camPos, maxDist)
+		local min = chunk.aabbMin
+		local max = chunk.aabbMax
+
+		-- AABB center
+		local cx = (min.X + max.X) * 0.5
+		local cy = (min.Y + max.Y) * 0.5
+		local cz = (min.Z + max.Z) * 0.5
+
+		local dx = cx - camPos.X
+		local dy = cy - camPos.Y
+		local dz = cz - camPos.Z
+
+		return (dx * dx + dy * dy + dz * dz) <= (maxDist * maxDist)
+	end
+
+	local Kinemium_camera = renderer.Kinemium_camera
+	local raylib_camera = renderer.camera
 	local meshlib = renderer.meshlib
 	local materialList = renderer.materialList
 	local loadedMaterials = {}
@@ -90,11 +199,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	Workspace.DescendantAdded:Connect(function(v)
 		pool[v.UniqueId] = v
+		addPart(v)
 		if isRenderable(v) then
 			signal:Fire("UpdatePart", v)
 			pool[v.UniqueId]._renderable = true
 		end
-		print(`Added {v.Name} to render pool!`)
 	end)
 
 	Workspace.DescendantRemoving:Connect(function(v)
@@ -135,21 +244,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 	end
 
-	local function drawPart(part)
-		local preloadedData = preloadedMeshes[part.Shape.Value]
-		local mesh = preloadedData and preloadedData[2]
-		local model = part._model
-
-		if not mesh and not model then
-			return
-		end
-
-		local cam = Workspace.CurrentCamera
-		if cam then
-			drawRaylib(part, model, mesh)
-		end
-	end
-
 	for _, child in pairs(Workspace:GetDescendants()) do
 		pool[child.UniqueId] = child
 		if isRenderable(child) then
@@ -157,18 +251,33 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 	end
 
-	local function drawParts()
-		for id, object in pairs(pool) do
-			if object._renderable then
-				drawPart(object)
+	local camera = renderer.camera
 
-				if object.Position.Y <= 300 then
-					--object:Destroy()
+	local function drawChunks()
+		local camPos = Kinemium_camera.CFrame.Position
+		local camTarget = Kinemium_camera.CFrame.LookVector
+		local camFovy = Kinemium_camera.FieldOfView
+
+		for _, chunk in pairs(chunks) do
+			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
+				for i = 1, #chunk.parts do
+					local part = chunk.parts[i]
+					if
+						isRenderable(part)
+						and ShouldDrawPart(
+							part,
+							camera,
+							vector.create(camPos.X, camPos.Y, camPos.Z),
+							vector.create(camTarget.X, camTarget.Y, camTarget.Z),
+							camFovy
+						)
+					then
+						local mesh = preloadedMeshes[part.Shape.Value][2]
+						drawRaylib(part, part._model, mesh)
+					end
 				end
-			else
-				if object.render then
-					object.render(object, renderer, game)
-				end
+
+				drawChunkWireframe(chunk)
 			end
 		end
 	end
@@ -176,17 +285,13 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local function draw()
 		renderer.Signal:Fire("WorkspaceStart")
 
-		drawParts()
+		drawChunks()
 
 		local KinemiumPhysicsService = game:GetService("PhysicsService")
 		KinemiumPhysicsService.setGravity(Workspace.Gravity, Workspace.GlobalWind)
 		renderer.Signal:Fire("WorkspaceFinish")
 	end
 
-	proptable.DrawParts = drawParts
-	proptable.Draw = draw
-	proptable.RenderPart = drawPart
-	proptable.RenderShadows = renderShadows
 	proptable.Add3DStack = renderer.Add3DStack
 	proptable.Add2DStack = renderer.Add2DStack
 	Workspace:SetProperties(proptable)

@@ -1,12 +1,8 @@
 local Instance = require("@Instance")
-local signal = require("@Kinemium.signal")
-local manifold = require("@manifold")
 local Color3 = require("@Color3")
 
 local StudioThemeService = Instance.new("StudioThemeService")
 StudioThemeService.ExplorerHidden = true
-
-local raylib = require("@raylib")
 
 StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	local themes = {

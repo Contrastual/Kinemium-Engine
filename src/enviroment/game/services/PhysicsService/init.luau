@@ -226,13 +226,13 @@ local function setGravity(physicsSystem, v, wind)
 end
 
 KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
-	log("[Physics] Initializing Jolt Physics...")
+	print("[Physics] Initializing Jolt Physics...")
 
 	local initSuccess = lib.JPH_Init()
 	if initSuccess == 0 then
 		error("[Physics] Failed to initialize Jolt")
 	end
-	log("[Physics] Jolt initialized")
+	print("[Physics] Jolt initialized")
 
 	local broadPhaseLayerInterface =
 		lib.JPH_BroadPhaseLayerInterfaceTable_Create(u32(NUM_OBJECT_LAYERS), u32(NUM_OBJECT_LAYERS))
@@ -242,7 +242,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 	lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, LAYER_NON_MOVING, 0)
 	lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, LAYER_MOVING, 1)
-	log("[Physics] BroadPhaseLayerInterface created")
+	print("[Physics] BroadPhaseLayerInterface created")
 
 	local objectLayerPairFilter = lib.JPH_ObjectLayerPairFilterTable_Create(u32(NUM_OBJECT_LAYERS))
 	if objectLayerPairFilter == ffi.null then
@@ -254,7 +254,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	lib.JPH_ObjectLayerPairFilterTable_EnableCollision(objectLayerPairFilter, LAYER_MOVING, LAYER_NON_MOVING)
 	lib.JPH_ObjectLayerPairFilterTable_EnableCollision(objectLayerPairFilter, LAYER_MOVING, LAYER_MOVING)
 
-	log("[Physics] ObjectLayerPairFilter created")
+	print("[Physics] ObjectLayerPairFilter created")
 
 	local objectVsBroadPhaseFilter = lib.JPH_ObjectVsBroadPhaseLayerFilterTable_Create(
 		broadPhaseLayerInterface,
@@ -265,7 +265,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	if objectVsBroadPhaseFilter == ffi.null then
 		error("[Physics] Failed to create ObjectVsBroadPhaseLayerFilter")
 	end
-	log("[Physics] ObjectVsBroadPhaseLayerFilter created")
+	print("[Physics] ObjectVsBroadPhaseLayerFilter created")
 
 	local physicsSystemSettings = structs.JPH_PhysicsSystemSettings:new({
 		maxBodies = 10240,
@@ -284,16 +284,16 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		error("[Physics] Failed to create physics system")
 	end
 
-	log("[Physics] Physics system created and initialized")
+	print("[Physics] Physics system created and initialized")
 
 	setGravity(physicsSystem, -9.81)
-	log("[Physics] Gravity set")
+	print("[Physics] Gravity set")
 
 	local bodyInterface = lib.JPH_PhysicsSystem_GetBodyInterface(physicsSystem)
 	if bodyInterface == ffi.null then
 		error("[Physics] Failed to get body interface")
 	end
-	log("[Physics] Body interface obtained")
+	print("[Physics] Body interface obtained")
 
 	local physicsState = {
 		system = physicsSystem,
@@ -309,14 +309,14 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		context = 0,
 		queueJob = ffi.null, -- Use Jolt's default
 		queueJobs = ffi.null, -- Use Jolt's default
-		maxConcurrency = 24, -- Number of threads
+		maxConcurrency = 8, -- Number of threads
 		maxBarriers = 8, -- Max barriers
 	})
 	local jobSystem = lib.JPH_JobSystemThreadPool_Create(config)
 	if jobSystem == ffi.null then
 		error("[Physics] Failed to create job system")
 	end
-	log("[Physics] Job system created")
+	print("[Physics] Job system created")
 
 	local bodyInterface = lib.JPH_PhysicsSystem_GetBodyInterface(physicsSystem)
 
@@ -453,8 +453,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				motion = 0
 			end
 
-			log(`Updated part {data.Name} with motion type {motion}`)
-
 			local oldBody = bodiesMap[data]
 			if oldBody then
 				lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, oldBody)
@@ -463,6 +461,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 
 			createBody(bodyInterface, data, motion)
+
 			lib.JPH_PhysicsSystem_OptimizeBroadPhase(physicsSystem)
 		elseif route == "RemovedPartFromRenderPool" then
 			local bodyID = bodiesMap[data]
@@ -478,11 +477,18 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 
 			local dt = data
+			local startTime = os.clock()
+			local bodyCount = 0
+			for _ in pairs(bodiesMap) do
+				bodyCount += 1
+			end
+			print(string.format("[Physics] Starting update with %d bodies", bodyCount))
 
 			renderer_signal:Fire("PrePhysics")
 			lib.JPH_PhysicsSystem_Update(physicsSystem, dt, 1 * KinemiumPhysicsService.DeltatimeMultiplier, jobSystem)
 			renderer_signal:Fire("PhysicsF")
 
+			local loopStart = os.clock()
 			for part, bodyID in pairs(bodiesMap) do
 				if part.NetworkOwnerType == Enum.MachineNetworkOwner.Server.Value then
 					-- set part cframe
@@ -499,6 +505,10 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					continue
 				end
 
+				if part.Anchored == true then
+					continue
+				end
+
 				local cf, linear, angular = CalculateBodyPhysics(part, bodyInterface, bodyID)
 
 				if not cf then
@@ -506,7 +516,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				end
 
 				if not part.Parent then
-					log("Cannot calculate position without 3D renderer")
+					print("Cannot calculate position without 3D renderer")
 					continue
 				end
 
@@ -522,6 +532,16 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					part.CFrame = cf
 				end
 			end
+			local loopEnd = os.clock()
+			local totalEnd = os.clock()
+			print(
+				string.format(
+					"[Physics] Update complete. Physics time: %.2fms, Loop time: %.2fms, Total: %.2fms",
+					(loopStart - startTime) * 1000,
+					(loopEnd - loopStart) * 1000,
+					(totalEnd - startTime) * 1000
+				)
+			)
 		end
 	end)
 

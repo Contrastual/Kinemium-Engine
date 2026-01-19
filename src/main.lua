@@ -165,7 +165,7 @@ end
 
 function Kinemium:playtest()
 	loop("src/sandboxed", function(path, entry)
-		if _G.IsHeadless and (string.find(path, "internals") or string.find(path, "Core")) then
+		if string.find(path, "internals") or string.find(path, "Core") then
 			return
 		end
 
