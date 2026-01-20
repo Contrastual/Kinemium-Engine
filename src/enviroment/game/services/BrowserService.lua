@@ -32,20 +32,21 @@ BrowserService.InitRenderer = function(renderer, renderer_signal)
 		return
 	end
 	local lib: typeof(raylib.lib) = renderer.lib
-	local vm = LuaVM.new()
-
-	task.spawn(function()
-		local success, result, err = vm:execute(startup)
-
-		if not success then
-			error("Failed to load webview-launcher.lua: " .. (err or "unknown error"))
-		end
-	end)
 
 	BrowserService:SetProperties({
 		openURL = lib.OpenURL,
 		webview = {
 			openWindowURL = function(str)
+				local vm = LuaVM.new()
+
+				task.spawn(function()
+					local success, result, err = vm:execute(startup)
+
+					if not success then
+						error("Failed to load webview-launcher.lua: " .. (err or "unknown error"))
+					end
+				end)
+
 				vm:execute(getCode(str))
 			end,
 		},

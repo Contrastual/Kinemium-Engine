@@ -45,7 +45,7 @@
         "python": "./src/runtime/python/wrapper",
         "httpServerViewer": "./src/libs/httpServerViewer",
         "luajit": "./src/runtime/luajit/wrapper",
-        "ki3d": "./src/libs/ki3d",
+        "ki3d": "./src/libs/KI3D",
         "kispring": "./src/libs/spring",
         "InstanceRegistry": "./src/enviroment/class/Registry",
         "raylib": "./src/external/raylib",

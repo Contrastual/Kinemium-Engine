@@ -195,11 +195,6 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
-if not _G.IsHeadless then
-	local nfd = require("@nfd")
-	print(nfd)
-end
-
 if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
