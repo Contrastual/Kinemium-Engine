@@ -4,4 +4,4 @@
 # New tools can be added by running `rokit add <tool>` in a terminal.
 
 [tools]
-zune = "Scythe-Technology/zune@0.5.2"
+zune = "Scythe-Technology/zune@0.5.3"

@@ -44,6 +44,7 @@ local CHUNK_SIZE = 32
 local chunks = {}
 
 local function worldToChunk(pos)
+	if not pos then return 0, 0, 0 end
 	return math.floor(pos.X / CHUNK_SIZE), math.floor(pos.Y / CHUNK_SIZE), math.floor(pos.Z / CHUNK_SIZE)
 end
 
