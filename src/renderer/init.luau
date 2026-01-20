@@ -230,7 +230,7 @@ local function step(time)
 	if game and game.Dimension == Enum.Dimension["3D"] then
 		guiBlur:BeginCapture()
 		ki3d:Begin3D()
-		--render3D()
+		render3D()
 		ki3d:End3D()
 		guiBlur:EndCapture()
 	end
