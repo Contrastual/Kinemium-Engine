@@ -162,6 +162,18 @@ function bufferUtils.EulerDegToQuaternion(euler: any): (number, number, number, 
     return x, y, z, w
 end
 
+function bufferUtils.GetMeshIndexFromModel(model, index)
+	local meshes_ptr = zune.ffi.ptrFromAddress(zune.mem.slice(model, structs.Model:offset("meshes"), 8))
+	local mesh_0_buf = meshes_ptr:read(0, buffer.create(structs.Mesh:size()), 0, structs.Mesh:size())
+	return mesh_0_buf
+end
+
+function bufferUtils.SetModelTex(model, tex) 
+	local materials = zune.ffi.ptrFromAddress(zune.mem.slice(model, structs.Model:offset("materials"), 8))
+	local maps = materials:readptr(structs.Material:offset("maps"))
+	maps:write(0, tex, 0, structs.Texture:size())
+end
+
 function bufferUtils.EulerToAxisAngle(eulerDeg)
 	local qx,qy,qz,qw = bufferUtils.EulerDegToQuaternion(eulerDeg)
 

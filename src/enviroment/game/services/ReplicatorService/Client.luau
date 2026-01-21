@@ -60,7 +60,6 @@ function Client.init(context)
 		elseif data.opcode == OPCODES.EDIT then
 			local object = lookup[data.object]
 
-			printi(lookup)
 			print(object)
 			print(data.object)
 			if object then

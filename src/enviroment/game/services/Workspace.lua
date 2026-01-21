@@ -12,7 +12,6 @@ local lib = raylib.lib
 local r3d = raylib.r3d
 local structs = raylib.structs
 local mat = lib.LoadMaterialDefault()
-local os = zune.platform.os
 local bufferUtils = require("@bufferUtils")
 
 local function Color3ToRaylib(c, transparency)
@@ -240,9 +239,18 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			part._lastSize = part.Size
 		end
 
-		if os ~= "linux" then 
-			-- draw for windows until linux is fixed
-			lib.DrawMesh(mesh, data.material, matrix)
+		local axis, angle = bufferUtils.EulerToAxisAngle(part.Rotation)
+		local position = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+		local scale = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
+		local tint = Color3ToRaylib(part.Color, part.Transparency)
+		local matData = loadedMaterials[part.Material.Value]
+
+		bufferUtils.SetModelTex(model, matData.texture)
+
+		if part._model then 
+			lib.DrawModelEx(part._model, position, axis, angle, scale * part.MeshScale, tint)
+		else
+			lib.DrawModelEx(model, position, axis, angle, scale, tint)
 		end
 	end
 
