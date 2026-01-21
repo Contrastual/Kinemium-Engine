@@ -11,6 +11,9 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local r3d = raylib.r3d
 local structs = raylib.structs
+local mat = lib.LoadMaterialDefault()
+local os = zune.platform.os
+local bufferUtils = require("@bufferUtils")
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -21,6 +24,7 @@ local function Color3ToRaylib(c, transparency)
 		a = math.floor(255 * (1 - transparency)),
 	})
 end
+
 
 local allowed_to_render = {
 	["Part"] = "Part",
@@ -102,7 +106,7 @@ local function drawChunkWireframe(chunk)
 
 	local size = Vector3.new(max.X - min.X, max.Y - min.Y, max.Z - min.Z)
 
-	raylib.lib.DrawCubeWires(center, size.X, size.Y, size.Z, raylib.const.RED)
+	lib.DrawCubeWires(center, size.X, size.Y, size.Z, raylib.const.RED)
 end
 
 Workspace.InitRenderer = function(renderer, signal, game)
@@ -236,14 +240,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			part._lastSize = part.Size
 		end
 
-		local color
-
-		if model then
-			raylib.lib.DrawModel(model, part._cfvec, part.MeshScale or 1, raylib.const.WHITE)
-		elseif mesh and data then
-			raylib.lib.DrawMesh(mesh, data.material, matrix)
-		else
-			print(`  ERROR: Cannot draw - mesh={mesh}, data={data}`)
+		if os ~= "linux" then 
+			-- draw for windows until linux is fixed
+			lib.DrawMesh(mesh, data.material, matrix)
 		end
 	end
 
@@ -275,8 +274,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 							camFovy
 						)
 					then
-						local mesh = preloadedMeshes[part.Shape.Value][2]
-						drawRaylib(part, part._model, mesh)
+						local meshData = preloadedMeshes[part.Shape.Value]
+						local mesh = meshData[2]
+						local model = meshData[1]
+						drawRaylib(part, model, mesh)
 					end
 				end
 

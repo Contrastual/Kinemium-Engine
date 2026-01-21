@@ -10,6 +10,7 @@ local propTable = {
 	RenderFidelity = Enum.RenderFidelity.Automatic,
 	CollisionScale = 1,
 	MeshScale = 1,
+	Size = Vector3.new(1, 1, 1)
 }
 
 Part.inherit(propTable)

@@ -31,21 +31,7 @@ return function(objects, data)
 		dividerColor = color3.new(0.20, 0.20, 0.22),
 
 		-- Navigation items
-		items = data.items or {
-			{ icon = "home", type = "icon", selected = false },
-			{ icon = "compass", type = "icon", selected = false },
-			{ icon = "shirt", type = "icon", label = "Skins (Beta)", selected = false },
-			{ icon = "stats", type = "icon", selected = false },
-			{ type = "divider" },
-			{ icon = "fire", type = "icon", texture = nil, selected = false },
-			{ icon = "cube", type = "icon", selected = false },
-			{ icon = "cube-outline", type = "icon", selected = false },
-			{ type = "divider" },
-			{ icon = "add", type = "icon", selected = false },
-			{ type = "spacer" },
-			{ icon = "settings", type = "icon", selected = false },
-			{ icon = "logout", type = "icon", selected = false },
-		},
+		items = data.items,
 
 		-- Layout
 		itemSize = 48,

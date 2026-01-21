@@ -3,6 +3,8 @@ local enumtransformer = require("@Enum")
 local enumTable = {}
 local dump = require("./dump")
 
+_G.log = _G.log
+
 enumTable.KeyCode = {
 	Backspace = 8,
 	Tab = 9,
@@ -612,6 +614,7 @@ enumTable.SecurityCapabilities = {
 }
 
 for propName, values in pairs(dump) do
+	if not propName then continue end
 	if enumTable[propName] then
 		for name, value in pairs(values) do
 			if enumTable[propName][name] then
@@ -623,7 +626,7 @@ for propName, values in pairs(dump) do
 	else
 		enumTable[propName] = values
 	end
-	log("[ENUM] Created platform enum " .. propName)
+	--log("[ENUM] Created platform enum " .. propName)
 end
 
 return enumtransformer.new(enumTable)

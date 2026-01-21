@@ -65,8 +65,12 @@ local function GenerateMesh(meshId: string, meshType: string, params: any)
 		return nil
 	end
 
+	local model = raylib.lib.LoadModelFromMesh(mesh)
+
+	raylib.lib.UploadMesh(mesh, false)
+
 	print(`Generated mesh: {meshId} ({meshType})`)
-	return { nil, mesh }
+	return { model, mesh }
 end
 
 local function PreloadStandardMeshes()

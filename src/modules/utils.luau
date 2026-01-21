@@ -136,4 +136,53 @@ function bufferUtils.extract.setModelTexture(maps, texture)
 	maps:write(0, texture, 0, structs.Texture:size())
 end
 
+-- quaternions
+
+function bufferUtils.EulerDegToQuaternion(euler: any): (number, number, number, number)
+    local rx = math.rad(euler.X)
+    local ry = math.rad(euler.Y)
+    local rz = math.rad(euler.Z)
+
+    local cx, sx = math.cos(rx * 0.5), math.sin(rx * 0.5)
+    local cy, sy = math.cos(ry * 0.5), math.sin(ry * 0.5)
+    local cz, sz = math.cos(rz * 0.5), math.sin(rz * 0.5)
+
+    local w = cz * cy * cx + sz * sy * sx
+    local x = cz * cy * sx - sz * sy * cx
+    local y = cz * sy * cx + sz * cy * sx
+    local z = sz * cy * cx - cz * sy * sx
+
+    local len = math.sqrt(x*x + y*y + z*z + w*w)
+    if len > 0 then
+        x, y, z, w = x/len, y/len, z/len, w/len
+    else
+        x, y, z, w = 0, 0, 0, 1
+    end
+	
+    return x, y, z, w
+end
+
+function bufferUtils.EulerToAxisAngle(eulerDeg)
+	local qx,qy,qz,qw = bufferUtils.EulerDegToQuaternion(eulerDeg)
+
+    qw = math.max(-1, math.min(1, qw))
+    local angleRad = 2 * math.acos(qw)
+
+    local s2 = 1 - qw * qw
+    if s2 < 1e-12 then
+        return vector.create(1, 0, 0), 0
+    end
+
+    local s = math.sqrt(s2)
+    local ax, ay, az = qx / s, qy / s, qz / s
+
+    local alen = math.sqrt(ax*ax + ay*ay + az*az)
+    if alen == 0 then
+        return vector.create(1, 0, 0), 0
+    end
+    ax, ay, az = ax/alen, ay/alen, az/alen
+
+    return vector.create(ax, ay, az), math.deg(angleRad)
+end
+
 return bufferUtils
