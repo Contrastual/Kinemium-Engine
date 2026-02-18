@@ -23,14 +23,11 @@ local function fn(returns: any, args: { any })
 	return { returns = returns, args = args }
 end
 
-local libLocation = "./src/external/raylib/native/bin/gizmo.dll"
+local libLocation = "./src/external/raylib/native/bin/gizmo." .. ffi.suffix
 
-if platform.cpu.arch == "x86_64" then
-	if platform.os == "windows" then
-		libLocation = "./src/external/raylib/native/bin/gizmo.dll"
-	elseif platform.os == "linux" then
-		libLocation = "./src/external/raylib/native/bin/gizmo.so"
-	end
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	libLocation = "./gizmo." .. ffi.suffix
 end
 
 type Fns = {
@@ -43,10 +40,8 @@ type Fns = {
 	SetGizmoRotateSpeed: (speed: float) -> (),
 	GetGizmoRotateSpeed: () -> float,
 
-	SetGizmoRotateSnapEnabled: (enabled: bool) -> (),
 	GetGizmoRotateSnapEnabled: () -> bool,
 	SetGizmoRotateSnapDegrees: (float) -> (),
-	GetGizmoRotateSnapDegrees: () -> float,
 
 	SetGizmoSize: (size: float) -> (),
 	SetGizmoLineWidth: (width: float) -> (),
@@ -59,14 +54,6 @@ local defs = {
 	GizmoToMatrix = fn(pointer, { pointer }),
 
 	DrawGizmo3D = fn(bool, { int, pointer }),
-
-	SetGizmoRotateSpeed = fn(void, { float }),
-	GetGizmoRotateSpeed = fn(float, {}),
-
-	SetGizmoRotateSnapEnabled = fn(void, { bool }),
-	GetGizmoRotateSnapEnabled = fn(bool, {}),
-	SetGizmoRotateSnapDegrees = fn(void, { float }),
-	GetGizmoRotateSnapDegrees = fn(float, {}),
 
 	SetGizmoSize = fn(void, { float }),
 	SetGizmoLineWidth = fn(void, { float }),
@@ -98,13 +85,6 @@ return {
 
 	SetGizmoRotateSpeed = lib.SetGizmoRotateSpeed,
 	GetGizmoRotateSpeed = lib.GetGizmoRotateSpeed,
-
-	SetGizmoRotateSnapEnabled = lib.SetGizmoRotateSnapEnabled,
-	GetGizmoRotateSnapEnabled = function()
-		return lib.GetGizmoRotateSnapEnabled() == 1
-	end,
-	SetGizmoRotateSnapDegrees = lib.SetGizmoRotateSnapDegrees,
-	GetGizmoRotateSnapDegrees = lib.GetGizmoRotateSnapDegrees,
 
 	SetGizmoSize = lib.SetGizmoSize,
 	SetGizmoLineWidth = lib.SetGizmoLineWidth,

@@ -1,6 +1,6 @@
 local Instance = {}
 local Signal = require("@Kinemium.signal")
-local task = zune.task
+local task = _G.zune.task
 local nextUniqueId = 1
 
 local function generateUniqueId()
@@ -48,7 +48,6 @@ function instance_mt.__tostring(self)
 		return "Instance <invalid>"
 	end
 
-	-- Roblox-style, useful for debugging
 	return string.format('%s "%s" (%s)', props.ClassName or "Instance", props.Name or "?", self:GetFullName())
 end
 
@@ -218,7 +217,7 @@ function Instance:GetDescendants()
 end
 
 function Instance:IsA(className)
-	return self.ClassName == className
+	return self.ClassName == className or self.BaseClass == className
 end
 
 function Instance:Clone()
@@ -744,7 +743,6 @@ function Instance:QueryDescendants(selector)
 	local function matchesSelector(inst, sel)
 		sel = sel:gsub("^%s+", ""):gsub("%s+$", "")
 
-		-- Handle :not()
 		if sel:match(":not%(") then
 			local notContent = sel:match(":not%((.-)%)")
 			if notContent then
@@ -759,7 +757,6 @@ function Instance:QueryDescendants(selector)
 			end
 		end
 
-		-- Handle :has()
 		if sel:match(":has%(") then
 			local hasContent = sel:match(":has%((.-)%)")
 			if hasContent then
@@ -773,7 +770,6 @@ function Instance:QueryDescendants(selector)
 					return false
 				end
 
-				-- Check if instance has descendant matching hasContent
 				local hasDirectChild = hasContent:sub(1, 1) == ">"
 				if hasDirectChild then
 					hasContent = hasContent:sub(2):gsub("^%s+", "")
@@ -800,7 +796,6 @@ function Instance:QueryDescendants(selector)
 		return filter(inst)
 	end
 
-	-- Determine search scope
 	local descendants
 	if selector:sub(1, 1) == ">" then
 		descendants = self:GetChildren()
@@ -847,28 +842,36 @@ function Instance:EnableHistory(limit)
 end
 
 function Instance:Destroy()
-	if self.Destroying then
-		self.Destroying:Fire()
+	if rawget(self, "Destroyed") then -- fix #1
+		return
 	end
 
-	if self.Parent then
-		local ancestor = self.Parent
-		while ancestor do
-			if ancestor.DescendantRemoving then
-				ancestor.DescendantRemoving:Fire(self)
+	local destroying = rawget(self, "Destroying")
+	if destroying then
+		destroying:Fire()
+	end
+
+	local children = rawget(self, "Children") or {}
+	for _, child in ipairs(children) do
+		child:Destroy()
+	end
+
+	local props = rawget(self, "_props")
+	if props and props.Parent then
+		local parentChildren = rawget(props.Parent, "Children")
+		if parentChildren then
+			for i = #parentChildren, 1, -1 do
+				if parentChildren[i] == self then
+					table.remove(parentChildren, i)
+					break
+				end
 			end
-			ancestor = ancestor.Parent
-		end
-
-		if self.Parent.ChildRemoved then
-			self.Parent.ChildRemoved:Fire(self)
 		end
 	end
 
-	self.Parent = nil
-	self._props = nil
-	self.Children = nil
-	self.Destroyed = true
+	rawset(self, "_props", nil)
+	rawset(self, "Children", nil)
+	rawset(self, "Destroyed", true)
 end
 
 return Instance

@@ -26,7 +26,8 @@ return function(objects, data)
 		likes = data.likes or "32.0k",
 		category = data.category or "Optimization",
 		icon = data.icon,
-		bannerImage = data.bannerImage, -- Single texture for the banner
+		bannerImage = data.bannerImage,
+		font = data.font, -- Custom font property
 
 		backgroundColor = color3.new(0.14, 0.14, 0.16),
 		darkBackgroundColor = color3.new(0.10, 0.10, 0.12),
@@ -110,11 +111,29 @@ return function(objects, data)
 			)
 		end
 
+		-- Title with custom font
 		local titleY = contentY + iconSize / 2 + 8
-		raylib.lib.DrawText(config.title, r.x + iconPadding, titleY, 18, c3tr(config.textColor, 0))
+		local titleFontSize = 18
+		local titleSpacing = 1.0
 
+		if config.font then
+			raylib.lib.DrawTextEx(
+				config.font,
+				config.title,
+				vector.create(r.x + iconPadding, titleY),
+				titleFontSize,
+				titleSpacing,
+				c3tr(config.textColor, 0)
+			)
+		else
+			raylib.lib.DrawText(config.title, r.x + iconPadding, titleY, titleFontSize, c3tr(config.textColor, 0))
+		end
+
+		-- Description with custom font and word wrapping
 		local descY = titleY + 26
 		local descWidth = r.width - iconPadding * 2
+		local descFontSize = 11
+		local descSpacing = 0.5
 
 		local words = {}
 		for word in config.description:gmatch("%S+") do
@@ -123,14 +142,37 @@ return function(objects, data)
 
 		local currentLine = ""
 		local lineY = descY
-		local fontSize = 11
 
 		for _, word in ipairs(words) do
 			local testLine = currentLine == "" and word or currentLine .. " " .. word
-			local lineWidth = raylib.lib.MeasureText(testLine, fontSize)
+			local lineWidth
+
+			if config.font then
+				local textSize = raylib.lib.MeasureTextEx(config.font, testLine, descFontSize, descSpacing)
+				lineWidth = textSize.x
+			else
+				lineWidth = raylib.lib.MeasureText(testLine, descFontSize)
+			end
 
 			if lineWidth > descWidth then
-				raylib.lib.DrawText(currentLine, r.x + iconPadding, lineY, fontSize, c3tr(config.dimTextColor, 0))
+				if config.font then
+					raylib.lib.DrawTextEx(
+						config.font,
+						currentLine,
+						vector.create(r.x + iconPadding, lineY),
+						descFontSize,
+						descSpacing,
+						c3tr(config.dimTextColor, 0)
+					)
+				else
+					raylib.lib.DrawText(
+						currentLine,
+						r.x + iconPadding,
+						lineY,
+						descFontSize,
+						c3tr(config.dimTextColor, 0)
+					)
+				end
 				currentLine = word
 				lineY = lineY + 16
 			else
@@ -139,11 +181,25 @@ return function(objects, data)
 		end
 
 		if currentLine ~= "" then
-			raylib.lib.DrawText(currentLine, r.x + iconPadding, lineY, fontSize, c3tr(config.dimTextColor, 0))
+			if config.font then
+				raylib.lib.DrawTextEx(
+					config.font,
+					currentLine,
+					vector.create(r.x + iconPadding, lineY),
+					descFontSize,
+					descSpacing,
+					c3tr(config.dimTextColor, 0)
+				)
+			else
+				raylib.lib.DrawText(currentLine, r.x + iconPadding, lineY, descFontSize, c3tr(config.dimTextColor, 0))
+			end
 		end
 
+		-- Stats with custom font
 		local statsY = r.y + r.height - 32
 		local statsIconSize = 12
+		local statsFontSize = 11
+		local statsSpacing = 0.5
 
 		raylib.lib.DrawRectangle(
 			r.x + iconPadding,
@@ -152,27 +208,69 @@ return function(objects, data)
 			statsIconSize,
 			c3tr(config.dimTextColor, 0)
 		)
-		raylib.lib.DrawText(
-			config.downloads,
-			r.x + iconPadding + statsIconSize + 6,
-			statsY + 2,
-			11,
-			c3tr(config.dimTextColor, 0)
-		)
+
+		if config.font then
+			raylib.lib.DrawTextEx(
+				config.font,
+				config.downloads,
+				vector.create(r.x + iconPadding + statsIconSize + 6, statsY + 2),
+				statsFontSize,
+				statsSpacing,
+				c3tr(config.dimTextColor, 0)
+			)
+		else
+			raylib.lib.DrawText(
+				config.downloads,
+				r.x + iconPadding + statsIconSize + 6,
+				statsY + 2,
+				statsFontSize,
+				c3tr(config.dimTextColor, 0)
+			)
+		end
 
 		local likesX = r.x + iconPadding + 100
 		raylib.lib.DrawRectangle(likesX, statsY + 4, statsIconSize, statsIconSize, c3tr(config.dimTextColor, 0))
-		raylib.lib.DrawText(config.likes, likesX + statsIconSize + 6, statsY + 2, 11, c3tr(config.dimTextColor, 0))
+
+		if config.font then
+			raylib.lib.DrawTextEx(
+				config.font,
+				config.likes,
+				vector.create(likesX + statsIconSize + 6, statsY + 2),
+				statsFontSize,
+				statsSpacing,
+				c3tr(config.dimTextColor, 0)
+			)
+		else
+			raylib.lib.DrawText(
+				config.likes,
+				likesX + statsIconSize + 6,
+				statsY + 2,
+				statsFontSize,
+				c3tr(config.dimTextColor, 0)
+			)
+		end
 
 		local categoryX = r.x + r.width - iconPadding - 100
 		raylib.lib.DrawRectangle(categoryX, statsY + 4, statsIconSize, statsIconSize, c3tr(config.categoryColor, 0))
-		raylib.lib.DrawText(
-			config.category,
-			categoryX + statsIconSize + 6,
-			statsY + 2,
-			11,
-			c3tr(config.categoryColor, 0)
-		)
+
+		if config.font then
+			raylib.lib.DrawTextEx(
+				config.font,
+				config.category,
+				vector.create(categoryX + statsIconSize + 6, statsY + 2),
+				statsFontSize,
+				statsSpacing,
+				c3tr(config.categoryColor, 0)
+			)
+		else
+			raylib.lib.DrawText(
+				config.category,
+				categoryX + statsIconSize + 6,
+				statsY + 2,
+				statsFontSize,
+				c3tr(config.categoryColor, 0)
+			)
+		end
 
 		if config.isHovered then
 			raylib.lib.DrawRectangleRounded(

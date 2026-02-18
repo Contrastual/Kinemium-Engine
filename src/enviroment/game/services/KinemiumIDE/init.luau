@@ -159,6 +159,8 @@ KinemiumIDE.InitRenderer = function(renderer, renderer_signal)
 	local editorReady = false
 	local vm = LuaVM.new()
 
+	-- Deprecated, used to be the old code editor for Kinemium
+	--[[
 	KinemiumIDE:SetProperties({
 		Open = function()
 			task.spawn(function()
@@ -170,9 +172,6 @@ KinemiumIDE.InitRenderer = function(renderer, renderer_signal)
 
 				local lib = vm:execute(editor)
 				editorReady = true
-				vm:execute([[
-					print(_G)
-				]])
 			end)
 		end,
 
@@ -198,6 +197,7 @@ KinemiumIDE.InitRenderer = function(renderer, renderer_signal)
 
 		Changed = signal.new(),
 	})
+			--]]
 end
 
 return KinemiumIDE

@@ -14,7 +14,7 @@ function DataModel.new(RENDERER, ...)
 	local self = setmetatable({}, DataModel)
 
 	self = Instance.new("DataModel")
-	self.Name = "game"
+	self.Name = "datamodel"
 	self.Dimension = Enum.Dimension["3D"]
 	self.Context = Enum.GameContext.Editor
 	self.EngineSignal = signal.new()
@@ -46,7 +46,7 @@ function DataModel.new(RENDERER, ...)
 			local success2, returnedData2 = pcall(function()
 				self.Services[name] = returnedData
 				if returnedData.InitRenderer then
-					returnedData.InitRenderer(RENDERER, RENDERER.Signal, self)
+					returnedData.InitRenderer(RENDERER, RENDERER.EventBus, self)
 					if returnedData.aliases then
 						aliases[name] = returnedData.aliases
 					end
@@ -66,6 +66,7 @@ function DataModel.new(RENDERER, ...)
 						.. "\n"
 						.. debug.traceback("", 2)
 				)
+				zune.process.exit(1)
 			end
 		else
 			warn(
@@ -78,6 +79,7 @@ function DataModel.new(RENDERER, ...)
 					.. "\n"
 					.. debug.traceback("", 2)
 			)
+			zune.process.exit(1)
 		end
 	end
 

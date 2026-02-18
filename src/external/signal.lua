@@ -327,8 +327,7 @@ function Signal:Destroy()
 	setmetatable(self, nil)
 end
 
-function Signal:__tostring()
-	return ("Signal(%d listeners, %s)"):format(#self._connections, self._paused and "paused" or "active")
-end
+Signal.__type = "KinemiumSignal"
+Connection.__type = "KinemiumConnection"
 
 return Signal

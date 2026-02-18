@@ -11,7 +11,7 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local vend = KinemiumFontService.GetDefaultFont()
 
-local aereon = import("@Kinemium.Aereon")
+local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
 local gui = aereon.gui
 local currentObject
@@ -20,18 +20,10 @@ local menuTarget
 local backgroundColor =
 	StudioThemeService.SelectedTheme.BackgroundColor:ToRaylib(StudioThemeService.SelectedTheme.BackgroundTransparency)
 local TextColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(StudioThemeService.SelectedTheme.TextTransparency)
-local ImageColor =
-	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
-
-local dragData = {
-	object = nil,
-	offset = Vector2.new(0, 0),
-}
 
 local dragStartOffset = Vector2.new(0, 0)
 
 local dragging = nil
-local dragOffset = Vector2.new(0, 0)
 
 local activeHandle = nil
 local dragStartMouse = nil
@@ -39,7 +31,6 @@ local dragStartPos = nil
 local dragStartSize = nil
 
 local Arect = require("@Arect")(raylib.lib)
-local connection
 
 Selection.SelectionAdded:Connect(function(selected) end)
 
@@ -52,7 +43,6 @@ local function applyAnchor(object, newAnchor)
 	object.Position = UDim2.new(newAnchor.X, 0, newAnchor.Y, 0)
 end
 
--- context menu utils
 local utilsMenu = gui.menu({
 	x = 0,
 	y = 0,
@@ -542,11 +532,7 @@ local function highlight(selected)
 	drawHandles(absPos, absSize, selected)
 end
 
-function measureText(text, size)
-	return lib.MeasureTextEx(vend, text, size, 1)
-end
-
-renderer.AddGuiStack(function()
+renderer.Pool.new("2d", function()
 	local dt = raylib.lib.GetFrameTime()
 	local mousePos = raylib.lib.GetMousePosition()
 
@@ -604,4 +590,4 @@ renderer.AddGuiStack(function()
 	end
 
 	utilsMenu.render(dt)
-end)
+end, -5)

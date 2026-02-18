@@ -130,6 +130,7 @@ function shader.cacheCommonLocations(shaderName)
 		"dirLightDir",
 		"dirLightColor",
 		"pointLightCount",
+		"lightCount",
 	}
 	for _, n in ipairs(names) do
 		shaderUniforms[shaderName][n] = lib.GetShaderLocation(activeShaders[shaderName], n)
@@ -190,13 +191,11 @@ function shader.SetShaderUniform(shaderName: string, uniformName: string, value:
 		return
 	end
 
-	local location = shaderUniforms[shaderName][uniformName] or shader.GetShaderUniformLocation(shaderName, uniformName)
+	shader.SetShaderValueRaw(shaderObj, uniformName, value, uniformType)
+end
 
-	--[[
-	if location == -1 then
-		return
-	end
-	--]]
+function shader.SetShaderValueRaw(shaderObj: buffer, uniformName: string, value: any, uniformType: number)
+	local location = lib.GetShaderLocation(shaderObj, uniformName)
 
 	local valuePtr
 	if type(value) == "number" then
@@ -210,11 +209,66 @@ function shader.SetShaderUniform(shaderName: string, uniformName: string, value:
 		valuePtr = ptr.vec3_ptr(value.x, value.y, value.z)
 	elseif type(value) == "table" and #value == 3 then
 		valuePtr = ptr.vec3_ptr(value[1], value[2], value[3])
+	elseif type(value) == "table" and #value == 4 then
+		local arr = ffi.create(ffi.types.float:array(4))
+		arr:writef32(0, value[1])
+		arr:writef32(4, value[2])
+		arr:writef32(8, value[3])
+		arr:writef32(12, value[4])
+		valuePtr = arr
+	elseif uniformType == const.ShaderUniformDataType.SHADER_UNIFORM_VEC4 and type(value) == "table" then
+		local count = #value
+		local arr = ffi.create(ffi.types.float:array(count * 4))
+		for i = 1, count do
+			local v = value[i]
+			local x = v[1] or v.x or v.X or 0
+			local y = v[2] or v.y or v.Y or 0
+			local z = v[3] or v.z or v.Z or 0
+			local w = v[4] or v.w or v.W or 0
+			local base = (i - 1) * 16
+			arr:writef32(base + 0, x)
+			arr:writef32(base + 4, y)
+			arr:writef32(base + 8, z)
+			arr:writef32(base + 12, w)
+		end
+		valuePtr = arr
+	elseif uniformType == const.ShaderUniformDataType.SHADER_UNIFORM_VEC3_ARRAY and type(value) == "table" then
+		local count = #value
+		local arr = ffi.create(ffi.types.float:array(count * 3))
+		for i = 1, count do
+			local v = value[i]
+			local x = v[1] or v.x or v.X or 0
+			local y = v[2] or v.y or v.Y or 0
+			local z = v[3] or v.z or v.Z or 0
+			local base = (i - 1) * 12
+			arr:writef32(base + 0, x)
+			arr:writef32(base + 4, y)
+			arr:writef32(base + 8, z)
+		end
+		valuePtr = arr
+	elseif uniformType == const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT_ARRAY and type(value) == "table" then
+		local count = #value
+		local arr = ffi.create(ffi.types.float:array(count))
+		for i = 1, count do
+			arr:writef32((i - 1) * 4, value[i] or 0)
+		end
+		valuePtr = arr
+	elseif uniformType == const.ShaderUniformDataType.SHADER_UNIFORM_VEC2 and type(value) == "table" then
+		local count = #value
+		local arr = ffi.create(ffi.types.float:array(count * 2))
+		arr:writef32(0, value[1] or value.x or value.X or 0)
+		arr:writef32(4, value[2] or value.y or value.Y or 0)
+		valuePtr = arr
 	else
 		valuePtr = value
 	end
 
 	lib.SetShaderValue(shaderObj, location, valuePtr, uniformType)
+end
+
+function shader.SetShaderTextureRaw(shaderObject, uniformName: string, texture: any)
+	local location = lib.GetShaderLocation(shaderObject, uniformName)
+	lib.SetShaderValueTexture(shaderObject, location, texture)
 end
 
 function shader.SetShaderTexture(shaderName: string, uniformName: string, texture: any)
@@ -223,8 +277,7 @@ function shader.SetShaderTexture(shaderName: string, uniformName: string, textur
 		return
 	end
 
-	local location = shaderUniforms[shaderName][uniformName] or shader.GetShaderUniformLocation(shaderName, uniformName)
-	lib.SetShaderValueTexture(shaderObj, location, texture)
+	shader.SetShaderTextureRaw(shaderObj, uniformName, texture)
 end
 
 function shader.UnloadShader(shaderName: string)

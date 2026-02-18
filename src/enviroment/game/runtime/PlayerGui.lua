@@ -11,9 +11,10 @@ PlayerGui.InitRenderer = function(renderer, renderer_signal)
 	PlayerGui.ChildAdded:Connect(function(child)
 		if type(child) == "table" and child.BaseClass == "UIContainer" then
 			if child["render"] then
-				renderer.AddToGuiRenderingPool(function()
-					return child
-				end, child.render)
+				renderer.Pool.new("2d", function()
+					local dt = renderer.Raylib.lib.GetFrameTime()
+					child.render(renderer.Raylib.lib, child, dt, renderer.Raylib.structs, renderer)
+				end, -5)
 			end
 		end
 	end)

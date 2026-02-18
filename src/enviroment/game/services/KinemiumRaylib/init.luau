@@ -6,9 +6,9 @@ KinemiumRaylib.ExplorerHidden = true
 
 KinemiumRaylib.InitRenderer = function(renderer, renderer_signal)
 	KinemiumRaylib:SetProperties({
-		lib = renderer.lib,
-		const = renderer.const,
-		structs = renderer.structs,
+		lib = renderer.Raylib.lib,
+		const = renderer.Raylib.const,
+		structs = renderer.Raylib.structs,
 		renderer = renderer,
 	})
 end

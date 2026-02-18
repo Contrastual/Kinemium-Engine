@@ -14,30 +14,42 @@ uniform vec3 viewPos;
 
 out vec4 finalColor;
 
+float Hash12(vec2 p)
+{
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
 float ShadowCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir)
 {
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
     projCoords = projCoords * 0.5 + 0.5;
 
-    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float sunHeight = clamp(lightDir.y, 0.0, 1.0);
+    float dayFactor = smoothstep(0.02, 0.18, sunHeight);
+
     float currentDepth = projCoords.z;
 
-    float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+    float bias = max(0.04 * (1.0 - dot(normal, lightDir)), 0.003);
+    bias *= mix(2.2, 1.0, sunHeight);
 
     float shadow = 0.0;
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    float softness = mix(2.2, 0.9, sunHeight);
+    vec2 jitter = vec2(Hash12(gl_FragCoord.xy), Hash12(gl_FragCoord.yx)) - 0.5;
     for(int x = -1; x <= 1; ++x)
     {
         for(int y = -1; y <= 1; ++y)
         {
-            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            vec2 offset = (vec2(x, y) + jitter) * texelSize * softness;
+            float pcfDepth = texture(shadowMap, projCoords.xy + offset).r;
             shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;
         }
     }
     shadow /= 9.0;
-
-    if(projCoords.z > 1.0)
-        shadow = 0.0;
+    shadow *= dayFactor;
 
     return shadow;
 }

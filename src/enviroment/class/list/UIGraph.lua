@@ -1,7 +1,7 @@
 local UDim2 = require("@UDim2")
 local Vector2 = require("@Vector2")
 local Color3 = require("@Color3")
-local Aereon = require("@Kinemium.Aereon")
+local Aereon = require("@Aereon")
 local gui = Aereon.gui
 local arect = Aereon.rect()
 local GuiObject = require("./GuiObject")
@@ -54,7 +54,7 @@ return {
 			graph.clear()
 		end
 
-		propTable.Point = function(value)
+		propTable.Push = function(value)
 			graph.push(value)
 		end
 
@@ -72,7 +72,6 @@ return {
 			graph.set("maxPoints", object.MaxPoints)
 			graph.set("min", object.Min)
 			graph.set("max", object.Max)
-			graph.push(math.random(0, 100))
 			graph.render(dt)
 		end
 

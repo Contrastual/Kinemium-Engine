@@ -3,6 +3,7 @@ local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
 local lib = raylib.lib
 local renderpool = {}
+local Vector2 = require("@Vector2")
 
 local proptble = {
 	Name = "ScreenGui",
@@ -14,9 +15,10 @@ local proptble = {
 
 	ResetOnSpawn = true,
 	Position = UDim2.new(0, 0, 0, 0),
-	Size = UDim2.new(0, lib.GetRenderWidth(), 0, lib.GetRenderHeight()),
+	Size = UDim2.new(0, 400, 0, 400),
 	BackgroundColor3 = Color3.new(1, 1, 1),
 	BackgroundTransparency = 1,
+	RenderOffset = Vector2.new(0, 0),
 
 	BaseClass = "UIContainer",
 }
@@ -26,6 +28,9 @@ return {
 
 	callback = function(instance, renderer)
 		proptble.render = function(lib, instance, dt, structs)
+			if not instance.Enabled then
+				return
+			end
 			local renderWidth, renderHeight
 
 			if IsHeadless then

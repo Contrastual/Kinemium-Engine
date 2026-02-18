@@ -6,15 +6,8 @@ local dump = require("./dump")
 _G.log = _G.log
 
 enumTable.KeyCode = {
-	Backspace = 8,
-	Tab = 9,
-	Clear = 12,
-	Return = 13,
-	Pause = 19,
-	Escape = 27,
 	Space = 32,
-
-	Quote = 39,
+	Quote = 39, -- Apostrophe
 	Comma = 44,
 	Minus = 45,
 	Period = 46,
@@ -64,92 +57,75 @@ enumTable.KeyCode = {
 	LeftBracket = 91,
 	Backslash = 92,
 	RightBracket = 93,
+	Grave = 96,
 
-	Insert = 45,
-	Delete = 46,
-	Home = 36,
-	End = 35,
-	PageUp = 33,
-	PageDown = 34,
+	Escape = 256,
+	Return = 257,
+	Tab = 258,
+	Backspace = 259,
+	Insert = 260,
+	Delete = 261,
 
-	Left = 37,
-	Up = 38,
-	Right = 39,
-	Down = 40,
+	Right = 262,
+	Left = 263,
+	Down = 264,
+	Up = 265,
 
-	Select = 41,
-	Print = 42,
-	Execute = 43,
-	PrintScreen = 44,
-	Help = 47,
+	PageUp = 266,
+	PageDown = 267,
+	Home = 268,
+	End = 269,
 
-	ZeroPad = 96,
-	OnePad = 97,
-	TwoPad = 98,
-	ThreePad = 99,
-	FourPad = 100,
-	FivePad = 101,
-	SixPad = 102,
-	SevenPad = 103,
-	EightPad = 104,
-	NinePad = 105,
+	CapsLock = 280,
+	ScrollLock = 281,
+	NumLock = 282,
+	PrintScreen = 283,
+	Pause = 284,
 
-	Multiply = 106,
-	Add = 107,
-	Separator = 108,
-	Subtract = 109,
-	Decimal = 110,
-	Divide = 111,
+	F1 = 290,
+	F2 = 291,
+	F3 = 292,
+	F4 = 293,
+	F5 = 294,
+	F6 = 295,
+	F7 = 296,
+	F8 = 297,
+	F9 = 298,
+	F10 = 299,
+	F11 = 300,
+	F12 = 301,
 
-	F1 = 112,
-	F2 = 113,
-	F3 = 114,
-	F4 = 115,
-	F5 = 116,
-	F6 = 117,
-	F7 = 118,
-	F8 = 119,
-	F9 = 120,
-	F10 = 121,
-	F11 = 122,
-	F12 = 123,
-	F13 = 124,
-	F14 = 125,
-	F15 = 126,
+	-- Keypad
+	ZeroPad = 320,
+	OnePad = 321,
+	TwoPad = 322,
+	ThreePad = 323,
+	FourPad = 324,
+	FivePad = 325,
+	SixPad = 326,
+	SevenPad = 327,
+	EightPad = 328,
+	NinePad = 329,
 
-	NumLock = 144,
-	CapsLock = 20,
-	ScrollLock = 145,
+	Decimal = 330,
+	Divide = 331,
+	Multiply = 332,
+	Subtract = 333,
+	Add = 334,
+	KeypadEnter = 335,
+	KeypadEquals = 336,
 
-	LeftShift = 160,
-	RightShift = 161,
-	LeftControl = 162,
-	RightControl = 163,
-	LeftAlt = 164,
-	RightAlt = 165,
+	-- Modifiers
+	LeftShift = 340,
+	LeftControl = 341,
+	LeftAlt = 342,
+	LeftSuper = 343,
+	RightShift = 344,
+	RightControl = 345,
+	RightAlt = 346,
+	RightSuper = 347,
 
-	LeftMeta = 91,
-	RightMeta = 92,
-	LeftSuper = 91,
-	RightSuper = 92,
-
-	Mode = 257,
-
-	Apps = 93,
-	Sleep = 95,
-
-	Thumbstick1 = 1000,
-	Thumbstick2 = 1001,
-	ButtonX = 1002,
-	ButtonY = 1003,
-	ButtonA = 1004,
-	ButtonB = 1005,
-	DPadLeft = 1006,
-	DPadRight = 1007,
-	DPadUp = 1008,
-	DPadDown = 1009,
-	Start = 1010,
-	Back = 1011,
+	Apps = 348,
 }
 
 enumTable.MachineNetworkOwner = {
@@ -207,26 +183,13 @@ enumTable.ActuatorRelativeTo = {
 }
 
 enumTable.Material = {
-	Air = "air",
 	SmoothPlastic = "smoothplastic",
-	Plastic = "plastic",
-	Metal = "metal",
 	Wood = "wood",
-	Glass = "glass",
 	Grass = "grass",
-	Rubber = "rubber",
-	Marble = "marble",
-	Granite = "granite",
 	Concrete = "concrete",
-	Fabric = "fabric",
 	Slate = "slate",
 	Sand = "sand",
-	Leather = "leather",
-	CarbonFiber = "carbonfiber",
-	Ice = "ice",
-	Neon = "neon",
 	debug = "debug",
-	ForceField = "forcefield",
 }
 
 enumTable.UserInputState = {
@@ -459,6 +422,7 @@ enumTable.AnimationPriority = {
 enumTable.GameContext = {
 	Game = 1,
 	Editor = 2,
+	Home = 3,
 }
 
 enumTable.RunContext = {
@@ -526,6 +490,15 @@ enumTable.ShapeType2D = {
 	Polygon = 2,
 	Edge = 3,
 	Chain = 4,
+}
+
+enumTable.PhysicsEngine = {
+	Default = 0,
+	Jolt = 1,
+	Ode = 2,
+	Bullet = 3,
+	PhysX = 4,
+	Impulse3D = 6,
 }
 
 enumTable.JointType2D = {
@@ -614,7 +587,9 @@ enumTable.SecurityCapabilities = {
 }
 
 for propName, values in pairs(dump) do
-	if not propName then continue end
+	if not propName then
+		continue
+	end
 	if enumTable[propName] then
 		for name, value in pairs(values) do
 			if enumTable[propName][name] then

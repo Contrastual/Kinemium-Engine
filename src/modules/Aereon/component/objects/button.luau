@@ -38,6 +38,14 @@ return function(objects, data)
 		return wrapper
 	end
 
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
+	wrapper.get_rect = function()
+		return config.obj_rect
+	end
+
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 		local isHovered = rect.MouseIsInRect(r)

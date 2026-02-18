@@ -3,6 +3,7 @@ local logic = require("@Kinemium.2dinput")
 
 local GuiObject = require("@GuiObject")
 local TextLabel = require("@TextLabel")
+local aereon = require("@aereon")
 
 local propTable = {
 	Name = "TextBox",
@@ -17,20 +18,20 @@ local propTable = {
 TextLabel.inherit(propTable)
 GuiObject.inherit(propTable)
 
+local datamodel
+
 propTable.render = function(lib, object, dt, structs, renderer)
 	local framePos, frameSize = TextLabel.render(lib, object, dt, structs, renderer)
 	if not object.Visible or not framePos or not frameSize then
 		return
 	end
 
-	logic:Step(object, lib, renderer)
-
 	return framePos, frameSize
 end
 
 return {
 	class = "TextBox",
-	callback = function(instance)
+	callback = function(instance, renderer, game)
 		logic:SetupSignals(propTable)
 
 		instance:SetProperties(propTable)

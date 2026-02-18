@@ -1,19 +1,12 @@
-local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
 local GuiObject = require("@GuiObject")
-local Enum = require("@EnumMap")
 local raylib = require("@Raylib")
-local lib = raylib.lib
 local UDim2 = require("@UDim2")
-local Color3 = require("@Color3")
 local structs = raylib.structs
-local const = raylib.const
 local Vector2 = require("@Vector2")
 local UDim = require("@UDim")
 
-local aereon = require("@Kinemium.Aereon")
-local gui = aereon.gui
+local aereon = require("@Aereon")
 local arect = aereon.rect()
 
 local propTable = {
@@ -29,6 +22,7 @@ local propTable = {
 	ScrollBarCornerRadius = UDim.new(0, 0),
 	ScrollBarBackgroundTransparency = 1,
 	ScrollBarBackgroundColor3 = Color3.new(1, 1, 1),
+	ScrollBarHoverColor3 = Color3.new(0.6, 0.6, 0.6),
 
 	-- scrolling state
 	Scroll = 0, -- normalized 0–1 (thumb position)
@@ -47,11 +41,33 @@ local propTable = {
 	-- behavior
 	ScrollBarThickness = 8,
 	ScrollBarVisible = true,
-	Elasticity = 0, -- 0 = hard clamp, >0 = overscroll later
+	ScrollBarAutoHide = true, -- auto-hide when not scrolling
+	ScrollBarFadeSpeed = 4, -- fade speed
+	ScrollBarPadding = 2, -- padding from edge
 
-	-- internal (do not expose)
+	-- elastic overscroll (Samsung-style)
+	ElasticEnabled = true,
+	ElasticStrength = 0.8, -- how far you can overscroll (0-1, relative to viewport)
+	ElasticSnapSpeed = 12, -- how fast it snaps back
+
+	-- momentum scrolling
+	MomentumEnabled = true,
+	MomentumFriction = 0.92, -- 0-1, higher = scrolls longer
+	MomentumMinVelocity = 0.001, -- minimum velocity before stopping
+
+	-- track clicking
+	TrackClickEnabled = true, -- click scrollbar track to jump
+	TrackClickSmooth = true, -- smooth scroll to position instead of instant
+
 	_draggingThumb = false,
 	_dragOffsetY = 0,
+	_scrollBarAlpha = 0, -- for fade in/out
+	_timeSinceLastScroll = 999, -- accumulated dt since last scroll
+	_velocity = 0, -- for momentum
+	_isOverscrolled = false,
+	_lastScroll = 0, -- for velocity calculation
+	_isHoveringThumb = false,
+	_isHoveringTrack = false,
 }
 
 local function c3tr(c, transparency)
@@ -64,6 +80,18 @@ local function c3tr(c, transparency)
 	})
 end
 
+-- Elastic easing function (bounces back at boundaries)
+local function elasticClamp(value, min, max, strength)
+	if value < min then
+		local overshoot = min - value
+		return min - overshoot * strength
+	elseif value > max then
+		local overshoot = value - max
+		return max + overshoot * strength
+	end
+	return value
+end
+
 GuiObject.inherit(propTable)
 
 return {
@@ -71,10 +99,21 @@ return {
 
 	callback = function(instance, renderer, game)
 		propTable.render = function(lib, object, dt, structs, renderer)
+			if not object.Visible then
+				return
+			end
 			object._draggingThumb = object._draggingThumb or false
 			object._dragOffsetY = object._dragOffsetY or 0
+			object._scrollBarAlpha = object._scrollBarAlpha or (object.ScrollBarAutoHide and 0 or 1)
+			object._timeSinceLastScroll = object._timeSinceLastScroll or 999
+			object._velocity = object._velocity or 0
+			object._isOverscrolled = object._isOverscrolled or false
+			object._lastScroll = object._lastScroll or object.Scroll
+			object._isHoveringThumb = object._isHoveringThumb or false
+			object._isHoveringTrack = object._isHoveringTrack or false
 
-			local canvasOffset = Vector2.new(0, object.CanvasPosition or 0)
+			-- Accumulate time since last scroll
+			object._timeSinceLastScroll = object._timeSinceLastScroll + dt
 
 			local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
 			object.AbsolutePosition = pos
@@ -82,69 +121,7 @@ return {
 
 			local backgroundRect = arect.new(pos.X, pos.Y, size.X, size.Y)
 
-			local scrollbarWidth = instance.ScrollBarThickness
-			local scrollbarRect = arect.new(pos.X + size.X - scrollbarWidth, pos.Y, scrollbarWidth, size.Y)
-
-			lib.DrawRectangleRec(
-				arect:translate(scrollbarRect),
-				c3tr(object.ScrollBarBackgroundColor3, object.ScrollBarBackgroundTransparency)
-			)
-
-			-- thumb
-			local thumbMinHeight = 16
-			local thumbHeight = math.max(size.Y * 0.2, thumbMinHeight)
-			thumbHeight = math.min(thumbHeight, size.Y)
-
-			local scroll = math.clamp(object.Scroll or 0, 0, 1)
-			local thumbY = pos.Y + (size.Y - thumbHeight) * scroll
-			local thumbRect = arect.new(pos.X + size.X - scrollbarWidth, thumbY, scrollbarWidth, thumbHeight)
-
-			lib.DrawRectangleRec(arect:translate(thumbRect), c3tr(object.ScrollBarColor3, object.ScrollBarTransparency))
-
-			-- logic
-			local mousePos = lib.GetMousePosition()
-
-			-- start dragging
-			if lib.IsMouseButtonPressed(0) == 1 and arect.MouseIsInRect(thumbRect) then
-				object._draggingThumb = true
-				object._dragOffsetY = mousePos.y - thumbY
-				raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
-			end
-
-			-- stop dragging
-			if lib.IsMouseButtonReleased(0) == 1 then
-				object._draggingThumb = false
-				raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
-			end
-
-			-- drag update
-			if object._draggingThumb then
-				local minY = pos.Y
-				local maxY = pos.Y + size.Y - thumbHeight
-
-				local newThumbY = mousePos.y - object._dragOffsetY
-				newThumbY = math.clamp(newThumbY, minY, maxY)
-
-				object.ScrollTarget = (newThumbY - minY) / (maxY - minY)
-			end
-
-			-- detect scroll
-			if arect.MouseIsInRect(backgroundRect) then
-				local wheel = lib.GetMouseWheelMove()
-
-				if wheel ~= 0 then
-					object.ScrollTarget =
-						math.clamp((object.ScrollTarget or object.Scroll) + wheel * object.ScrollOffset, 0, 1)
-				end
-			end
-
-			-- hard clamp (safety)
-			object.ScrollTarget = math.clamp(object.ScrollTarget or object.Scroll, 0, 1)
-
-			object.Scroll = object.Scroll
-				+ (object.ScrollTarget - object.Scroll) * math.clamp(dt * object.ScrollLerpSpeed, 0, 1)
-
-			-- compute total content height
+			-- Compute total content height first
 			local contentHeight = 0
 			for _, child in pairs(object:GetChildren()) do
 				local childOffset = child.Position.Y.Offset
@@ -155,12 +132,191 @@ return {
 			object.ContentSize = object.AutoScrollSize and contentHeight or object.CanvasSize
 
 			local maxScroll = math.max(0, object.ContentSize - object.AbsoluteSize.Y)
+			local canScroll = maxScroll > 0
+
+			-- Auto-hide scrollbar logic
+			if object.ScrollBarAutoHide then
+				local fadeDelay = 0.5 -- seconds before fading
+
+				if object._draggingThumb or object._isHoveringTrack or object._timeSinceLastScroll < fadeDelay then
+					object._scrollBarAlpha = math.min(1, object._scrollBarAlpha + dt * object.ScrollBarFadeSpeed)
+				else
+					object._scrollBarAlpha = math.max(0, object._scrollBarAlpha - dt * object.ScrollBarFadeSpeed)
+				end
+			else
+				object._scrollBarAlpha = 1
+			end
+
+			-- Only render scrollbar if visible and there's content to scroll
+			local scrollbarWidth = instance.ScrollBarThickness
+			local scrollbarRect =
+				arect.new(pos.X + size.X - scrollbarWidth - object.ScrollBarPadding, pos.Y, scrollbarWidth, size.Y)
+
+			if object.ScrollBarVisible and canScroll and object._scrollBarAlpha > 0 then
+				-- Background track
+				lib.DrawRectangleRec(
+					arect:translate(scrollbarRect),
+					c3tr(
+						object.ScrollBarBackgroundColor3,
+						1 - (1 - object.ScrollBarBackgroundTransparency) * object._scrollBarAlpha
+					)
+				)
+
+				-- Thumb
+				local thumbMinHeight = 16
+				local viewportRatio = math.min(1, size.Y / object.ContentSize)
+				local thumbHeight = math.max(size.Y * viewportRatio, thumbMinHeight)
+				thumbHeight = math.min(thumbHeight, size.Y)
+
+				local scroll = object.Scroll or 0
+				local scrollableRange = size.Y - thumbHeight
+				local thumbY = pos.Y + scrollableRange * math.clamp(scroll, 0, 1)
+				local thumbRect = arect.new(
+					pos.X + size.X - scrollbarWidth - object.ScrollBarPadding,
+					thumbY,
+					scrollbarWidth,
+					thumbHeight
+				)
+
+				-- Determine thumb color (hover effect)
+				local thumbColor = object._isHoveringThumb and object.ScrollBarHoverColor3 or object.ScrollBarColor3
+				lib.DrawRectangleRec(
+					arect:translate(thumbRect),
+					c3tr(thumbColor, 1 - (1 - object.ScrollBarTransparency) * object._scrollBarAlpha)
+				)
+
+				-- Mouse interaction
+				local mousePos = lib.GetMousePosition()
+				object._isHoveringThumb = arect.MouseIsInRect(thumbRect)
+				object._isHoveringTrack = arect.MouseIsInRect(scrollbarRect)
+
+				-- Start dragging thumb
+				if lib.IsMouseButtonPressed(0) == 1 and object._isHoveringThumb then
+					object._draggingThumb = true
+					object._dragOffsetY = mousePos.y - thumbY
+					object._velocity = 0 -- stop momentum when dragging
+					object._timeSinceLastScroll = 0
+					raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
+				end
+
+				-- Click on track to jump (if not clicking thumb)
+				if
+					object.TrackClickEnabled
+					and lib.IsMouseButtonPressed(0) == 1
+					and object._isHoveringTrack
+					and not object._isHoveringThumb
+				then
+					local clickY = mousePos.y
+					local targetScroll = math.clamp((clickY - pos.Y - thumbHeight / 2) / scrollableRange, 0, 1)
+
+					if object.TrackClickSmooth then
+						object.ScrollTarget = targetScroll
+					else
+						object.Scroll = targetScroll
+						object.ScrollTarget = targetScroll
+					end
+					object._timeSinceLastScroll = 0
+				end
+
+				-- Stop dragging
+				if lib.IsMouseButtonReleased(0) == 1 then
+					object._draggingThumb = false
+					raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+				end
+
+				-- Drag update
+				if object._draggingThumb then
+					local minY = pos.Y
+					local maxY = pos.Y + scrollableRange
+
+					local newThumbY = mousePos.y - object._dragOffsetY
+					newThumbY = math.clamp(newThumbY, minY, maxY)
+
+					local newScroll = (newThumbY - minY) / scrollableRange
+					object.ScrollTarget = newScroll
+					object._timeSinceLastScroll = 0
+				end
+			end
+
+			if arect.MouseIsInRect(backgroundRect) and canScroll then
+				local wheel = lib.GetMouseWheelMove()
+
+				if wheel ~= 0 then
+					local currentTarget = object.ScrollTarget or object.Scroll
+					object.ScrollTarget = currentTarget - wheel * object.ScrollOffset
+					object._velocity = -wheel * object.ScrollOffset * 0.5 -- add some momentum
+					object._timeSinceLastScroll = 0
+				end
+			end
+
+			if object.ElasticEnabled then
+				if object.ScrollTarget < 0 or object.ScrollTarget > 1 then
+					object._isOverscrolled = true
+				end
+
+				if object.ScrollTarget < 0 then
+					local overshoot = -object.ScrollTarget
+					object.ScrollTarget = -overshoot * object.ElasticStrength
+				elseif object.ScrollTarget > 1 then
+					local overshoot = object.ScrollTarget - 1
+					object.ScrollTarget = 1 + overshoot * object.ElasticStrength
+				end
+
+				if object._isOverscrolled and not object._draggingThumb then
+					if object._timeSinceLastScroll > 0.1 then -- small delay before snapping
+						if object.ScrollTarget < 0 then
+							object.ScrollTarget = object.ScrollTarget
+								+ (0 - object.ScrollTarget) * dt * object.ElasticSnapSpeed
+							if math.abs(object.ScrollTarget) < 0.001 then
+								object.ScrollTarget = 0
+								object._isOverscrolled = false
+							end
+						elseif object.ScrollTarget > 1 then
+							object.ScrollTarget = object.ScrollTarget
+								+ (1 - object.ScrollTarget) * dt * object.ElasticSnapSpeed
+							if math.abs(object.ScrollTarget - 1) < 0.001 then
+								object.ScrollTarget = 1
+								object._isOverscrolled = false
+							end
+						end
+					end
+				end
+			else
+				-- Hard clamp if elastic is disabled
+				object.ScrollTarget = math.clamp(object.ScrollTarget or object.Scroll, 0, 1)
+			end
+
+			-- Calculate velocity for momentum
+			if object.MomentumEnabled and not object._draggingThumb then
+				local scrollDelta = object.Scroll - object._lastScroll
+				object._velocity = scrollDelta / dt
+
+				-- Apply momentum when not actively scrolling
+				if object._timeSinceLastScroll > 0.05 and math.abs(object._velocity) > object.MomentumMinVelocity then
+					object.ScrollTarget = object.ScrollTarget + object._velocity * dt
+					object._velocity = object._velocity * object.MomentumFriction
+
+					-- Stop momentum if velocity is too low
+					if math.abs(object._velocity) < object.MomentumMinVelocity then
+						object._velocity = 0
+					end
+				end
+			end
+
+			-- Smooth scroll interpolation
+			object.Scroll = object.Scroll
+				+ (object.ScrollTarget - object.Scroll) * math.clamp(dt * object.ScrollLerpSpeed, 0, 1)
+
+			-- Store last scroll for velocity calculation
+			object._lastScroll = object.Scroll
+
+			-- Calculate canvas position (allow negative for overscroll effect)
 			object.CanvasPosition = object.Scroll * maxScroll
 
+			-- Render children with clipping and offset
 			for _, child in pairs(object:GetChildren()) do
 				if child.render then
-					local originalPos = child.Position
-
+					-- Store base position once
 					child._basePosition = child._basePosition or child.Position
 
 					local base = child._basePosition

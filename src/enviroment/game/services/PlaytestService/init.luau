@@ -2,6 +2,8 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 local Color3 = require("@Color3")
 
+local befProps = {}
+
 local PlaytestService = Instance.new("PlaytestService")
 PlaytestService.ExplorerHidden = true
 
@@ -9,7 +11,13 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	PlaytestService:SetProperties({
 		CreatePlaytestAsync = function()
 			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
+			local workspace = datamodel.Workspace
 
+			for _, v in pairs(workspace:GetDescendants()) do
+				befProps[v.UniqueId] = v._props
+			end
+
+			PlaytestService.IsPlaytesting = true
 			ScriptRunnerService.Clear()
 
 			for _, script in pairs(datamodel:GetDescendants()) do
@@ -20,11 +28,23 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end,
 
 		StopCurrentPlaytest = function()
-			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
+			local workspace = datamodel.Workspace
 
-			print(ScriptRunnerService.GetActive())
+			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
+			PlaytestService.IsPlaytesting = false
+
+			for _, v in pairs(workspace:GetDescendants()) do
+				if befProps[v.UniqueId] then
+					for propName, propValue in pairs(befProps[v.UniqueId]) do
+						v[propName] = propValue
+					end
+				end
+			end
+
 			ScriptRunnerService.Clear()
 		end,
+
+		IsPlaytesting = false,
 	})
 end
 

@@ -32,6 +32,8 @@ local inputRT
 local normalRT
 local depthRT
 
+ki3d.enabled = true
+
 ki3d.color3 = function(x, y, z)
 	return { r = x, g = y, b = z }
 end
@@ -84,6 +86,7 @@ ki3d.Begin3D = function(self)
 		return
 	end
 	lib.BeginTextureMode(sceneRT)
+	lib.ClearBackground(raylib.const.BLACK)
 end
 
 ki3d.End3D = function(self)
@@ -95,24 +98,38 @@ ki3d.End3D = function(self)
 	local screenWidth = lib.GetRenderWidth()
 	local screenHeight = lib.GetRenderHeight()
 
+	local currentRT = sceneRT -- start from the scene
+	local tempRT = outputRT -- temp for filters
+
 	for _, filter in pairs(filters) do
-		lib.BeginTextureMode(outputRT)
-		lib.ClearBackground(raylib.const.BLANK)
+		if not ki3d.enabled then
+			continue
+		end
 
 		local runtime_lib = {
 			lib = lib,
 			structs = raylib.structs,
 			const = raylib.const,
 
-			texture = utils.extract.texture(inputRT),
-			depth = utils.extract.depth(depthRT),
-			normal = utils.extract.normal(normalRT),
+			texture = utils.extract.texture(currentRT),
+			depth = utils.extract.texture(depthRT),
+			normal = utils.extract.texture(normalRT),
 
 			width = screenWidth,
 			height = screenHeight,
 			size = { x = 0, y = 0, width = screenWidth, height = -screenHeight },
 			rect = raylib.structs.Rectangle,
+
+			shaderobj = filter.shader,
 		}
+
+		if filter.disableauto and filter.setuniforms then
+			filter.setuniforms(filter, runtime_lib)
+			continue
+		end
+
+		lib.BeginTextureMode(tempRT)
+		lib.ClearBackground(raylib.const.BLACK)
 
 		filter:begin(runtime_lib)
 		lib.DrawTextureRec(
@@ -125,13 +142,28 @@ ki3d.End3D = function(self)
 
 		lib.EndTextureMode()
 
-		inputRT, outputRT = outputRT, inputRT
+		-- copy tempRT -> currentRT for next filter
+		lib.BeginTextureMode(currentRT)
+		lib.ClearBackground(raylib.const.BLANK)
+		lib.DrawTextureRec(
+			utils.extract.texture(tempRT),
+			runtime_lib.rect:new({ x = 0, y = 0, width = screenWidth, height = screenHeight }), -- positive height
+			vector.create(0, 0),
+			raylib.const.WHITE
+		)
+		lib.EndTextureMode()
 	end
 
-	self.finalRT = sceneRT
+	self.finalRT = currentRT
 end
 
-ki3d.scene = sceneRT
+ki3d.GetRenderTextures = function()
+	return {
+		scene = sceneRT,
+		normalRT = normalRT,
+		depthRT = depthRT,
+	}
+end
 
 ki3d.BeginNormals = function(normalShader)
 	lib.BeginTextureMode(normalRT)
@@ -145,19 +177,33 @@ end
 
 ki3d.BeginDepth = function(depthShader)
 	lib.BeginTextureMode(depthRT)
-	lib.BeginShaderMode(depthShader)
+	lib.ClearBackground(raylib.const.WHITE)
 end
 
 ki3d.EndDepth = function()
-	lib.EndShaderMode()
 	lib.EndTextureMode()
 end
 
 ki3d.UpdateRenderTextures = function(screenWidth, screenHeight)
+	-- unload old textures first to avoid memory leaks
+	if sceneRT then
+		lib.UnloadRenderTexture(sceneRT)
+	end
+	if normalRT then
+		lib.UnloadRenderTexture(normalRT)
+	end
+	if depthRT then
+		lib.UnloadRenderTexture(depthRT)
+	end
+	if outputRT then
+		lib.UnloadRenderTexture(outputRT)
+	end
+
 	sceneRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 	normalRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 	depthRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 	outputRT = lib.LoadRenderTexture(screenWidth, screenHeight)
+	inputRT = sceneRT
 end
 
 ki3d.Draw = function(self, camera)
@@ -171,12 +217,18 @@ ki3d.Draw = function(self, camera)
 	lib.ClearBackground(raylib.const.BLACK)
 	lib.BeginBlendMode(raylib.const.BlendMode.BLEND_ALPHA)
 
-	lib.DrawTextureRec(
+	local source = raylib.structs.Rectangle:new({ x = 0, y = 0, width = screenWidth, height = -screenHeight })
+	local mainRect = raylib.structs.Rectangle:new({ x = 0, y = 0, width = screenWidth, height = screenHeight })
+
+	lib.DrawTexturePro(
 		utils.extract.texture(self.finalRT),
-		raylib.structs.Rectangle:new({ x = 0, y = 0, width = screenWidth, height = -screenHeight }),
+		source,
+		mainRect,
 		vector.create(0, 0),
+		0,
 		raylib.const.WHITE
 	)
+
 	lib.EndBlendMode()
 end
 

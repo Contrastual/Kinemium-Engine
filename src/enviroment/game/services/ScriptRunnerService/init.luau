@@ -4,6 +4,11 @@ local signal = require("@Kinemium.signal")
 local Enum = require("@EnumMap")
 local sandboxer = require("@sandboxer")
 local task = zune.task
+local fs = zune.fs
+local process = zune.process
+
+local qjsvm = require("@quickjs")
+local python = require("@python")
 
 local ScriptRunnerService = Instance.new("ScriptRunnerService")
 ScriptRunnerService.ExplorerHidden = true
@@ -13,6 +18,8 @@ ScriptRunnerService.ExplorerHidden = true
 local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
 
 ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
+	local ScriptRan = signal.new()
+
 	ScriptRunnerService:SetProperties({
 		RunLuauScript = function(ScriptInstance)
 			local LogService = datamodel:GetService("LogService")
@@ -37,8 +44,6 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 		end,
 
 		RunPythonScript = function(ScriptInstance)
-			local python = require("@python")
-
 			local VM = python.PythonVM.new()
 
 			for k, p in pairs(enviroment) do
@@ -50,20 +55,10 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 			return VM:execute(ScriptInstance.Source), VM
 		end,
 
-		RunDuktapeScript = function(ScriptInstance)
-			local duktape = require("@duktape")
-
+		RunQuickJS = function(ScriptInstance)
 			local object = task.spawn(function()
-				local VM = duktape.DuktapeVM.new()
-
-				for k, p in pairs(enviroment) do
-					if type(p) == "table" then
-						continue
-					end
-					VM:setGlobal(k, p)
-				end
-
-				VM:execute(ScriptInstance.Source)
+				local VM = qjsvm.new()
+				VM.Evaluate(ScriptInstance.Source)
 			end)
 
 			threads.duktape[ScriptInstance.Name] = object
@@ -78,7 +73,7 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 			elseif language == Enum.Language.Python then
 				return ScriptRunnerService.RunPythonScript(ScriptInstance)
 			elseif language == Enum.Language.JavaScript then
-				return ScriptRunnerService.RunDuktapeScript(ScriptInstance)
+				return ScriptRunnerService.RunQuickJS(ScriptInstance)
 			end
 			return
 		end,
@@ -98,6 +93,32 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 
 			for _, thread in pairs(threads.duktape) do
 				thread:close()
+			end
+		end,
+
+		OpenInExternalEditor = function(script, program, folderPath)
+			if program == "vscode" then
+				local path = folderPath .. "/" .. script.UniqueId .. ".luau"
+				fs.writeFile(path, script.Source)
+
+				script.IsOverridden = true
+
+				local abs = fs.realPath(path)
+
+				task.spawn(function()
+					process.run("code", { abs }, { shell = true })
+				end)
+				task.spawn(function()
+					while true do
+						if fs.stat(path).kind ~= "none" then
+							script.Source = fs.readFile(path)
+							task.wait(0.3)
+						else
+							print("File not found")
+							break
+						end
+					end
+				end)
 			end
 		end,
 	})

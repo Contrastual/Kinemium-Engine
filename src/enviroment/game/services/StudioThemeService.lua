@@ -18,8 +18,9 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			SecondaryTextTransparency = 0,
 			SecondaryTextColor = Color3.new(0.541176, 0.541176, 0.541176),
 			SecondaryBackgroundColor = Color3.new(0.03, 0.03, 0.03),
+			ThirdBackgroundColor = Color3.new(0.15, 0.15, 0.15),
 			SecondaryBackgroundColorTransparency = 0,
-			Accent = Color3.new(0.02, 0.5, 1),
+			Accent = Color3.new(1, 0.5490196078431373, 0),
 			AccentTransparency = 0,
 			WindowBackgroundColor = Color3.new(0, 0, 0),
 			WindowBackgroundTransparency = 0.05,
@@ -50,7 +51,7 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				},
 
 				ide = {
-					BackgroundColor = Color3.new(0.05, 0.05, 0.05),
+					BackgroundColor = Color3.fromRGB(16, 20, 28),
 					SecondaryBackgroundColor = Color3.new(0.07, 0.07, 0.07),
 					TextColor = Color3.new(1, 1, 1),
 					currentLineColor = Color3.new(0.2, 0.2, 0.2),

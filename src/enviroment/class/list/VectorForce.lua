@@ -8,7 +8,7 @@ local rl = raylib.lib
 local propTable = {
 	Attachment0 = nil,
 
-	Force = Vector3.new(0, 50, 1999),
+	Force = Vector3.new(0, 0, 0),
 	RelativeTo = Enum.ActuatorRelativeTo.World,
 
 	Enabled = true,
@@ -22,7 +22,7 @@ return {
 	callback = function(instance, renderer, game)
 		instance:SetProperties(propTable)
 
-		local PhysicsService = game:GetService("PhysicsService")
+		local PhysicsService = game:GetService("JoltPhysicsService")
 
 		local function updateArrow()
 			if not instance.Enabled or not instance.Attachment0 then
@@ -62,8 +62,8 @@ return {
 			end
 		end
 
-		renderer.Signal:Connect(function(route)
-			if route == "PrePhysics" then
+		renderer.EventBus:Connect(function(route)
+			if route == "RenderStepped" then
 				if not instance.Enabled then
 					return
 				end
@@ -71,13 +71,13 @@ return {
 				if attach and attach:IsA("Attachment") then
 					local parent = attach.Parent
 					if parent:IsA("Part") or parent:IsA("MeshPart") then
-						PhysicsService.ApplyForce(parent, instance.Force, attach.CFrame.Position)
+						PhysicsService.ApplyImpulse(parent, instance.Force)
 					end
 				end
 			end
 		end)
 
-		renderer.Add3DStack(function()
+		renderer.Pool.new("gizmo", function()
 			updateArrow()
 		end)
 

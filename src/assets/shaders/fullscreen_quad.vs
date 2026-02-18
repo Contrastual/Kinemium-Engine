@@ -1,11 +1,16 @@
 #version 330
 
-layout(location = 0) in vec2 aPosition;
-layout(location = 1) in vec2 aTexCoord;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
+in vec4 vertexColor;
 
-out vec2 vTexCoord;
+out vec2 fragTexCoord;
+out vec4 fragColor;
+
+uniform mat4 mvp;
 
 void main() {
-    vTexCoord = aTexCoord;
-    gl_Position = vec4(aPosition, 0.0, 1.0);
+    fragTexCoord = vertexTexCoord;
+    fragColor = vertexColor;
+    gl_Position = mvp * vec4(vertexPosition, 1.0);
 }

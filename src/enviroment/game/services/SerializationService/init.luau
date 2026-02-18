@@ -33,19 +33,18 @@ local blacklisted = {
 
 local function compress(tbl)
 	local encoded = encoder.encode(tbl)
-	local compressed = zstd.compress(encoded)
-	return serde.base64.encode(compressed)
+	return zstd.compress(encoded)
 end
 
 local function decompress(str)
-	local compressed = serde.base64.decode(str)
-	local decoded = zstd.decompress(compressed)
-	return encoder.decode(decoded)
+	local compressed = zstd.decompress(str)
+	return encoder.decode(compressed)
 end
 
 local function serialize_value(value)
 	if type(value) == "table" then
 		if value["ToTable"] then
+			print(value)
 			return value:ToTable()
 		end
 	elseif table.find(blacklisted, typeof(value)) then

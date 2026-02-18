@@ -1,1 +1,0 @@
-require('webview-launcher').launchFromArgs()

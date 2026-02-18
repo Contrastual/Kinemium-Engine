@@ -1,10 +1,19 @@
-local ffi = zune.ffi
-local c = ffi.c
+--!optimize 2
+--!native
 
-local pointer = ffi.types.pointer
-local void = ffi.types.void
-local float = ffi.types.float
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	_G.IsExecutable = true
+	print("Running embedded mode.")
+	print("EXE Path: " .. zune.fs.getExePath())
+	print("Current working directory: " .. zune.process.cwd())
+else
+	_G.IsExecutable = false
+end
+
 local httpServerViewer = require("@httpServerViewer")
+
+_G.ENGINE_PROFILER = require("@profiler")
 
 _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
@@ -12,6 +21,14 @@ end
 
 _G.log = function(...)
 	print("[\x1b[94mLOG\x1b[0m]", ...)
+end
+
+_G.runtime = function(...)
+	print("[\x1b[91mRUNTIME\x1b[0m]", ...)
+end
+
+_G.iodebug = function(...)
+	print("\x1b[38;5;208m[DEBUG]\x1b[0m", ...)
 end
 
 _G.task = zune.task
@@ -39,7 +56,7 @@ _G.GetFlagValue = function(flag)
 	local args = zune.process.args
 	for i, v in ipairs(args) do
 		if v == "--" .. flag then
-			return args[i + 1] -- may be nil if no value is provided
+			return args[i + 1]
 		end
 	end
 	return nil
@@ -54,7 +71,6 @@ _G.debugstep = function()
 	log(`Debug step {callerEnv._cdebug}`)
 end
 
--- primitives
 _G.float = function(value)
 	local buf = buffer.create(4)
 	buffer.writef32(buf, 0, value or 0)
@@ -71,31 +87,36 @@ end
 
 _G.printi = function(tbl)
 	for i, _ in pairs(tbl) do
-		print(i)
+		iodebug(i)
 	end
 end
 
+_G.cfunc = function(code)
+	local compiled = ffi.c.compile(code)
+	local ptr = compiled:getSymbol("callbackFunc")
+	return ptr
+end
+
+-- DEPENDENCIES
 local sandboxer = require("./modules/sandboxer")
 local Instance = require("@Instance")
 local filesystem = require("./modules/filesystem")
 local Enum = require("@EnumMap")
 local kilang = require("@kilang")
 local task = zune.task
-local Kinemium = {}
+local cam = require("@camera")
 
-local dummy = require("./renderer/dummy")
-
-local renderer
+-- DETERMINE ENGINE MODE
+_G.IsClient = false
+_G.IsServer = false
+_G.IsHeadless = false
 
 if FlagExists("client") then
 	_G.IsClient = true
-	_G.IsServer = false
 elseif FlagExists("server") then
 	_G.IsServer = true
-	_G.IsClient = false
-	--_G.IsHeadless = true
-
-	log("Running engine headless mode (Server).")
+	_G.IsHeadless = true
+	log("Running engine in headless mode (Server).")
 end
 
 if FlagExists("headless") then
@@ -104,26 +125,54 @@ end
 
 if FlagExists("cli") then
 	_G.IsHeadless = true
-
 	task.spawn(function()
 		task.wait(10)
-		print("Ran CLI successfully")
+		iodebug("Ran CLI successfully")
 		zune.process.exit(0)
 	end)
 end
 
-if IsHeadless then
-	kilang.renderer = dummy
+-- LOAD APPROPRIATE RENDERER
+local renderer
+local KiRend
+
+if _G.IsHeadless then
+	KiRend = require("./renderer/dummy")
+	renderer = KiRend.new({
+		width = 800,
+		height = 600,
+		maxFps = 120,
+		title = "Kinemium Headless",
+	})
+	log("Loaded headless renderer")
 else
-	kilang.renderer = require("@Kinemium.3d")
+	KiRend = require("@Kinemium.3d")
+	renderer = KiRend.new({
+		width = 1000,
+		height = 800,
+		maxFps = 0,
+		title = "Kinemium Engine",
+	})
+	log("Loaded GPU renderer")
 end
 
-kilang:init()
+-- SETUP CAMERA
+local instancePointer = Instance.new("Camera")
+local Kinemium_camera = cam.callback(instancePointer, renderer)
+Kinemium_camera.Parent = sandboxer.enviroment.Workspace
+
+-- SETUP KILANG
+kilang.renderer = renderer
+local CEnv = kilang:init(Kinemium_camera)
 
 local game = kilang.env.game
 kilang.env.FlagExists = FlagExists
-kilang.renderer.DatamodelObject(game)
 
+-- SETUP PROFILER
+renderer:SetProfiler(ENGINE_PROFILER)
+renderer:UseRlCamera(Kinemium_camera._raylibcam)
+
+-- FILE SYSTEM UTILITIES
 local function loop(base, callback)
 	base = base or "src/sandboxed"
 	filesystem.entryloop(base, function(entry)
@@ -137,21 +186,39 @@ local function loop(base, callback)
 	end)
 end
 
-local Folder = Instance.new("Folder")
-Folder.Name = "Studio"
-Folder.Parent = kilang.env.game.CoreGui
+-- KINEMIUM ENGINE
+local Kinemium = {}
 
-if not _G.IsHeadless then
+-- LOAD INTERNAL SCRIPTS
+local function loadInternals()
+	if _G.IsHeadless then
+		return
+	end
+
+	local Folder = Instance.new("Folder")
+	Folder.Name = "Studio"
+	Folder.Parent = kilang.env.game.CoreGui
+
 	loop("src/sandboxed/internals", function(path, entry)
 		if kilang.threads[path] then
 			return
 		end
 
 		local code = zune.fs.readFile(path)
-		kilang:execute(code, {
-			SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-			StackId = path,
-		})
+
+		if string.find(path, ".luau") or string.find(path, ".lua") then
+			local threadid, success, result = kilang:execute(code, {
+				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+				StackId = path,
+			})
+
+			if not success and result ~= nil then
+				error(`Error loading internal {threadid}: {tostring(result)}`)
+			end
+		elseif string.find(path, ".c") then
+			iodebug("Found C file!", path)
+			CEnv.runC(code)
+		end
 
 		local luauCleaned = string.gsub(entry.name, ".luau", "")
 		local luaCleaned = string.gsub(luauCleaned, ".lua", "")
@@ -163,6 +230,7 @@ if not _G.IsHeadless then
 	end)
 end
 
+-- LOAD USER SCRIPTS
 function Kinemium:playtest()
 	loop("src/sandboxed", function(path, entry)
 		if string.find(path, "internals") or string.find(path, "Core") then
@@ -179,6 +247,7 @@ function Kinemium:playtest()
 		if string.find(entry.name, ".cpp") then
 			superset = "cpp"
 		end
+
 		kilang:execute(code, {
 			superset = superset,
 			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
@@ -187,27 +256,33 @@ function Kinemium:playtest()
 	end)
 end
 
-kilang.renderer.Kinemium_camera.Parent = sandboxer.enviroment.Workspace
-
+-- ENGINE SIGNAL HANDLER
 game.EngineSignal:Connect(function(route)
 	if route == "playtest" then
 		Kinemium:playtest()
 	end
 end)
 
+-- KILANG REPL
 if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
-			local success, result = pcall(function(...)
+			local success, result = pcall(function()
 				kilang:execute(line, {
 					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
 				})
 			end)
+			if not success then
+				warn("REPL error:", result)
+			end
 		end)
 	end)
 end
 
+-- INITIALIZE ENGINE
+loadInternals()
 httpServerViewer:Init()
 Kinemium:playtest()
 
-kilang.renderer.Run()
+-- RUN RENDERER
+renderer:Run()

@@ -2,6 +2,7 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
 local SQLiteService = Instance.new("SQLiteBaseService")
+SQLiteService.ExplorerHidden = true
 
 local SQLiteBases = {}
 

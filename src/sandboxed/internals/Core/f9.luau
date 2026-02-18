@@ -93,18 +93,16 @@ local function label(y)
 end
 
 local fpsText = label(30)
-local bodiesText = label(70)
-local renderPoolText = label(110)
-local renderPoolText3D = label(150)
-local connectedToText = label(190)
+local renderPoolText = label(70)
+local renderPoolText3D = label(110)
+local connectedToText = label(150)
 
 local blur = Instance.new("BlurEffect")
 blur.Parent = main
 RunService.RenderStepped:Connect(function(dt: number)
 	local addr, port = NetworkService.GetServerDataAsync()
-	mainFps = 1 / dt
+	mainFps = RunService.GetFPS()
 	fpsText.Text = `FPS: {math.round(mainFps)}`
-	bodiesText.Text = `Bodies: {KinemiumPhysicsService.GetPhysicsBodyCount()}`
 	renderPoolText.Text = `RenderPool2D: {renderer.get2DCount()}`
 	renderPoolText3D.Text = `RenderPool3D: {workspace.GetPoolCount()}`
 	connectedToText.Text = `Connected to: \n{addr}:{port}`

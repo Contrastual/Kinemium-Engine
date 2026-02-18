@@ -112,7 +112,7 @@ end
 
 function Schema.u64()
 	return function(value)
-		return type(value) == "number" and value >= 0 and value <= 0xFFFFFFFFFFFFFFFF and math.floor(value) == value
+		return type(value) == "number" and value >= 0 and value <= 9007199254740991 and math.floor(value) == value
 	end
 end
 

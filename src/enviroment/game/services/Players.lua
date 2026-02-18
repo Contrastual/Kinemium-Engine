@@ -1,8 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local StarterGui = require("@StarterGui")
-local Workspace = require("@Workspace")
-local Enum = require("@EnumMap")
+
 local Mouse = require("@Mouse")
 local Player = require("@Player")
 

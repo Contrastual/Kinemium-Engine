@@ -42,14 +42,16 @@ local AVIndexEntry = ffi.struct({
 export type AVIndexEntry = typeof(AVIndexEntry:new({}))
 
 local AVStream = ffi.struct({
-	{ index = ffi.types.i32 },
-	{ id = ffi.types.i32 },
-	{ time_base = ffi.types.pointer },
-	{ start_time = ffi.types.i64 },
-	{ duration = ffi.types.i64 },
-	{ nb_frames = ffi.types.i64 },
-	{ disposition = ffi.types.i32 },
-	{ discard = ffi.types.pointer },
+	{ av_class = ffi.types.pointer }, -- offset 0 (private field)
+	{ index = ffi.types.i32 }, -- offset 8
+	{ id = ffi.types.i32 }, -- offset 12
+	{ codecpar = ffi.types.pointer }, -- offset 16  ← HERE!
+	{ time_base = ffi.types.pointer }, -- offset 24
+	{ start_time = ffi.types.i64 }, -- offset 32
+	{ duration = ffi.types.i64 }, -- offset 40
+	{ nb_frames = ffi.types.i64 }, -- offset 48
+	{ disposition = ffi.types.i32 }, -- offset 56
+	{ discard = ffi.types.pointer }, -- offset 60 (+ padding)
 	{ sample_aspect_ratio = ffi.types.pointer },
 	{ avg_frame_rate = ffi.types.pointer },
 	{ attached_pic = ffi.types.pointer },
@@ -96,10 +98,16 @@ local AVChapter = ffi.struct({
 export type AVChapter = typeof(AVChapter:new({}))
 
 local AVFormatContext = ffi.struct({
-	{ ctx_flags = ffi.types.i32 },
-	{ nb_streams = ffi.types.i32 },
-	{ nb_stream_groups = ffi.types.i32 },
-	{ nb_chapters = ffi.types.i32 },
+	{ av_class = ffi.types.pointer }, -- offset 0
+	{ iformat = ffi.types.pointer }, -- offset 8
+	{ oformat = ffi.types.pointer }, -- offset 16
+	{ priv_data = ffi.types.pointer }, -- offset 24
+	{ pb = ffi.types.pointer }, -- offset 32
+	{ ctx_flags = ffi.types.i32 }, -- offset 40
+	{ nb_streams = ffi.types.u32 }, -- offset 44
+	{ streams = ffi.types.pointer }, -- offset 48
+	{ nb_stream_groups = ffi.types.u32 }, -- offset 56 (after padding)
+	{ nb_chapters = ffi.types.u32 },
 	{ start_time = ffi.types.i64 },
 	{ duration = ffi.types.i64 },
 	{ bit_rate = ffi.types.i64 },
@@ -195,11 +203,11 @@ local funcs = {
 	},
 	av_probe_input_buffer2 = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u32, ffi.types.u32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u32, ffi.types.u32 },
 	},
 	av_probe_input_buffer = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u32, ffi.types.u32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u32, ffi.types.u32 },
 	},
 	avformat_open_input = {
 		returns = ffi.types.i32,
@@ -249,7 +257,7 @@ local funcs = {
 	av_hex_dump = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 } },
 	av_hex_dump_log = {
 		returns = ffi.types.void,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.i32, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_pkt_dump2 = {
 		returns = ffi.types.void,
@@ -257,7 +265,7 @@ local funcs = {
 	},
 	av_pkt_dump_log2 = {
 		returns = ffi.types.void,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.i32, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_codec_get_id = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.u32 } },
 	av_codec_get_tag = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
@@ -343,7 +351,6 @@ local funcs = {
 	avio_write_marker = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.i64, ffi.types.pointer } },
 	avio_seek = { returns = ffi.types.i64, args = { ffi.types.pointer, ffi.types.i64, ffi.types.i32 } },
 	avio_skip = { returns = ffi.types.i64, args = { ffi.types.pointer, ffi.types.i64 } },
-	avio_seek = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
 	avio_size = { returns = ffi.types.i64, args = { ffi.types.pointer } },
 	avio_feof = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	avio_vprintf = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },

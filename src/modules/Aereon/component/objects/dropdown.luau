@@ -18,16 +18,30 @@ local defaultFont = raylib.lib.GetFontDefault()
 
 return function(objects, data)
 	local config = {
-		obj_rect = rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4] or 30),
+		obj_rect = rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4] or 36),
 		options = data.options or { "Option 1", "Option 2", "Option 3" },
 		selectedIndex = data.selectedIndex or 1,
 		expanded = false,
-		backgroundColor = data.backgroundColor or color3.new(0.2, 0.2, 0.2),
-		hoverColor = data.hoverColor or color3.new(0.3, 0.3, 0.3),
-		textColor = data.textColor or color3.new(1, 1, 1),
-		fontSize = data.fontSize or 18,
+		font = data.font or defaultFont,
+		backgroundColor = data.backgroundColor or color3.new(0.15, 0.15, 0.18),
+		hoverColor = data.hoverColor or color3.new(0.25, 0.35, 0.55),
+		selectedColor = data.selectedColor or color3.new(0.2, 0.3, 0.5),
+		borderColor = data.borderColor or color3.new(0.3, 0.3, 0.35),
+		textColor = data.textColor or color3.new(0.95, 0.95, 0.97),
+		secondaryTextColor = data.secondaryTextColor or color3.new(0.7, 0.7, 0.75),
+		fontSize = data.fontSize or 16,
+		spacing = data.spacing or 1,
 		onSelect = data.onSelect,
+		animProgress = 0,
 	}
+
+	local function drawText(text, x, y, fontSize, spacing, color)
+		if config.font then
+			raylib.lib.DrawTextEx(config.font, text, vector.create(x, y), fontSize, spacing, c3tr(color, 0))
+		else
+			raylib.lib.DrawText(text, x, y, fontSize, c3tr(color, 0))
+		end
+	end
 
 	local wrapper = {}
 
@@ -50,78 +64,186 @@ return function(objects, data)
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(config.backgroundColor, 0))
+		if config.expanded then
+			config.animProgress = math.min(config.animProgress + dt * 8, 1)
+		else
+			config.animProgress = math.max(config.animProgress - dt * 8, 0)
+		end
+
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.15, 10, c3tr(config.borderColor, 0))
+		raylib.lib.DrawRectangleRounded(
+			structs.Rectangle:new({
+				x = r.x + 1,
+				y = r.y + 1,
+				width = r.width - 2,
+				height = r.height - 2,
+			}),
+			0.15,
+			10,
+			c3tr(config.backgroundColor, 0)
+		)
+
+		if rect.MouseIsInRect(r) and not config.expanded then
+			raylib.lib.DrawRectangleRounded(
+				structs.Rectangle:new({
+					x = r.x + 1,
+					y = r.y + 1,
+					width = r.width - 2,
+					height = r.height - 2,
+				}),
+				0.15,
+				10,
+				c3tr(config.hoverColor, 0.7)
+			)
+		end
 
 		local selectedText = config.options[config.selectedIndex] or "Select..."
-		local textX = r.x + 8
+		local textX = r.x + 12
 		local textY = r.y + (r.height - config.fontSize) / 2
 
-		raylib.lib.DrawText(selectedText, textX, textY, config.fontSize, c3tr(config.textColor, 0))
+		drawText(selectedText, textX, textY, config.fontSize, config.spacing, config.textColor)
 
-		local arrowSize = 8
-		local arrowX = r.x + r.width - arrowSize - 8
+		local arrowSize = 6
+		local arrowX = r.x + r.width - arrowSize - 12
 		local arrowY = r.y + r.height / 2
+		local arrowRotation = config.animProgress * 180
+
 		if config.expanded then
 			raylib.lib.DrawTriangle(
 				vector.create(arrowX, arrowY + arrowSize / 2),
 				vector.create(arrowX + arrowSize, arrowY + arrowSize / 2),
 				vector.create(arrowX + arrowSize / 2, arrowY - arrowSize / 2),
-				c3tr(config.textColor, 0)
+				c3tr(config.secondaryTextColor, 0)
 			)
 		else
 			raylib.lib.DrawTriangle(
 				vector.create(arrowX, arrowY - arrowSize / 2),
 				vector.create(arrowX + arrowSize, arrowY - arrowSize / 2),
 				vector.create(arrowX + arrowSize / 2, arrowY + arrowSize / 2),
-				c3tr(config.textColor, 0)
+				c3tr(config.secondaryTextColor, 0)
 			)
 		end
 
-		if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then
-			config.expanded = not config.expanded
+		if rect.MouseIsInRect(r) then
+			if raylib.lib.IsMouseButtonReleased(0) == 1 then
+				config.expanded = not config.expanded
+			end
+			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
+		else
+			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 		end
 
-		if config.expanded then
+		if config.animProgress > 0.01 then
 			local itemHeight = r.height
 			local listHeight = itemHeight * #config.options
-			local listY = r.y + r.height + 2
+			local actualHeight = listHeight * config.animProgress
+
+			local screenWidth = raylib.lib.GetScreenWidth()
+			local screenHeight = raylib.lib.GetScreenHeight()
+
+			local margin = 4
+			local spaceBelow = screenHeight - (r.y + r.height + margin)
+			local spaceAbove = r.y - margin
+
+			local openUpward = spaceBelow < listHeight and spaceAbove > spaceBelow
+
+			local maxListHeight = openUpward and math.max(spaceAbove, 1) or math.max(spaceBelow, 1)
+			listHeight = math.min(listHeight, maxListHeight)
+
+			local listY = openUpward and math.max(r.y - listHeight - margin, margin) or (r.y + r.height + margin)
+
+			listY = math.clamp(listY, margin, screenHeight - listHeight - margin)
+
+			local listX = math.clamp(r.x, margin, math.max(screenWidth - r.width - margin, margin))
 
 			raylib.lib.DrawRectangleRounded(
-				structs.Rectangle:new({ x = r.x, y = listY, width = r.width, height = listHeight }),
-				0.2,
-				8,
+				structs.Rectangle:new({
+					x = listX + 2,
+					y = listY + 2,
+					width = r.width,
+					height = actualHeight,
+				}),
+				0.15,
+				10,
+				c3tr(color3.new(0, 0, 0), 0.3)
+			)
+
+			raylib.lib.DrawRectangleRounded(
+				structs.Rectangle:new({
+					x = listX,
+					y = listY,
+					width = r.width,
+					height = actualHeight,
+				}),
+				0.15,
+				10,
+				c3tr(config.borderColor, 0)
+			)
+			raylib.lib.DrawRectangleRounded(
+				structs.Rectangle:new({
+					x = listX + 1,
+					y = listY + 1,
+					width = r.width - 2,
+					height = actualHeight - 2,
+				}),
+				0.15,
+				10,
 				c3tr(config.backgroundColor, 0)
 			)
 
 			for i, option in ipairs(config.options) do
 				local itemY = listY + (i - 1) * itemHeight
-				local itemRect = rect.new(r.x, itemY, r.width, itemHeight)
+				local itemRect = rect.new(listX + 2, itemY + 2, r.width - 4, itemHeight - 2)
 
-				if rect.MouseIsInRect(itemRect) then
-					raylib.lib.DrawRectangle(
-						itemRect.x,
-						itemRect.y,
-						itemRect.width,
-						itemRect.height,
-						c3tr(config.hoverColor, 0)
-					)
+				local itemVisible = openUpward and (itemY + itemHeight > listY) or (itemY < listY + actualHeight)
+				if itemVisible then
+					local isSelected = i == config.selectedIndex
 
-					if raylib.lib.IsMouseButtonReleased(0) == 1 then
-						config.selectedIndex = i
-						config.expanded = false
-						if config.onSelect then
-							config.onSelect(i, option)
+					if isSelected then
+						raylib.lib.DrawRectangleRounded(
+							structs.Rectangle:new({
+								x = itemRect.x,
+								y = itemRect.y,
+								width = itemRect.width,
+								height = itemRect.height,
+							}),
+							0.12,
+							8,
+							c3tr(config.selectedColor, 0.5)
+						)
+					end
+
+					if rect.MouseIsInRect(itemRect) and config.expanded then
+						raylib.lib.DrawRectangleRounded(
+							structs.Rectangle:new({
+								x = itemRect.x,
+								y = itemRect.y,
+								width = itemRect.width,
+								height = itemRect.height,
+							}),
+							0.12,
+							8,
+							c3tr(config.hoverColor, 0)
+						)
+
+						if raylib.lib.IsMouseButtonReleased(0) == 1 then
+							config.selectedIndex = i
+							config.expanded = false
+							if config.onSelect then
+								config.onSelect(i, option)
+							end
 						end
 					end
-				end
 
-				raylib.lib.DrawText(
-					option,
-					r.x + 8,
-					itemY + (itemHeight - config.fontSize) / 2,
-					config.fontSize,
-					c3tr(config.textColor, 0)
-				)
+					drawText(
+						option,
+						listX + 12,
+						itemY + (itemHeight - config.fontSize) / 2,
+						config.fontSize,
+						config.spacing,
+						config.textColor
+					)
+				end
 			end
 		end
 	end

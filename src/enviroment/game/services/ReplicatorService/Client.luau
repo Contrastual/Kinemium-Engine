@@ -2,8 +2,6 @@ local Client = {}
 
 type Client = typeof(require("@kinet").Client)
 
-local registry = require("@InstanceRegistry")
-
 local OPCODES = {
 	CREATE = 1,
 	REMOVE = 2,
@@ -60,8 +58,8 @@ function Client.init(context)
 		elseif data.opcode == OPCODES.EDIT then
 			local object = lookup[data.object]
 
-			print(object)
-			print(data.object)
+			iodebug(object)
+			iodebug(data.object)
 			if object then
 				object[data.prop] = userdata.Decode(data.newval)
 			end

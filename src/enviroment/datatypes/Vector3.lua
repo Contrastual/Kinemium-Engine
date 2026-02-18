@@ -73,6 +73,8 @@ function Vector3.__add(a, b)
 end
 
 function Vector3.__sub(a, b)
+	assert(a.X and a.Y and a.Z, "Left operand is not a Vector3")
+	assert(b.X and b.Y and b.Z, "Right operand is not a Vector3")
 	return Vector3.new(a.X - b.X, a.Y - b.Y, a.Z - b.Z)
 end
 
@@ -268,5 +270,8 @@ function Vector3.FromTable(tbl)
 	assert(tbl.type == "Vector3")
 	return Vector3.new(tbl.X, tbl.Y, tbl.Z)
 end
+
+Vector3.zero = Vector3.new(0, 0, 0)
+Vector3.one = Vector3.new(1, 1, 1)
 
 return Vector3

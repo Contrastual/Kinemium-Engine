@@ -1,7 +1,7 @@
 local Instance = require("@Instance")
 
 local ReplicatorService = Instance.new("ReplicatorService")
-ReplicatorService.ExplorerHidden = false
+ReplicatorService.ExplorerHidden = true
 
 local Server = require("./ReplicatorService/Server")
 local Client = require("./ReplicatorService/Client")

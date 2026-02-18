@@ -20,7 +20,6 @@ local cos = math.cos
 local sin = math.sin
 local EPS = 1e-4
 
--- Zero helpers
 local function zeroLike(v, typeName)
 	if typeName == "Number" then
 		return 0
@@ -37,7 +36,6 @@ local function zeroLike(v, typeName)
 	error("Unsupported type: " .. tostring(typeName))
 end
 
--- Solver for numbers
 local function numberStep(x, v, target, dampingRatio, freq, dt)
 	local f = freq * 2 * pi
 	local offset = x - target
@@ -173,7 +171,6 @@ Datatypes.Ray = {
 	end,
 }
 
--- Spring constructor
 function Spring.new(damping, frequency, typeName, initialValue)
 	typeName = typeName or "Number"
 	assert(Datatypes[typeName], "Unsupported type: " .. tostring(typeName))
@@ -190,7 +187,6 @@ function Spring.new(damping, frequency, typeName, initialValue)
 	}, Spring)
 end
 
--- API Methods
 function Spring:Play()
 	self.running = true
 end

@@ -4,6 +4,9 @@ local UDim = require("@UDim")
 local Frame = require("@Frame")
 local Color3 = require("@Color3")
 local Enum = require("@EnumMap")
+local raylib = require("@raylib")
+local lib = raylib.lib
+local GuiObject = require("@GuiObject")
 
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
@@ -37,37 +40,29 @@ local propTable = {
 
 Frame.inherit(propTable)
 
+local defaultFont = lib.GetFontDefault()
+
+local function applyTruncate(text, mode)
+	if mode == Enum.TextTruncate.None then
+		return text
+	end
+	if mode == Enum.TextTruncate.Head then
+		return #text <= 3 and "..." or "..." .. text:sub(#text - 20)
+	elseif mode == Enum.TextTruncate.Tail then
+		return #text <= 3 and "..." or text:sub(1, 20) .. "..."
+	end
+	return text
+end
+
 propTable.render = function(lib, object, dt, structs, renderer)
-	local framePos, frameSize = Frame.render(lib, object, dt, structs, renderer)
+	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
 	if not object.Visible or not framePos or not frameSize then
 		return
 	end
 
-	local function Color3ToRaylib(c, transparency)
-		local r, g, b = c:ToRGB()
-		return structs.Color:new({
-			r = r,
-			g = g,
-			b = b,
-			a = math.floor(255 * (1 - transparency)),
-		})
-	end
-
-	local function applyTruncate(text, mode)
-		if mode == Enum.TextTruncate.None then
-			return text
-		end
-		if mode == Enum.TextTruncate.Head then
-			return #text <= 3 and "..." or "..." .. text:sub(#text - 20)
-		elseif mode == Enum.TextTruncate.Tail then
-			return #text <= 3 and "..." or text:sub(1, 20) .. "..."
-		end
-		return text
-	end
-
-	local font = renderer.GetFont(object.Font.Value)
+	local font = renderer.Font.Get(object.Font.Value)
 	if not font then
-		font = lib.GetFontDefault()
+		font = defaultFont
 	end
 
 	local fontSize = object.TextSize
@@ -81,23 +76,38 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		measured = lib.MeasureTextEx(font, object.Text, fontSize, 0)
 	end
 
-	local lines = {}
-	if object.TextWrapped then
-		local currentLine = ""
-		for word in object.Text:gmatch("%S+") do
-			local testLine = currentLine == "" and word or currentLine .. " " .. word
-			local w = lib.MeasureTextEx(font, testLine, fontSize, 0).x
-			if w <= frameSize.X then
-				currentLine = testLine
-			else
-				table.insert(lines, currentLine)
-				currentLine = word
+	object._cachedText = object._cachedText or {}
+	if
+		object._cachedText.text ~= object.Text
+		or object._cachedText.font ~= font
+		or object._cachedText.fontSize ~= fontSize
+		or object._cachedText.wrap ~= object.TextWrapped
+	then
+		local lines = {}
+		if object.TextWrapped then
+			local currentLine = ""
+			for word in object.Text:gmatch("%S+") do
+				local testLine = currentLine == "" and word or currentLine .. " " .. word
+				local w = lib.MeasureTextEx(font, testLine, fontSize, 0).x
+				if w <= frameSize.X then
+					currentLine = testLine
+				else
+					table.insert(lines, currentLine)
+					currentLine = word
+				end
 			end
+			table.insert(lines, currentLine)
+		else
+			lines = { applyTruncate(object.Text, object.TextTruncate) }
 		end
-		table.insert(lines, currentLine)
-	else
-		lines = { applyTruncate(object.Text, object.TextTruncate) }
+		object._cachedText.lines = lines
+		object._cachedText.text = object.Text
+		object._cachedText.font = font
+		object._cachedText.fontSize = fontSize
+		object._cachedText.wrap = object.TextWrapped
 	end
+
+	local lines = object._cachedText.lines
 
 	local lineHeightPx = fontSize * object.LineHeight
 	local totalHeight = #lines * lineHeightPx
@@ -110,9 +120,9 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		offsetY = frameSize.Y - totalHeight
 	end
 
-	local tint = Color3ToRaylib(object.TextColor3, object.TextTransparency)
+	local tint = object.TextColor3:ToRaylib(object.TextTransparency)
+
 	for i, line in ipairs(lines) do
-		-- Calculate line-specific X offset based on alignment
 		local lineWidth = lib.MeasureTextEx(font, line, fontSize, 0).x
 		local lineOffsetX = 0
 
@@ -122,7 +132,6 @@ propTable.render = function(lib, object, dt, structs, renderer)
 			lineOffsetX = frameSize.X - lineWidth
 		end
 
-		-- Position is relative to framePos (which already accounts for anchor point)
 		local linePos = vector.create(framePos.X + lineOffsetX, framePos.Y + offsetY + (i - 1) * lineHeightPx)
 		lib.DrawTextEx(font, line, linePos, fontSize, object.TextSpacing or 0, tint)
 	end

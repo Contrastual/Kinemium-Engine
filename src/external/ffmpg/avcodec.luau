@@ -257,13 +257,31 @@ local AVCodecDescriptor = ffi.struct({
 })
 export type AVCodecDescriptor = typeof(AVCodecDescriptor:new({}))
 
+local AVStream = ffi.struct({
+	{ index = ffi.types.i32 },
+	{ id = ffi.types.i32 },
+	{ codecpar = ffi.types.pointer }, -- AVCodecParameters*
+	{ nb_frames = ffi.types.i64 },
+	{ start_time = ffi.types.i64 },
+	{ duration = ffi.types.i64 },
+})
+export type AVStream = typeof(AVStream:new({}))
+
+local AVFormatContext = ffi.struct({
+	{ nb_streams = ffi.types.i32 },
+	{ streams = ffi.types.pointer }, -- AVStream**
+	{ duration = ffi.types.i64 },
+})
+export type AVFormatContext = typeof(AVFormatContext:new({}))
+
 local AVCodecParameters = ffi.struct({
-	{ codec_type = ffi.types.pointer },
-	{ codec_id = ffi.types.pointer },
-	{ codec_tag = ffi.types.u32 },
-	{ extradata_size = ffi.types.i32 },
-	{ nb_coded_side_data = ffi.types.i32 },
-	{ format = ffi.types.i32 },
+	{ codec_type = ffi.types.i32 }, -- offset 0 (enum, not pointer!)
+	{ codec_id = ffi.types.i32 }, -- offset 4 (enum, not pointer!)
+	{ codec_tag = ffi.types.u32 }, -- offset 8
+	{ extradata_size = ffi.types.i32 }, -- offset 12
+
+	{ extradata = ffi.types.pointer }, -- offset 16
+	{ format = ffi.types.i32 }, -- offset 24
 	{ bit_rate = ffi.types.i64 },
 	{ bits_per_coded_sample = ffi.types.i32 },
 	{ bits_per_raw_sample = ffi.types.i32 },
@@ -273,14 +291,14 @@ local AVCodecParameters = ffi.struct({
 	{ height = ffi.types.i32 },
 	{ sample_aspect_ratio = ffi.types.pointer },
 	{ framerate = ffi.types.pointer },
-	{ field_order = ffi.types.pointer },
-	{ color_range = ffi.types.pointer },
-	{ color_primaries = ffi.types.pointer },
-	{ color_trc = ffi.types.pointer },
-	{ color_space = ffi.types.pointer },
-	{ chroma_location = ffi.types.pointer },
+	{ field_order = ffi.types.i32 }, -- enum, not pointer!
+	{ color_range = ffi.types.i32 }, -- enum, not pointer!
+	{ color_primaries = ffi.types.i32 }, -- enum, not pointer!
+	{ color_trc = ffi.types.i32 }, -- enum, not pointer!
+	{ color_space = ffi.types.i32 }, -- enum, not pointer!
+	{ chroma_location = ffi.types.i32 }, -- enum, not pointer!
 	{ video_delay = ffi.types.i32 },
-	{ ch_layout = ffi.types.pointer },
+	{ ch_layout = ffi.types.pointer }, -- Actually a struct, but pointer works
 	{ sample_rate = ffi.types.i32 },
 	{ block_align = ffi.types.i32 },
 	{ frame_size = ffi.types.i32 },
@@ -525,6 +543,7 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.u8, ffi.types.i32, ffi.types.pointer },
 	},
+
 	avcodec_pix_fmt_to_codec_tag = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	avcodec_find_best_pix_fmt_of_list = {
 		returns = ffi.types.pointer,
@@ -539,10 +558,14 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
+	avcodec_find_decoder = { returns = ffi.types.pointer, args = { ffi.types.i32 } },
+	avcodec_alloc_context3 = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	av_packet_alloc = { returns = ffi.types.pointer, args = {} },
+	av_packet_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	avcodec_flush_buffers = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_get_audio_frame_duration = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	av_fast_padded_malloc = { returns = ffi.types.void, args = {, ffi.types.u32, ffi.types.u64 } },
-	av_fast_padded_mallocz = { returns = ffi.types.void, args = {, ffi.types.u32, ffi.types.u64 } },
+	av_fast_padded_malloc = { returns = ffi.types.void, args = { ffi.types.u32, ffi.types.u64 } },
+	av_fast_padded_mallocz = { returns = ffi.types.void, args = { ffi.types.u32, ffi.types.u64 } },
 	avcodec_is_open = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	avcodec_dct_init = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_bsf_alloc = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
@@ -574,8 +597,7 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
-	av_jni_set_java_vm = { returns = ffi.types.i32, args = { } },
-	av_jni_set_android_app_ctx = { returns = ffi.types.i32, args = { } },
+	av_jni_set_java_vm = { returns = ffi.types.i32, args = {} },
 	av_mediacodec_default_init = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer },
@@ -657,20 +679,11 @@ local funcs = {
 			ffi.types.pointer,
 			ffi.types.pointer,
 			ffi.types.pointer,
-			ffi.types.void,
 		},
 	},
 	av_smpte_291m_anc_8bit_extract_cta_708 = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.u8 },
-	},
-	av_vdpau_bind_context = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
-	},
-	av_vdpau_get_surface_parameters = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u32, ffi.types.u32 },
 	},
 	av_vorbis_parse_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_vorbis_parse_frame_flags = {
@@ -707,6 +720,7 @@ local structs = {
 	AVPacketSideData = AVPacketSideData,
 	AVPacket = AVPacket,
 	AVPacketList = AVPacketList,
+	AVFormatContext = AVFormatContext,
 	AVQSVContext = AVQSVContext,
 	AVSmpte436mAncIterator = AVSmpte436mAncIterator,
 	AVSmpte291mAnc8bit = AVSmpte291mAnc8bit,

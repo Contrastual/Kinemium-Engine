@@ -532,8 +532,6 @@ do
 end
 
 -- Type definitions
--- Transforms Roblox types into intermediate types, converting
--- between spaces as necessary to preserve perceptual linearity
 local typeMetadata = {
 	boolean = {
 		springType = LinearSpring.new,

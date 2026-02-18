@@ -31,6 +31,45 @@ function Color3.new(r, g, b)
 	}, Color3)
 end
 
+function Color3:ToHSV()
+	local r, g, b = self.R, self.G, self.B
+	local max = math.max(r, g, b)
+	local min = math.min(r, g, b)
+	local delta = max - min
+
+	local h, s, v
+
+	-- Value
+	v = max
+
+	-- Saturation
+	if max == 0 then
+		s = 0
+	else
+		s = delta / max
+	end
+
+	-- Hue
+	if delta == 0 then
+		h = 0
+	else
+		if max == r then
+			h = ((g - b) / delta) % 6
+		elseif max == g then
+			h = ((b - r) / delta) + 2
+		else
+			h = ((r - g) / delta) + 4
+		end
+		h = h / 6
+	end
+
+	if h < 0 then
+		h = h + 1
+	end
+
+	return h, s, v
+end
+
 function Color3.fromRGB(r, g, b)
 	return Color3.new(r / 255, g / 255, b / 255)
 end

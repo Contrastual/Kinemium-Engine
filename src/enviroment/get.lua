@@ -4,9 +4,10 @@ local DataModel = require("@DataModel")
 local EnumMap = require("@EnumMap")
 local PlayerGui = require("@PlayerGui")
 local Terrain = require("@Terrain")
+local capi = require("./capi")
 local shared = {}
 
-return function(renderer)
+return function(renderer, Kinemium_camera)
 	local mainDatamodel = DataModel.new(renderer)
 	local data = datatypes
 
@@ -25,9 +26,10 @@ return function(renderer)
 		wait = zune.task.wait,
 	}
 	data.game = mainDatamodel
+	data.ishared = {}
 	data.workspace = mainDatamodel:GetService("Workspace")
 	data.shared = shared
-	data._VERSION = "Kilang 1.1.0"
+	data._VERSION = "Kilang Superset"
 	data.wait = zune.task.wait
 
 	data.typeof = function(v)
@@ -46,12 +48,8 @@ return function(renderer)
 		end
 	end
 
-	data.kinemium = {
-		version = "1.1.0.5",
-	}
-
 	local playerGui = PlayerGui.InitRenderer(renderer, renderer.Signal)
-	local terrainObject = Terrain.InitRenderer(renderer, renderer.Signal)
+	local terrainObject = Terrain.InitRenderer(renderer, renderer.Signal, mainDatamodel)
 
 	local players = mainDatamodel:GetService("Players")
 	players.LocalPlayer.PlayerGui = playerGui
@@ -59,7 +57,7 @@ return function(renderer)
 
 	playerGui.Parent = players.LocalPlayer
 
-	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
+	Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 
 	terrainObject.Parent = mainDatamodel:GetService("Workspace")
 
@@ -69,21 +67,26 @@ return function(renderer)
 	local LogService = mainDatamodel:GetService("LogService")
 
 	data.print = function(...)
-		print("RUNTIME", ...)
+		runtime(...)
 
 		return LogService.CreateLog("print", tostring(...))
 	end
+
 	data.warn = function(...)
-		print("RUNTIME", ...)
+		runtime(...)
 
 		return LogService.CreateLog("warn", tostring(...))
 	end
 
 	data.error = function(...)
-		warn("RUNTIME", ...)
+		runtime(...)
 
 		return LogService.CreateLog("error", tostring(...))
 	end
+
+	data.regex = zune.regex
+	data.io = zune.io
+	data.platform = zune.platform
 
 	data.require = function(Instance)
 		if type(Instance) == "table" then
@@ -131,5 +134,7 @@ return function(renderer)
 		end
 	end
 
-	return data
+	local c_api = capi(data)
+
+	return data, c_api
 end

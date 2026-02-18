@@ -100,7 +100,6 @@ local funcs = {
 			ffi.types.pointer,
 			ffi.types.pointer,
 			ffi.types.pointer,
-			ffi.types.void,
 			ffi.types.pointer,
 		},
 	},

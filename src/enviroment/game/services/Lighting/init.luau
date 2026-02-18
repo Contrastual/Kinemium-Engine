@@ -5,6 +5,52 @@ local raylib = require("@raylib")
 local const = raylib.const
 local lib = raylib.lib
 local Lighting = Instance.new("Lighting")
+local PointLights = {}
+local clouds = require("./Lighting/clouds")
+
+function Lighting:AddPointLight(id, position, color, intensity, range)
+	for _, obj in pairs(PointLights) do
+		if obj.Id == id then
+			obj.Position = position
+			obj.Color = color
+			obj.Intensity = intensity
+			obj.Range = range
+
+			return obj
+		end
+	end
+	local light = {
+		Id = id,
+		Position = position,
+		Color = color,
+		Intensity = intensity,
+		Range = range,
+		Enabled = true,
+	}
+	table.insert(PointLights, light)
+	return light
+end
+
+function Lighting:ClearLights()
+	table.clear(PointLights)
+end
+
+function Lighting:RemovePointLight(light)
+	for i, v in ipairs(PointLights) do
+		if v == light then
+			table.remove(PointLights, i)
+			return
+		end
+	end
+end
+
+function Lighting:GetPointLights()
+	return PointLights
+end
+
+function Lighting:ClearPointLights()
+	table.clear(PointLights)
+end
 
 local Stars = {}
 
@@ -248,17 +294,129 @@ local function handleSky(skyObject, renderer)
 	end
 end
 
+local function initShaders(ki3d, shader, game, renderer)
+	--[[
+	ki3d.filters.new("blur", {
+		shader = {
+			vertex = "./src/assets/shaders/blur.vs",
+			fragment = "./src/assets/shaders/blur.fs",
+		},
+
+		begin = function(self, runtime)
+			shader.SetShaderValueRaw(self.shader, "resolution", {
+				lib.GetRenderWidth(),
+				lib.GetRenderHeight(),
+			}, const.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
+			shader.SetShaderValueRaw(self.shader, "blurRadius", 18, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+
+			raylib.lib.BeginShaderMode(self.shader)
+		end,
+
+		finish = function(self, runtime)
+			runtime.lib.EndShaderMode()
+		end,
+	})
+		--]]
+
+	ki3d.filters.new("sunrays", {
+		shader = {
+			vertex = nil, -- Use default vertex shader
+			fragment = "./src/assets/shaders/sunrays.fs",
+		},
+
+		sunScreenPos = vector.create(0.5, 0.5),
+		density = 0.5,
+		weight = 0.5,
+		decay = 0.95,
+		exposure = 0.03,
+		threshold = 0.8,
+
+		begin = function(self, runtime)
+			local lighting = game:GetService("Lighting")
+			local sunDir = lighting:GetSunDirection()
+
+			local workspace = game and game:GetService("Workspace")
+			local Kinemium_camera = workspace.Camera
+			local camPos = Kinemium_camera.CFrame.Position
+			local sunWorldPos =
+				vector.create(camPos.X - sunDir.X * 1000, camPos.Y - sunDir.Y * 1000, camPos.Z - sunDir.Z * 1000)
+
+			local sunScreenPos = lib.GetWorldToScreen(sunWorldPos, Kinemium_camera._raylibcam)
+			local screenWidth = lib.GetRenderWidth()
+			local screenHeight = lib.GetRenderHeight()
+
+			self.sunScreenPos = vector.create(sunScreenPos.x / screenWidth, sunScreenPos.y / screenHeight)
+
+			raylib.lib.BeginShaderMode(self.shader)
+
+			shader.SetShaderValueRaw(
+				self.shader,
+				"sunScreenPos",
+				{ self.sunScreenPos.X, self.sunScreenPos.Y },
+				const.ShaderUniformDataType.SHADER_UNIFORM_VEC2
+			)
+			shader.SetShaderValueRaw(
+				self.shader,
+				"density",
+				self.density,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				self.shader,
+				"weight",
+				self.weight,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(self.shader, "decay", self.decay, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+			shader.SetShaderValueRaw(
+				self.shader,
+				"exposure",
+				self.exposure,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				self.shader,
+				"threshold",
+				self.threshold,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+		end,
+
+		finish = function(self, runtime)
+			runtime.lib.EndShaderMode()
+		end,
+	})
+
+	ki3d.filters.new("ssao", {
+		shader = {
+			vertex = "shaders/fullscreen_quad.vs", -- basic full-screen quad
+			fragment = "shaders/ssao.fs",
+		},
+
+		begin = function(self, runtime)
+			local shaderobj = runtime.shaderobj
+		end,
+
+		finish = function() end,
+	})
+end
+
 Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	if _G.IsHeadless then
 		return
 	end
+
+	initShaders(renderer.Ki3d, renderer.Shader, datamodel, renderer)
+
 	local sunTexture = lib.LoadTexture("./src/assets/sky/default/sun.png")
 	local moonTexture = lib.LoadTexture("./src/assets/sky/default/moon.png")
 
-	renderer.skybox.Load()
+	renderer.Skybox.Load()
+
+	local cloudsNew = clouds.init()
 
 	Lighting:SetProperties({
-		Ambient = Color3.fromRGB(128, 128, 128),
+		Ambient = Color3.new(1, 1, 1),
 		Brightness = 2.0,
 		ColorShift_Top = Color3.fromRGB(255, 255, 255),
 		ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
@@ -267,6 +425,11 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		ClockTime = 14.0,
 		GeographicLatitude = 0.0,
 		EnableDayCycle = false,
+
+		GetDaylight = function()
+			local t = getDayAlpha(Lighting.ClockTime)
+			return t
+		end,
 	})
 
 	renderer_signal:Connect(function(route, dt)
@@ -274,8 +437,8 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
 
 			if blurEffect then
-				renderer.blur.blurRadius = blurEffect.Size
-				renderer.blur:DrawFullBlur(const.WHITE)
+				renderer.Blur.blurRadius = blurEffect.Size
+				renderer.Blur:DrawFullBlur(const.WHITE)
 			end
 		end
 	end)
@@ -284,17 +447,20 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		handleSky(child, renderer)
 	end)
 
-	renderer.Before3DRender(function()
-		local camera = renderer.camera
+	--[[]]
+	renderer.Skybox.Load()
+
+	renderer.Hook.new("Before3D", function()
+		local workspace = datamodel.Workspace
+		local camera = workspace.Camera._raylibcam
 
 		local sunDir = Lighting:GetSunDirection()
 		local moonDir = Vector3.new(-sunDir.X, -sunDir.Y, -sunDir.Z) -- Moon opposite to sun
 
-		local t = getDayAlpha(Lighting.ClockTime)
-		local night = 1 - math.clamp(math.sin(t * math.pi * 2), 0, 1)
-		local daylight = math.clamp(math.sin(t * math.pi * 2), 0, 1)
+		local daylight = Lighting.GetDaylight()
+		local night = 1 - daylight
 
-		renderer.skybox.Draw(camera, 50)
+		renderer.Skybox.Draw(camera, 50)
 
 		Lighting.Ambient = lerpColor(
 			Color3.fromRGB(20, 20, 40), -- night
@@ -313,6 +479,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			DrawNightSky(camera, night)
 			DrawCelestialBody(moonTexture, moonDir, camera, 450, 50)
 			DrawStars(camera, math.floor(255 * night))
+		end
+
+		if workspace.Terrain and workspace.Terrain:FindFirstChild("Clouds") then
+			local cameraPos = zune.mem.toVector3(camera, 0)
+
+			cloudsNew.render(Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z))
 		end
 
 		if Lighting.EnableDayCycle then

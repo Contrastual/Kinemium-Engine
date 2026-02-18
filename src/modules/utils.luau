@@ -1,9 +1,74 @@
-local bufferUtils = {}
+local bufferUtils = { extract = {}, string = {} }
 
 local raylib = require("@raylib")
 local box2d = require("@box2d")
 local box2d_structs = box2d.structs
 local const, structs, lib = raylib.const, raylib.structs, raylib.lib
+local ffi = zune.ffi
+
+local function getOfs(source, field)
+	return source:offset(field)
+end
+
+-- Strings
+function bufferUtils.stringToPtr(str)
+	return ffi.dupe(buffer.fromstring(`{str}\0`))
+end
+
+function bufferUtils.string.ReadUTF16(outPath)
+	local stringPtr = outPath:readptr(0)
+
+	local bytes = {}
+	local i = 0
+	while true do
+		local b1 = stringPtr:readu8(i)
+		local b2 = stringPtr:readu8(i + 1)
+		-- Stop at UTF-16 null terminator
+		if b1 == 0 and b2 == 0 then
+			break
+		end
+		-- Convert little-endian UTF-16 to codepoint
+		local code = b1 + b2 * 256
+		bytes[#bytes + 1] = utf8.char(code)
+		i = i + 2
+	end
+
+	return table.concat(bytes)
+end
+
+function bufferUtils.WriteColorToBuffer(dest, offset, colorBuf)
+	-- colorBuf is a buffer (4 bytes: R, G, B, A)
+	-- dest is a Zune FFIPointer
+	dest:writeu8(offset + 0, buffer.readu8(colorBuf, 0))
+	dest:writeu8(offset + 1, buffer.readu8(colorBuf, 1))
+	dest:writeu8(offset + 2, buffer.readu8(colorBuf, 2))
+	dest:writeu8(offset + 3, buffer.readu8(colorBuf, 3))
+end
+
+function bufferUtils.string.ReadUTF8(outPath)
+	local stringPtr = outPath:readptr(0)
+
+	local bytes = {}
+	local i = 0
+	while true do
+		local b = stringPtr:readu8(i)
+		if b == 0 then
+			break
+		end -- null terminator
+		bytes[#bytes + 1] = string.char(b)
+		i = i + 1
+	end
+
+	return table.concat(bytes)
+end
+
+function bufferUtils.string.ReadOSBased(outPath)
+	if zune.platform.os == "windows" then
+		return bufferUtils.string.ReadUTF16(outPath)
+	else
+		return bufferUtils.string.ReadUTF8(outPath)
+	end
+end
 
 -- Unsigned integers
 function bufferUtils:u8(number)
@@ -43,7 +108,6 @@ function bufferUtils:i32(number)
 	return buf
 end
 
--- Floating point
 function bufferUtils:float(number)
 	local buf = buffer.create(4)
 	buffer.writef32(buf, 0, number)
@@ -72,9 +136,6 @@ function bufferUtils:vector3_32(x, y, z)
 	return buf
 end
 
---Textures
-bufferUtils.extract = {}
-
 function bufferUtils:readi32(ptr)
 	return ptr:readi32(0)
 end
@@ -90,6 +151,69 @@ function bufferUtils:readhexa(ptr)
 	return tonumber(hex, 16)
 end
 
+function bufferUtils:readString(ptr)
+	if not ptr or ptr == zune.ffi.null then
+		return nil
+	end
+
+	-- ptr is char** → read the actual char* inside
+	local strPtr = ptr:readptr(0)
+	if not strPtr or strPtr == zune.ffi.null then
+		return nil
+	end
+
+	local len = zune.mem.findScalar(strPtr, 0)
+	if not len then
+		return nil
+	end
+
+	local buf = zune.mem.slice(strPtr, 0, len)
+	return buffer.tostring(buf)
+end
+
+function bufferUtils:readMesh(ptr: FFIPointer)
+	--[[
+	local Mesh = ffi.struct({
+	{ vertexCount = int }, -- 0
+	{ triangleCount = int }, -- 4
+	{ vertices = ffi.types.pointer },
+	{ texcoords = ffi.types.pointer },
+	{ texcoords2 = ffi.types.pointer },
+	{ normals = ffi.types.pointer },
+	{ tangents = ffi.types.pointer },
+	{ colors = ffi.types.pointer },
+	{ indices = ffi.types.pointer },
+	{ animVertices = ffi.types.pointer },
+	{ animNormals = ffi.types.pointer },
+	{ boneIds = ffi.types.pointer },
+	{ boneWeights = ffi.types.pointer },
+	{ vaoId = uint },
+	{ vboId = ffi.types.pointer },
+})
+export type Mesh = typeof(Mesh:new({}))
+	--]]
+
+	local mesh = {
+		vertexCount = ptr:readi32(getOfs(structs.Mesh, "vertexCount")),
+		triangleCount = ptr:readi32(getOfs(structs.Mesh, "triangleCount")),
+		vertices = ptr:readptr(getOfs(structs.Mesh, "vertices")),
+		texcoords = ptr:readptr(getOfs(structs.Mesh, "texcoords")),
+		texcoords2 = ptr:readptr(getOfs(structs.Mesh, "texcoords2")),
+		normals = ptr:readptr(getOfs(structs.Mesh, "normals")),
+		tangents = ptr:readptr(getOfs(structs.Mesh, "tangents")),
+		colors = ptr:readptr(getOfs(structs.Mesh, "colors")),
+		indices = ptr:readptr(getOfs(structs.Mesh, "indices")),
+		animVertices = ptr:readptr(getOfs(structs.Mesh, "animVertices")),
+		animNormals = ptr:readptr(getOfs(structs.Mesh, "animNormals")),
+		boneIds = ptr:readptr(getOfs(structs.Mesh, "boneIds")),
+		boneWeights = ptr:readptr(getOfs(structs.Mesh, "boneWeights")),
+		vaoId = ptr:readu32(getOfs(structs.Mesh, "vaoId")),
+		vboId = ptr:readptr(getOfs(structs.Mesh, "vboId")),
+	}
+
+	return mesh
+end
+
 function bufferUtils:fcall(func, expected)
 	local result = func()
 	local read = bufferUtils:readhexa(result)
@@ -97,6 +221,10 @@ function bufferUtils:fcall(func, expected)
 		error("Expected " .. expected .. " but got " .. read .. " in FFI call\nOriginal string " .. tostring(result))
 	end
 	return result
+end
+
+function bufferUtils.extract.pointer(ptr)
+	return ptr:readptr(0)
 end
 
 function bufferUtils.extract.texture(v)
@@ -136,30 +264,41 @@ function bufferUtils.extract.setModelTexture(maps, texture)
 	maps:write(0, texture, 0, structs.Texture:size())
 end
 
+function bufferUtils.extract.MaterialMap(object, material)
+	local mapsPtr = zune.ffi.ptrFromAddress(zune.mem.slice(object, structs.Material:offset("maps"), 8))
+	return mapsPtr
+end
+
+function bufferUtils.setMaterialColor(material, color)
+	local maps = bufferUtils.extract.MaterialMap(material, structs.Material)
+	maps:write(structs.MaterialMap:offset("color"), color, 0, structs.Color:size())
+	return maps
+end
+
 -- quaternions
 
 function bufferUtils.EulerDegToQuaternion(euler: any): (number, number, number, number)
-    local rx = math.rad(euler.X)
-    local ry = math.rad(euler.Y)
-    local rz = math.rad(euler.Z)
+	local rx = math.rad(euler.X)
+	local ry = math.rad(euler.Y)
+	local rz = math.rad(euler.Z)
 
-    local cx, sx = math.cos(rx * 0.5), math.sin(rx * 0.5)
-    local cy, sy = math.cos(ry * 0.5), math.sin(ry * 0.5)
-    local cz, sz = math.cos(rz * 0.5), math.sin(rz * 0.5)
+	local cx, sx = math.cos(rx * 0.5), math.sin(rx * 0.5)
+	local cy, sy = math.cos(ry * 0.5), math.sin(ry * 0.5)
+	local cz, sz = math.cos(rz * 0.5), math.sin(rz * 0.5)
 
-    local w = cz * cy * cx + sz * sy * sx
-    local x = cz * cy * sx - sz * sy * cx
-    local y = cz * sy * cx + sz * cy * sx
-    local z = sz * cy * cx - cz * sy * sx
+	local w = cz * cy * cx + sz * sy * sx
+	local x = cz * cy * sx - sz * sy * cx
+	local y = cz * sy * cx + sz * cy * sx
+	local z = sz * cy * cx - cz * sy * sx
 
-    local len = math.sqrt(x*x + y*y + z*z + w*w)
-    if len > 0 then
-        x, y, z, w = x/len, y/len, z/len, w/len
-    else
-        x, y, z, w = 0, 0, 0, 1
-    end
-	
-    return x, y, z, w
+	local len = math.sqrt(x * x + y * y + z * z + w * w)
+	if len > 0 then
+		x, y, z, w = x / len, y / len, z / len, w / len
+	else
+		x, y, z, w = 0, 0, 0, 1
+	end
+
+	return x, y, z, w
 end
 
 function bufferUtils.GetMeshIndexFromModel(model, index)
@@ -168,33 +307,33 @@ function bufferUtils.GetMeshIndexFromModel(model, index)
 	return mesh_0_buf
 end
 
-function bufferUtils.SetModelTex(model, tex) 
+function bufferUtils.SetModelTex(model, tex)
 	local materials = zune.ffi.ptrFromAddress(zune.mem.slice(model, structs.Model:offset("materials"), 8))
 	local maps = materials:readptr(structs.Material:offset("maps"))
 	maps:write(0, tex, 0, structs.Texture:size())
 end
 
 function bufferUtils.EulerToAxisAngle(eulerDeg)
-	local qx,qy,qz,qw = bufferUtils.EulerDegToQuaternion(eulerDeg)
+	local qx, qy, qz, qw = bufferUtils.EulerDegToQuaternion(eulerDeg)
 
-    qw = math.max(-1, math.min(1, qw))
-    local angleRad = 2 * math.acos(qw)
+	qw = math.max(-1, math.min(1, qw))
+	local angleRad = 2 * math.acos(qw)
 
-    local s2 = 1 - qw * qw
-    if s2 < 1e-12 then
-        return vector.create(1, 0, 0), 0
-    end
+	local s2 = 1 - qw * qw
+	if s2 < 1e-12 then
+		return vector.create(1, 0, 0), 0
+	end
 
-    local s = math.sqrt(s2)
-    local ax, ay, az = qx / s, qy / s, qz / s
+	local s = math.sqrt(s2)
+	local ax, ay, az = qx / s, qy / s, qz / s
 
-    local alen = math.sqrt(ax*ax + ay*ay + az*az)
-    if alen == 0 then
-        return vector.create(1, 0, 0), 0
-    end
-    ax, ay, az = ax/alen, ay/alen, az/alen
+	local alen = math.sqrt(ax * ax + ay * ay + az * az)
+	if alen == 0 then
+		return vector.create(1, 0, 0), 0
+	end
+	ax, ay, az = ax / alen, ay / alen, az / alen
 
-    return vector.create(ax, ay, az), math.deg(angleRad)
+	return vector.create(ax, ay, az), math.deg(angleRad)
 end
 
 return bufferUtils

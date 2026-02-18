@@ -3,6 +3,7 @@ local signal = require("@Kinemium.signal")
 local Enum = require("@EnumMap")
 
 local TweenService = Instance.new("TweenService")
+TweenService.ExplorerHidden = true
 
 local TweenCompleted = signal.new()
 local activeTweens = {}

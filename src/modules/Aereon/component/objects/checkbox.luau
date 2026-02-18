@@ -55,16 +55,20 @@ return function(objects, data)
 		config.animProgress = config.animProgress + (targetProgress - config.animProgress) * 0.2
 
 		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, config.boxColor:ToRaylib(0))
+		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 1, config.checkColor:ToRaylib(0))
 
-		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 2, config.checkColor:ToRaylib(0))
+		if config.animProgress > 0.01 then
+			local innerRect = rect.new(r.x, r.y, r.width, r.height)
 
-		if config.animProgress > 0.1 then
-			local checkSize = r.width * 0.6 * config.animProgress
-			local checkX = r.x + (r.width - checkSize) / 2
-			local checkY = r.y + (r.height - checkSize) / 2
-			local checkRect = rect.new(checkX, checkY, checkSize, checkSize)
+			local scale = config.animProgress
+			local scaledWidth = innerRect.width * scale
+			local scaledHeight = innerRect.height * scale
+			local offsetX = (innerRect.width - scaledWidth) / 2
+			local offsetY = (innerRect.height - scaledHeight) / 2
 
-			raylib.lib.DrawRectangleRounded(rect:translate(checkRect), 0.3, 8, config.checkColor:ToRaylib(0))
+			local scaledRect = rect.new(innerRect.x + offsetX, innerRect.y + offsetY, scaledWidth, scaledHeight)
+
+			raylib.lib.DrawRectangleRounded(rect:translate(scaledRect), 0.3, 8, config.checkColor:ToRaylib(0))
 		end
 
 		if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then

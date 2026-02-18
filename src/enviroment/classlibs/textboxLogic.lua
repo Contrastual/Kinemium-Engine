@@ -84,13 +84,12 @@ function logic:Step(object, lib, renderer, callbackHover, callbackLeave)
 		local currentKey = lib.GetCharPressed()
 		while currentKey ~= 0 do
 			local char = string.char(currentKey)
-			print(char)
 			-- insert character at caret position
 			local before = object.Text:sub(1, object.CaretPosition)
 			local after = object.Text:sub(object.CaretPosition + 1)
 			object.Text = before .. char .. after
 			object.CaretPosition = object.CaretPosition + 1
-			print(object.Text)
+
 			currentKey = lib.GetCharPressed()
 		end
 

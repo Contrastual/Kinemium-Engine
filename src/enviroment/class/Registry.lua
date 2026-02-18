@@ -18,8 +18,6 @@ else
 	entries = zune.fs.entries("./src/enviroment/class/list")
 end
 
-print("Class entries", entries)
-
 task.spawn(function()
 	for _, entry in pairs(entries) do
 		local code

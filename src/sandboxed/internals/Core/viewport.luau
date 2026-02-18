@@ -1,14 +1,11 @@
 -- devcell
 
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
-local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
-local DiscordRPC = game:GetService("DiscordRPC")
 local EngineSignal = game.EngineSignal
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local renderer = KinemiumRaylib.renderer
 local rl = KinemiumRaylib.lib
-local structs = KinemiumRaylib.structs
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 
@@ -28,10 +25,6 @@ local SecondaryTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor:T
 local ImageColor =
 	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
 
-if game.Context ~= Enum.GameContext.Editor then
-	return
-end
-
 if FlagExists("client") then
 	return
 end
@@ -44,7 +37,7 @@ if FlagExists("headless") then
 	return
 end
 
-local aereon = import("@Kinemium.Aereon")
+local aereon = import("@Aereon")
 local gui = aereon.gui
 local ide = aereon.ide(nil, game)
 
@@ -60,25 +53,21 @@ local currentObject
 EngineSignal:Connect(function(route, value, Script)
 	if route == "idestate" then
 		if value == true then
-			--KinemiumIDE.Open()
-			ide.text:clear()
-			ide.text:insertString(Script.Source)
+			ide:openTab(Script.Name, Script.Source)
+
 			enableIDE = true
 			currentObject = Script
-			DiscordRPC.ChangeDetail(`Editing {Script.Name}`)
-
 			game.Stop3DInput = true
 		else
 			enableIDE = false
 			currentObject = nil
-			DiscordRPC.ChangeDetail(`idle..`)
 
 			game.Stop3DInput = false
 		end
 	end
 end)
 
-local window = aereon.window(game, mainTheme, 1)
+local window = aereon.window(game)
 
 local function calculate()
 	local screenWidth = rl.GetMonitorWidth(0)
@@ -94,7 +83,7 @@ end
 local x, y, width, height = calculate()
 
 local ideWindow = window.create({
-	title = "Kinemium IDE",
+	title = "Script Editor",
 	x = x,
 	y = y,
 	width = width,
@@ -102,20 +91,53 @@ local ideWindow = window.create({
 	enabled = false,
 })
 
-ideWindow.stepped = function(data)
-	data.enabled = enableIDE
-	if enableIDE then
-		ide.draw(ideWindow.x, ideWindow.y + 30, vector.create(ideWindow.width, ideWindow.height), 50)
+--[[
+local viewportWindow = window.create({
+	title = "Viewport",
+	x = x,
+	y = y,
+	width = width,
+	height = height,
+	backgroundTransparency = 1,
+	enabled = false,
+})
+--]]
 
-		if currentObject then
-			currentObject.Source = ide:getCode()
+ideWindow.stepped = function(data)
+	ide.draw(ideWindow.x, ideWindow.y + 30, vector.create(ideWindow.width, ideWindow.height), 50)
+
+	if currentObject then
+		if currentObject.IsOverridden then
+			ide.text:clear()
+			ide.text:insertString(currentObject.Source)
+			ide.text:setCursor(1, 1)
+			ide._highlightCache = {}
+			return
 		end
+		currentObject.Source = ide:getCode()
 	end
 end
 
-renderer.Add2DStack(function(data)
+local viewport_x, viewport_y, viewport_width, viewport_height = 0, 0, 0, 0
+
+renderer.Pool.new("2d", function(data)
+	if game.Context ~= Enum.GameContext.Editor then
+		return
+	end
+
 	local dt = rl.GetFrameTime()
 	local mainTheme = StudioThemeService.SelectedTheme
 
+	ideWindow.enabled = enableIDE
+
 	aereon.step(dt, mainTheme.aereon)
 end)
+
+--[[
+viewportWindow.stepped = function(data)
+	viewport_x = data.x
+	viewport_y = data.y + 30
+	viewport_width = data.width
+	viewport_height = data.height - 30
+end
+--]]

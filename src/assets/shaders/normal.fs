@@ -1,7 +1,11 @@
-#version 330 core
-in vec3 Normal;
-out vec4 FragColor;
+#version 330
+
+in vec3 fragNormal;
+
+out vec4 fragColor;
 
 void main() {
-    FragColor = vec4(1.0, 0.0, 0.0, 1.0); // solid red
+    // Encode normal to 0-1 range
+    vec3 normal = normalize(fragNormal);
+    fragColor = vec4(normal * 0.5 + 0.5, 1.0);
 }

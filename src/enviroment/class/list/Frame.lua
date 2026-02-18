@@ -1,10 +1,4 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
 local GuiObject = require("@GuiObject")
-local Enum = require("@EnumMap")
-local raylib = require("@raylib")
-local lib = raylib.lib
 
 local propTable = {
 	Name = "Frame",
@@ -15,6 +9,9 @@ local propTable = {
 GuiObject.inherit(propTable)
 
 propTable.render = function(lib, object, dt, structs, renderer)
+	if not object.Visible then
+		return
+	end
 	local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
 	object.AbsolutePosition = pos
 	object.AbsoluteSize = size

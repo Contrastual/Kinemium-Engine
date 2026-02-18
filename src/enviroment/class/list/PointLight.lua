@@ -4,55 +4,43 @@ local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
 
 local propTable = {
-	Position = Vector3.new(0, 0, 0),
-	Direction = Vector3.new(0, 0, 0),
 	Color = Color3.new(1, 1, 1),
-	Brightness = 1, -- intensity of the light
-	Range = 10, -- how far the light reaches
+	Brightness = 200, -- intensity of the light
+	Range = 400, -- how far the light reaches
 	Shadows = true, -- casts shadows or not
 	Enabled = true, -- whether the light is active
 	Name = "PointLight",
 	BaseClass = "Kinemium.light",
-	CFrame = CFrame.new(0, 0, 0),
 }
 
 return {
 	class = "PointLight",
 	callback = function(instance, renderer, datamodel)
 		local Lighting = datamodel:GetService("Lighting")
-		local Kilights = Lighting.kilight
 
-		propTable.Update = function()
-			Lighting.RemoveLight(instance.UniqueId)
-			Lighting.AddLight(
-				instance.UniqueId,
-				Kilights.LIGHT_POINT,
-				vector.create(instance.Position.X, instance.Position.Y, instance.Position.Z),
-				vector.create(instance.Direction.X, instance.Direction.Y, instance.Direction.Z),
-				{
-					r = instance.Color.R * 255,
-					g = instance.Color.G * 255,
-					b = instance.Color.B * 255,
-					a = 255,
-				},
-				Lighting.kilight_shader_def
-			)
-			local light = Lighting:GetLight(instance.UniqueId)
-			if light then
-				light.energy = instance.Brightness
-				light.range = instance.Range
-				light.shadow = instance.Shadows
+		local function Update()
+			if instance.Parent then
+				local parent = instance.Parent
+				if parent.BaseClass == "BasePart" then
+					local pos = parent.CFrame.Position
+					if instance.Enabled then
+						Lighting:AddPointLight(
+							parent.UniqueId,
+							pos,
+							instance.Color,
+							instance.Brightness,
+							instance.Range
+						)
+					end
+				end
 			end
 		end
 
-		instance:SetProperties(propTable)
-
-		instance.Changed:Connect(function(prop)
-			if prop == "Position" or prop == "Direction" or prop == "Color" or prop == "Brightness" then
-				instance.Update()
-			end
+		renderer.Pool.new("3d", function()
+			Update()
 		end)
-		instance.Update()
+
+		instance:SetProperties(propTable)
 
 		return instance
 	end,
