@@ -50,9 +50,14 @@ else
 
 	local store = `{platform.os}-{platform.cpu.arch}`
 	local mapped = BIN_MAP[store] or store
-	local file = `raylib`
+	local file = `raylib-{RAYLIB_VERSION}_{mapped}`
 
-	if fs.stat(`{BIN_LOCATION}/{file}.{ffi.suffix}`).kind == "none" then
+	print(file)
+
+	local findFIle = `{BIN_LOCATION}/{file}.{ffi.suffix}`
+	print(findFIle)
+
+	if (fs.stat(findFIle).kind == "none") then
 		print(`Downloading '{file}'...`)
 
 		local archive: buffer?
@@ -66,6 +71,7 @@ else
 				},
 				max_body_size = 1024 * 1024 * 10, -- 10 MB
 			}, true)
+			print(res)
 			if not res.ok then
 				continue
 			end

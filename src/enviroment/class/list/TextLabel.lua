@@ -132,6 +132,9 @@ propTable.render = function(lib, object, dt, structs, renderer)
 			lineOffsetX = frameSize.X - lineWidth
 		end
 
+		if object.TextTransparency == 1 then
+			continue
+		end
 		local linePos = vector.create(framePos.X + lineOffsetX, framePos.Y + offsetY + (i - 1) * lineHeightPx)
 		lib.DrawTextEx(font, line, linePos, fontSize, object.TextSpacing or 0, tint)
 	end

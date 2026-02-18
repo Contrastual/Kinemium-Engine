@@ -20,7 +20,11 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 			local read = fs.readFile(projectsFile)
 			local data = toml.decode(read)
 			if data then
-				return data.projects
+				if data.projects then
+					return data.projects
+				else
+					return {}
+				end
 			end
 			return {}
 		end,
@@ -28,6 +32,15 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 		StartObserve = function(path) end,
 
 		NewProject = function(name, path, iconPath, description)
+			if not name then
+				return
+			end
+			if not path then
+				return
+			end
+			if not iconPath then
+				return
+			end
 			local kprojFile = path .. "/kproj.toml"
 			-- write to projects list
 			local projects = ProjectLoaderService.GetProjects()

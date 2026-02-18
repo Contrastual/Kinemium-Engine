@@ -387,49 +387,6 @@ local function initShaders(ki3d, shader, game, renderer)
 		end,
 	})
 
-	ki3d.filters.new("fxaa", {
-		shader = {
-			vertex = nil,
-			fragment = "./src/assets/shaders/fxaa.frag",
-		},
-
-		begin = function(self, runtime)
-			lib.BeginShaderMode(self.shader)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"uTexelSize",
-				{ 1.0 / lib.GetRenderWidth(), 1.0 / lib.GetRenderHeight() },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC2
-			)
-		end,
-
-		finish = function(self, runtime)
-			lib.EndShaderMode()
-		end,
-	})
-
-	ki3d.filters.new("bloom", {
-		shader = {
-			vertex = nil, -- Use default vertex shader
-			fragment = "./src/assets/shaders/bloom.frag",
-		},
-
-		begin = function(self, runtime)
-			lib.BeginShaderMode(self.shader)
-			shader.SetShaderValueRaw(self.shader, "uBloomMode", 3, const.ShaderUniformDataType.SHADER_UNIFORM_INT)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"uBloomIntensity",
-				13,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-		end,
-
-		finish = function(self, runtime)
-			lib.EndShaderMode()
-		end,
-	})
-
 	ki3d.filters.new("ssao", {
 		shader = {
 			vertex = "shaders/fullscreen_quad.vs", -- basic full-screen quad

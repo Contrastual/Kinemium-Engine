@@ -71,7 +71,6 @@ local function createBody(object, worldId)
 end
 
 Box2DService.InitRenderer = function(renderer, renderer_signal, game)
-	print(renderer, renderer_signal)
 	Box2DService:SetProperties({
 		lib = renderer.lib,
 		const = renderer.const,

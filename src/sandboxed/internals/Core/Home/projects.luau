@@ -207,7 +207,7 @@ group.frame.setTransparency(1)
 local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
 local kilLogo = KinemiumIconLoader.ToTexture(logoPath)
 
-local projects = ProjectLoaderService.GetProjects()
+local projects = ProjectLoaderService.GetProjects() or {}
 
 local itemSlots = {}
 local base_y = 150

@@ -133,6 +133,7 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		until game.Workspace
 		local workspace = game.Workspace
 
+		print("Ode init")
 		lib.dInitODE()
 
 		local worldId = lib.dWorldCreate()
@@ -159,14 +160,14 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		for _, part in pairs(workspace:GetDescendants()) do
 			if part.BaseClass == "BasePart" then
 				iodebug("Created physics object for part:", part.Name)
-				createPhysicsBody(worldId, space, part)
+				--createPhysicsBody(worldId, space, part)
 			end
 		end
 
 		workspace.DescendantAdded:Connect(function(descendant)
 			if descendant.BaseClass == "BasePart" then
 				iodebug("Created physics object for part:", descendant.Name)
-				createPhysicsBody(worldId, space, descendant)
+				--createPhysicsBody(worldId, space, descendant)
 			end
 		end)
 
@@ -178,14 +179,7 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				if dt == 0 then
 					return
 				end
-				applyGravity()
 
-				lib.dSpaceCollide(space, nil, compiled)
-				lib.dWorldQuickStep(worldId, dt)
-				lib.dJointGroupEmpty(contactGroup)
-
-				-- apply position
-				applyPositions(worldId)
 			end
 		end)
 
