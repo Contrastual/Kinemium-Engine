@@ -95,21 +95,23 @@ ki3d.End3D = function(self)
 	end
 	lib.EndTextureMode()
 
-	inputRT = sceneRT
-
 	local screenWidth = lib.GetRenderWidth()
 	local screenHeight = lib.GetRenderHeight()
+
+	local currentRT = sceneRT -- start from the scene
+	local tempRT = outputRT -- temp for filters
 
 	for _, filter in pairs(filters) do
 		if not ki3d.enabled then
 			continue
 		end
+
 		local runtime_lib = {
 			lib = lib,
 			structs = raylib.structs,
 			const = raylib.const,
 
-			texture = utils.extract.texture(inputRT),
+			texture = utils.extract.texture(currentRT),
 			depth = utils.extract.texture(depthRT),
 			normal = utils.extract.texture(normalRT),
 
@@ -121,15 +123,13 @@ ki3d.End3D = function(self)
 			shaderobj = filter.shader,
 		}
 
-		if filter.disableauto == true then
-			if filter.setuniforms then
-				filter.setuniforms(filter, runtime_lib)
-			end
+		if filter.disableauto and filter.setuniforms then
+			filter.setuniforms(filter, runtime_lib)
 			continue
 		end
 
-		lib.BeginTextureMode(outputRT)
-		lib.ClearBackground(raylib.const.BLANK)
+		lib.BeginTextureMode(tempRT)
+		lib.ClearBackground(raylib.const.BLACK)
 
 		filter:begin(runtime_lib)
 		lib.DrawTextureRec(
@@ -142,12 +142,19 @@ ki3d.End3D = function(self)
 
 		lib.EndTextureMode()
 
-		local tmp = inputRT
-		inputRT = outputRT
-		outputRT = tmp
+		-- copy tempRT -> currentRT for next filter
+		lib.BeginTextureMode(currentRT)
+		lib.ClearBackground(raylib.const.BLANK)
+		lib.DrawTextureRec(
+			utils.extract.texture(tempRT),
+			runtime_lib.rect:new({ x = 0, y = 0, width = screenWidth, height = screenHeight }), -- positive height
+			vector.create(0, 0),
+			raylib.const.WHITE
+		)
+		lib.EndTextureMode()
 	end
 
-	self.finalRT = inputRT
+	self.finalRT = currentRT
 end
 
 ki3d.GetRenderTextures = function()

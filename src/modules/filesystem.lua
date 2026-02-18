@@ -6,7 +6,7 @@ function filesystem.entryloop(path, callback)
 	local entries = zunefs.entries(path)
 	if entries then
 		for _, entry in pairs(entries) do
-			callback(entry)
+			callback(entry, entries)
 		end
 	end
 	return true

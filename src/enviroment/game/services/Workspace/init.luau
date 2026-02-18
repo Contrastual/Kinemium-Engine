@@ -65,8 +65,6 @@ local function ShouldDrawPart(part, camPos, camForward, camFovy, screenWidth, sc
 end
 
 Workspace.InitRenderer = function(renderer, signal, game)
-	local raybatch = require("@raybatch")
-	local rb_lib = raybatch.lib
 	local IdPool = {}
 
 	local ki3d = renderer.Ki3d
@@ -398,6 +396,16 @@ Workspace.InitRenderer = function(renderer, signal, game)
 							part._lastCFrame = part.CFrame
 							part._lastSize = part.Size
 						end
+						local meshData = preloadedMeshes[part.Shape.Value]
+						local mesh = meshData[2]
+						local model = meshData[1]
+						drawRaylib(part, model, mesh)
+						--[[
+						if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
+							part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+							part._lastCFrame = part.CFrame
+							part._lastSize = part.Size
+						end
 
 						local batchKey = part.Shape.Value .. "|" .. part.Material.Value
 						local batch = shapeMaterialBatches[batchKey]
@@ -409,12 +417,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 							batch = {
 								mesh = meshBuf,
 								material = matData.material,
-								matricesBuf = buffer.create(MAX_INSTANCES * MATRIX_SIZE), -- buffer for DrawMeshInstanced
+								matricesBuf = buffer.create(MAX_INSTANCES * MATRIX_SIZE),
 								colors = zune.ffi.alloc(MAX_INSTANCES * COLOR_SIZE),
 								count = 0,
 							}
+
 							shapeMaterialBatches[batchKey] = batch
 						end
+
+						print("Copying")
 
 						buffer.copy(batch.matricesBuf, batch.count * MATRIX_SIZE, part._raylibMatrix, 0, MATRIX_SIZE)
 
@@ -422,31 +433,20 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						bufferUtils.WriteColorToBuffer(batch.colors, batch.count * COLOR_SIZE, tint)
 
 						batch.count += 1
+
+						print("Created batch")
+						--]]
 					end
 				end
 			end
 		end
-		for key, batch in pairs(shapeMaterialBatches) do
+		--[[
+		for _, batch in pairs(shapeMaterialBatches) do
 			if batch.count > 0 then
-				--[[
-                print(
-					"Drawing batch:",
-					key,
-					"count:",
-					batch.count,
-					"mesh type:",
-					type(batch.mesh),
-					"mat type:",
-					type(batch.material)
-				)
-                    --]]
-				for i = 0, batch.count - 1 do
-					local matBuf = buffer.create(MATRIX_SIZE)
-					buffer.copy(matBuf, 0, batch.matricesBuf, i * MATRIX_SIZE, MATRIX_SIZE)
-					lib.DrawMesh(batch.mesh, batch.material, matBuf)
-				end
+				lib.DrawMeshInstanced(batch.mesh, batch.material, batch.matricesBuf, batch.count)
 			end
 		end
+		--]]
 	end
 
 	renderer.Hook.new("After3D", function(runtime)

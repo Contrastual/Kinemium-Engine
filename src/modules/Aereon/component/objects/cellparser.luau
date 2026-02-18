@@ -2,7 +2,7 @@ return function(objects, config)
 	local cells = {}
 	local cellRefs = {}
 	local raylib = require("@raylib")
-	local MergedCell = require("./cellitem")
+	local MergedCell = require("./cellItem")
 
 	local arect = require("@Arect")(raylib.lib)
 
