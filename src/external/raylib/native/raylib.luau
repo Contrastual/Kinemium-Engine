@@ -145,8 +145,8 @@ local Camera2D = ffi.struct({
 export type Camera2D = typeof(Camera2D:new({}))
 
 local Mesh = ffi.struct({
-	{ vertexCount = int },
-	{ triangleCount = int },
+	{ vertexCount = int }, -- 0
+	{ triangleCount = int }, -- 4
 	{ vertices = ffi.types.pointer },
 	{ texcoords = ffi.types.pointer },
 	{ texcoords2 = ffi.types.pointer },
@@ -181,7 +181,7 @@ local float4 = ffi.struct({ { _1 = float }, { _2 = float }, { _3 = float }, { _4
 
 local Material = ffi.struct({
 	{ shader = Shader },
-	{ maps = ffi.types.pointer },
+	{ maps = MaterialMap },
 	{ params = float4 },
 })
 export type Material = typeof(Material:new({}))

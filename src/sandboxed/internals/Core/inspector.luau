@@ -12,6 +12,11 @@ local rl = KinemiumRaylib.lib
 local Selection = game:GetService("Selection")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
+local overlapping = {}
+
+local scrollOffset = 0
+local maxScrollOffset = 0
+
 local EngineSignal = game.EngineSignal
 
 local StudioThemeService = game:GetService("StudioThemeService")
@@ -53,9 +58,11 @@ local addIcon = KinemiumIconLoader.ToTexture(png)
 
 local windowRegistry = {}
 
-local aereon = import("@Kinemium.Aereon")
+local aereon = require("@Aereon")
 local gui = aereon.gui
 local window = aereon.window(game)
+local arect = aereon.rect()
+local immediate = gui.immediate
 
 local blacklisted = {
 	"Children",
@@ -92,34 +99,383 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Inspector"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback, frame = create_window_back(screenGui, "Inspector", Vector2.new(1, 1), UDim2.new(0, 400, 0.3, 0))
-
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
+local propback, frame = create_window_back(screenGui, "Inspector", Vector2.new(1, 1), UDim2.new(0, 400, 0.5, 0))
 
 local windowObject
+local comps = {}
 
 RunService.GuiRender:Connect(function()
 	if not windowObject then
 		return
 	end
-	renderer.blur:DrawBlurredRegion(
+	renderer.Blur:DrawBlurredRegion(
 		windowObject.x,
 		windowObject.y,
 		windowObject.width,
 		windowObject.height,
-		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+		Color3.new(1, 1, 1):ToRaylib(0)
 	)
 end)
 
-local createdGuiComponents = {}
+local openProperties = {}
+local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
+
+local datatypes = {
+	string = {
+		select = function(selected, propName, propValue)
+			comps[propName] = textbox.new({
+				padding = 5,
+				onSubmit = function(new)
+					if type(propValue) == "string" then
+						selected[propName] = new
+					elseif type(propValue) == "number" then
+						selected[propName] = tonumber(new) or 0
+					end
+				end,
+			})
+			comps[propName]:setText(tostring(propValue))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local tbx = comps[propName]
+			if tbx then
+				tbx:drawWithExtras(pos.x, pos.y, rect.width / 2, cellHeight - 4)
+			end
+		end,
+	},
+
+	Vector2 = {
+		select = function(selected, propName, propValue)
+			comps[propName] = {
+				x = textbox.new({
+					padding = 5,
+					numeric = true,
+					numericStep = 1,
+
+					TextColor = Color3.new(1, 0, 0):ToRaylib(0),
+					onSubmit = function(new)
+						local v = selected[propName]
+						selected[propName] = Vector2.new(tonumber(new) or 0, v.Y)
+					end,
+				}),
+				y = textbox.new({
+					padding = 5,
+					numeric = true,
+					TextColor = Color3.new(0, 1, 0):ToRaylib(0),
+					onSubmit = function(new)
+						local v = selected[propName]
+						selected[propName] = Vector2.new(v.X, tonumber(new) or 0)
+					end,
+				}),
+			}
+
+			comps[propName].x:setText(tostring(propValue.X))
+			comps[propName].y:setText(tostring(propValue.Y))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local vec = comps[propName]
+			if not vec then
+				return
+			end
+
+			local totalWidth = rect.width / 2
+			local spacing = 4
+			local w = (totalWidth - spacing) / 2
+
+			vec.x:drawWithExtras(pos.x, pos.y, w, cellHeight - 4)
+			vec.y:drawWithExtras(pos.x + w + spacing, pos.y, w, cellHeight - 4)
+		end,
+	},
+
+	UDim2 = {
+		select = function(selected, propName, propValue)
+			comps[propName] = {
+				sx = textbox.new({
+					padding = 5,
+					numeric = true,
+					TextColor = Color3.new(0.4, 1, 1):ToRaylib(0),
+					onSubmit = function(new)
+						print("udim2 changed!")
+						local v = selected[propName]
+						selected[propName] = UDim2.new(tonumber(new) or 0, v.X.Offset, v.Y.Scale, v.Y.Offset)
+					end,
+				}),
+				ox = textbox.new({
+					padding = 5,
+					numeric = true,
+					TextColor = Color3.new(1, 1, 1):ToRaylib(0),
+					onSubmit = function(new)
+						local v = selected[propName]
+						selected[propName] = UDim2.new(v.X.Scale, tonumber(new) or 0, v.Y.Scale, v.Y.Offset)
+					end,
+				}),
+				sy = textbox.new({
+					padding = 5,
+					numeric = true,
+					TextColor = Color3.new(0.4, 1, 1):ToRaylib(0),
+					onSubmit = function(new)
+						local v = selected[propName]
+						selected[propName] = UDim2.new(v.X.Scale, v.X.Offset, tonumber(new) or 0, v.Y.Offset)
+					end,
+				}),
+				oy = textbox.new({
+					padding = 5,
+					numeric = true,
+					TextColor = Color3.new(1, 1, 1):ToRaylib(0),
+					onSubmit = function(new)
+						local v = selected[propName]
+						selected[propName] = UDim2.new(v.X.Scale, v.X.Offset, v.Y.Scale, tonumber(new) or 0)
+					end,
+				}),
+			}
+
+			comps[propName].sx:setText(tostring(propValue.X.Scale))
+			comps[propName].ox:setText(tostring(propValue.X.Offset))
+			comps[propName].sy:setText(tostring(propValue.Y.Scale))
+			comps[propName].oy:setText(tostring(propValue.Y.Offset))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local u = comps[propName]
+			if not u then
+				return
+			end
+
+			local totalWidth = rect.width / 2
+			local spacing = 4
+			local half = (totalWidth - spacing) / 2
+			local innerSpacing = 4
+			local w = (half - innerSpacing) / 2
+
+			u.sx:drawWithExtras(pos.x, pos.y, w, cellHeight - 4)
+			u.ox:drawWithExtras(pos.x + w + innerSpacing, pos.y, w, cellHeight - 4)
+
+			local xStart = pos.x + half + spacing
+			u.sy:drawWithExtras(xStart, pos.y, w, cellHeight - 4)
+			u.oy:drawWithExtras(xStart + w + innerSpacing, pos.y, w, cellHeight - 4)
+		end,
+	},
+
+	Color3 = {
+		select = function(selected, propName, propValue)
+			comps[propName] = {
+				r = textbox.new({
+					padding = 5,
+					numeric = true,
+					numericMin = 0,
+					numericMax = 1,
+					numericStep = 1,
+					TextColor = Color3.new(1, 0, 0):ToRaylib(0),
+
+					onSubmit = function(new)
+						local r, g, b = selected[propName]:ToRGB()
+						selected[propName] = Color3.fromRGB(new, g, b)
+					end,
+				}),
+				g = textbox.new({
+					padding = 5,
+					numeric = true,
+					numericMin = 0,
+					numericMax = 1,
+					numericStep = 1,
+
+					TextColor = Color3.new(0, 1, 0):ToRaylib(0),
+
+					onSubmit = function(new)
+						local r, g, b = selected[propName]:ToRGB()
+						selected[propName] = Color3.fromRGB(r, new, b)
+					end,
+				}),
+				b = textbox.new({
+					padding = 5,
+					numeric = true,
+					numericMin = 0,
+					numericStep = 1,
+					numericMax = 1,
+					TextColor = Color3.new(0, 0, 1):ToRaylib(0),
+
+					onSubmit = function(new)
+						local r, g, b = selected[propName]:ToRGB()
+						selected[propName] = Color3.fromRGB(r, g, new)
+					end,
+				}),
+			}
+
+			local r, g, b = propValue:ToRGB()
+
+			comps[propName].r:setText(tostring(r))
+			comps[propName].g:setText(tostring(g))
+			comps[propName].b:setText(tostring(b))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local c = comps[propName]
+			if not c then
+				return
+			end
+
+			local totalWidth = rect.width / 2
+			local spacing = 4
+			local w = (totalWidth - spacing * 2) / 3
+
+			c.r:drawWithExtras(pos.x, pos.y, w, cellHeight - 4)
+			c.g:drawWithExtras(pos.x + w + spacing, pos.y, w, cellHeight - 4)
+			c.b:drawWithExtras(pos.x + (w + spacing) * 2, pos.y, w, cellHeight - 4)
+		end,
+	},
+
+	number = {
+		select = function(selected, propName, propValue)
+			comps[propName] = textbox.new({
+				padding = 5,
+
+				numeric = true,
+				numericMin = 0,
+				numericMax = 100000,
+				numericStep = 1,
+				showStepButtons = true,
+
+				onSubmit = function(new)
+					print("number changed!")
+					selected[propName] = tonumber(new or 0)
+				end,
+			})
+			comps[propName]:setText(tostring(propValue))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local tbx = comps[propName]
+			if tbx then
+				tbx:drawWithExtras(pos.x, pos.y, rect.width / 2, cellHeight - 4)
+			end
+		end,
+	},
+
+	boolean = {
+		select = function(selected, propName, propValue)
+			comps[propName] = aereon.gui.checkbox({
+				value = propValue,
+				onChanged = function(new)
+					selected[propName] = new
+				end,
+			})
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local dt = KinemiumRaylib.lib.GetFrameTime()
+			local tbx = comps[propName]
+			if tbx then
+				tbx.set("obj_rect", arect.new(pos.x, pos.y, 25, 25))
+				tbx.render(dt)
+			end
+		end,
+	},
+
+	EnumItem = {
+		select = function(selected, propName, propValue)
+			local itemNames = propValue.EnumType:GetItemsNames()
+			local selected_index = 1
+
+			for i, name in pairs(itemNames) do
+				if name == propValue.Name then
+					selected_index = i
+					break
+				end
+			end
+
+			local dp = gui.dropdown({
+				options = propValue.EnumType:GetItemsNames(),
+				font = vend,
+				selectedIndex = selected_index,
+				backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+				hoverColor = StudioThemeService.SelectedTheme.BackgroundColor,
+				onSelect = function(i, option: string)
+					selected[propName] = Enum[propValue.EnumType.Name][option]
+				end,
+			})
+			overlapping[propName] = {
+				render = function(selected, propName, propValue, pos, rect, cellHeight)
+					local dt = KinemiumRaylib.lib.GetFrameTime()
+					dp.set("obj_rect", arect.new(pos.x, pos.y, (rect.width / 2) - 10, cellHeight - 4))
+					dp.render(dt)
+				end,
+			}
+		end,
+	},
+
+	Vector3 = {
+		select = function(selected, propName, propValue)
+			comps[propName] = {
+				x = textbox.new({
+					padding = 5,
+					onSubmit = function(new)
+						print("changed")
+						selected[propName] = Vector3.new(tonumber(new), selected[propName].Y, selected[propName].Z)
+					end,
+					TextColor = Color3.new(1, 0, 0):ToRaylib(0),
+				}),
+				y = textbox.new({
+					padding = 5,
+					onSubmit = function(new)
+						print("changed")
+
+						selected[propName] = Vector3.new(selected[propName].X, tonumber(new), selected[propName].Z)
+					end,
+					TextColor = Color3.new(0, 1, 0.266667):ToRaylib(0),
+				}),
+				z = textbox.new({
+					padding = 5,
+					onSubmit = function(new)
+						print("changed")
+
+						selected[propName] = Vector3.new(selected[propName].X, selected[propName].Y, tonumber(new))
+					end,
+					TextColor = Color3.new(0, 0, 1):ToRaylib(0),
+				}),
+			}
+			comps[propName].x:setText(tostring(propValue.X))
+			comps[propName].y:setText(tostring(propValue.Y))
+			comps[propName].z:setText(tostring(propValue.Z))
+		end,
+
+		render = function(selected, propName, propValue, pos, rect, cellHeight)
+			local vec = comps[propName]
+			if vec then
+				local totalWidth = rect.width / 2
+				local spacing = 4
+				local w = (totalWidth - spacing * 2) / 3
+
+				vec.x:drawWithExtras(pos.x, pos.y, w, cellHeight - 4)
+				vec.y:drawWithExtras(pos.x + w + spacing, pos.y, w, cellHeight - 4)
+				vec.z:drawWithExtras(pos.x + (w + spacing) * 2, pos.y, w, cellHeight - 4)
+			end
+		end,
+	},
+}
+
+Selection.SelectionAdded:Connect(function(selected)
+	table.clear(comps)
+	table.clear(overlapping)
+	scrollOffset = 0
+
+	for propName, propValue in pairs(selected._props) do
+		if type(propValue) == "table" then
+			if propValue._history then
+				continue
+			end
+			local datatype = datatypes[propValue.__type]
+			if datatype then
+				datatype.select(selected, propName, propValue)
+			end
+		else
+			local datatype = datatypes[type(propValue)]
+			if datatype then
+				datatype.select(selected, propName, propValue)
+			end
+		end
+	end
+end)
 
 window.stepped = function(windowData)
 	if windowData.title == "Inspector" then
@@ -127,9 +483,23 @@ window.stepped = function(windowData)
 
 		local winX, winY = windowData.x, windowData.y + 30
 		local winWidth = windowData.width
-		local cellHeight = 25
-		local padding = 5
+		local winHeight = windowData.height - 30
+		local cellHeight = 28
+		local padding = 0
 		local mousePos = rl.GetMousePosition()
+
+		local mouseWheel = rl.GetMouseWheelMove()
+		if mouseWheel ~= 0 then
+			if
+				mousePos.x >= winX
+				and mousePos.x <= winX + winWidth
+				and mousePos.y >= winY
+				and mousePos.y <= winY + winHeight
+			then
+				scrollOffset = scrollOffset - mouseWheel * 40 -- 40 pixels per scroll notch
+				scrollOffset = math.max(0, math.min(scrollOffset, maxScrollOffset))
+			end
+		end
 
 		if rl.IsWindowResized() == 1 then
 			window.dragspring:target(windowData, {
@@ -148,7 +518,7 @@ window.stepped = function(windowData)
 
 		gui.clear()
 
-		local i = 0
+		local propertyCount = 0
 		for propName, propValue in pairs(selected._props) do
 			if table.find(blacklisted, propName) then
 				continue
@@ -156,19 +526,55 @@ window.stepped = function(windowData)
 			if type(propValue) == "function" then
 				continue
 			end
-			if type(propValue) == "table" and not propValue.Name then
+			if type(propValue) == "table" then
+				if propValue.__type == "KinemiumSignal" or propValue.__type == "KinemiumConnection" then
+					continue
+				end
+				if propValue._history then
+					continue
+				end
+			end
+			if string.find(propName, "_") then
 				continue
+			end
+			propertyCount = propertyCount + 1
+		end
+		local totalContentHeight = propertyCount * (cellHeight + padding)
+		maxScrollOffset = math.max(0, totalContentHeight - winHeight)
+
+		rl.BeginScissorMode(winX, winY, winWidth, winHeight)
+
+		local i = 0
+
+		for propName, propValue in pairs(selected._props) do
+			if table.find(blacklisted, propName) then
+				continue
+			end
+			if type(propValue) == "function" then
+				continue
+			end
+			if type(propValue) == "table" then
+				if propValue._history then
+					continue
+				end
 			end
 			if string.find(propName, "_") then
 				continue
 			end
 
 			i += 1
-			local cellY = winY + (i - 1) * (cellHeight + padding)
+
+			local cellY = winY + (i - 1) * (cellHeight + padding) - scrollOffset
+
+			if cellY + cellHeight < winY or cellY > winY + winHeight then
+				continue
+			end
+
 			local rect = { x = winX + 5, y = cellY, width = winWidth - 25, height = cellHeight }
+			local pos = vector.create(rect.x + 200, rect.y + 4)
+
 			local transparency = 1
 
-			-- highlight on hover
 			local col
 			if i % 2 == 0 then
 				col = Color3.new(0.15, 0.15, 0.15) -- dark gray
@@ -196,55 +602,67 @@ window.stepped = function(windowData)
 				}),
 				0.2,
 				6,
-				Color3ToRaylib(col, transparency)
+				col:ToRaylib(transparency)
 			)
 
 			-- draw property name
-			rl.DrawTextEx(vend, propName, vector.create(rect.x + 8, rect.y + 4), 22, 1, TextColor)
+			rl.DrawTextEx(vend, propName, vector.create(rect.x + 8, rect.y + 4), 17, 1, TextColor)
 
-			local valueColor
-			if propValue == true then
-				valueColor = KinemiumRaylib.const.GREEN
-			elseif propValue == false then
-				valueColor = KinemiumRaylib.const.RED
-			elseif tonumber(propValue) then
-				valueColor = KinemiumRaylib.const.YELLOW
+			if type(propValue) == "table" then
+				if propValue.__type ~= "EnumItem" then
+					local datatype = datatypes[propValue.__type]
+					if datatype then
+						datatype.render(selected, propName, propValue, pos, rect, cellHeight)
+					end
+				end
 			else
-				valueColor = TextColor
+				local datatype = datatypes[type(propValue)]
+				if datatype then
+					datatype.render(selected, propName, propValue, pos, rect, cellHeight)
+				end
 			end
 
-			local textboxX = rect.x + rect.width - 130
-			local textboxWidth = 120
-
-			local valueName = type(propValue) == "table" and propValue.Name or tostring(propValue)
-
-			local pos = vector.create(rect.x + 300, rect.y + 4)
-
-			if type(propValue) == "string" or type(propValue) == "number" then
-				createdGuiComponents[propName] = aereon.gui.textInput({
-					x = pos.x,
-					y = pos.y,
-					width = textboxWidth,
-					height = cellHeight,
-					text = propValue,
-				})
-			elseif type(propValue) == "boolean" then
-				createdGuiComponents[propName] = aereon.gui.checkbox({
-					x = pos.x,
-					y = pos.y,
-					width = textboxWidth,
-					height = cellHeight,
-					value = propValue,
-				})
+			for pN, gui in pairs(overlapping) do
+				if pN == propName then
+					gui.propName = propName
+					gui.propValue = propValue
+					gui.pos = pos
+					gui.rect = rect
+					gui.cellHeight = cellHeight
+					overlapping[pN] = gui
+				end
 			end
+		end
+
+		rl.EndScissorMode()
+
+		for pN, gui in pairs(overlapping) do
+			if not gui.propName then
+				continue
+			end
+			gui.render(selected, gui.propName, gui.propValue, gui.pos, gui.rect, cellHeight)
+		end
+
+		if maxScrollOffset > 0 then
+			local scrollbarWidth = 8
+			local scrollbarX = winX + winWidth - scrollbarWidth - 2
+			local scrollbarHeight = winHeight
+			local scrollbarThumbHeight = math.max(30, (winHeight / totalContentHeight) * scrollbarHeight)
+			local scrollbarThumbY = winY + (scrollOffset / maxScrollOffset) * (scrollbarHeight - scrollbarThumbHeight)
+
+			rl.DrawRectangle(scrollbarX, winY, scrollbarWidth, scrollbarHeight, Color3.new(0.1, 0.1, 0.1):ToRaylib(0.3))
 
 			rl.DrawRectangleRounded(
-				structs.Rectangle:new({ x = textboxX, y = rect.y + 2, width = textboxWidth, height = cellHeight - 4 }),
+				structs.Rectangle:new({
+					x = scrollbarX,
+					y = scrollbarThumbY,
+					width = scrollbarWidth,
+					height = scrollbarThumbHeight,
+				}),
 				0.5,
-				4,
-				Color3ToRaylib(Color3.new(0.08, 0.08, 0.08), 1)
+				6,
+				Color3.new(1, 1, 1):ToRaylib(0.7)
 			)
-			rl.DrawTextEx(vend, valueName, vector.create(rect.x + 300, rect.y + 4), 22, 1, valueColor)
 		end
 	end
 end

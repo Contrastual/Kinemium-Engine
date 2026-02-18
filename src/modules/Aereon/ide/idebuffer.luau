@@ -2,6 +2,22 @@
 local buffer = {}
 buffer.__index = buffer
 
+local function sanitizeText(text)
+	text = text:gsub("[\194\160]", " ") -- Non-breaking space (UTF-8)
+	text = text:gsub("[\226\128\168]", " ") -- Zero-width space
+	text = text:gsub("[\226\128\139]", "") -- Zero-width joiner
+	text = text:gsub("[\239\187\191]", "") -- BOM (Byte Order Mark)
+
+	-- Remove or replace any other non-printable characters
+	text = text:gsub("[^\9\10\13\32-\126\128-\255]", "")
+
+	-- Normalize line endings
+	text = text:gsub("\r\n", "\n")
+	text = text:gsub("\r", "\n")
+
+	return text
+end
+
 function buffer.create()
 	return setmetatable({
 		lines = { "" },
@@ -112,6 +128,7 @@ function buffer:delete()
 end
 
 function buffer:insertString(str)
+	str = sanitizeText(str)
 	local lines = string.split(str, "\n")
 	if #lines == 1 then
 		local c = self.cursor
@@ -284,13 +301,12 @@ function buffer:duplicateLine()
 		self:setCursor(eL, eC)
 		self:insertString(text)
 
-		-- Restore selection? Maybe not.
 		self.selection.active = false
 	else
 		local c = self.cursor
 		local line = self.lines[c.line]
 		table.insert(self.lines, c.line + 1, line)
-		-- Move down to the new line
+
 		c.line += 1
 	end
 end

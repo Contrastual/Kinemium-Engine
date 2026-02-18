@@ -1,24 +1,32 @@
 local rl = require("@raylib")
---local aereon = require("@Kinemium.Aereon")
+--local aereon = require("@Aereon")
 
 local ideBuffer = require("./idebuffer")
 local EnumMap = require("@EnumMap")
 local Color3 = require("@Color3")
 local syntax = require("./syntax")
 local autocomplete = require("./autocomplete")
+local ligatures = require("./ligatures")
 local luau = zune.luau
 
 local structs = rl.structs
 local const = rl.const
 
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
+local function sanitizeText(text)
+	-- Replace non-ASCII spaces and tabs with standard ones
+	text = text:gsub("[\194\160]", " ") -- Non-breaking space (UTF-8)
+	text = text:gsub("[\226\128\168]", " ") -- Zero-width space
+	text = text:gsub("[\226\128\139]", "") -- Zero-width joiner
+	text = text:gsub("[\239\187\191]", "") -- BOM (Byte Order Mark)
+
+	-- Remove or replace any other non-printable characters
+	text = text:gsub("[^\9\10\13\32-\126\128-\255]", "")
+
+	-- Normalize line endings
+	text = text:gsub("\r\n", "\n")
+	text = text:gsub("\r", "\n")
+
+	return text
 end
 
 return function(raylib: typeof(rl.lib), theme, aereon, game)
@@ -38,11 +46,60 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if #text == 0 then
 			return 0
 		end
-		return raylib.MeasureTextEx(vend, text, fontSize, spacing).x
+
+		local width = 0
+
+		for i = 1, #text do
+			local ch = text:sub(i, i)
+
+			if ch == " " then
+				width += editor.spaceWidth
+			elseif ch == "\t" then
+				width += editor.tabWidth
+			else
+				width += raylib.MeasureTextEx(vend, ch, fontSize, spacing).x
+			end
+		end
+
+		return width
 	end
 
 	local function isMouseInRect(r, mousePos)
 		return mousePos.x >= r.x and mousePos.x <= r.x + r.width and mousePos.y >= r.y and mousePos.y <= r.y + r.height
+	end
+
+	--[[
+        ide = {
+			BackgroundColor = Color3.new(0.05, 0.05, 0.05),
+			SecondaryBackgroundColor = Color3.new(0.07, 0.07, 0.07),
+			TextColor = Color3.new(1, 1, 1),
+		},
+    --]]
+	local editor_theme = theme.ide
+	local theme_background, theme_secondary, theme_text, currentLineColor =
+		editor_theme.BackgroundColor:ToRaylib(0),
+		editor_theme.SecondaryBackgroundColor:ToRaylib(0),
+		editor_theme.TextColor:ToRaylib(0),
+		editor_theme.currentLineColor:ToRaylib(0)
+
+	local autocompletetheme = editor_theme.autocomplete
+
+	local function measureTextWithTabs(text, fontSize, spacing)
+		local width = 0
+
+		for i = 1, #text do
+			local ch = text:sub(i, i)
+
+			if ch == "\t" then
+				width += editor.tabWidth
+			elseif ch == " " then
+				width += editor.spaceWidth
+			else
+				width += raylib.MeasureTextEx(vend, ch, fontSize, spacing).x
+			end
+		end
+
+		return width
 	end
 
 	local function getColumnFromX(line, xPos, fontSize, spacing)
@@ -67,22 +124,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		return bestCol
 	end
 
-	--[[
-        ide = {
-			BackgroundColor = Color3.new(0.05, 0.05, 0.05),
-			SecondaryBackgroundColor = Color3.new(0.07, 0.07, 0.07),
-			TextColor = Color3.new(1, 1, 1),
-		},
-    --]]
-	local editor_theme = theme.ide
-	local theme_background, theme_secondary, theme_text, currentLineColor =
-		Color3ToRaylib(editor_theme.BackgroundColor, 0),
-		Color3ToRaylib(editor_theme.SecondaryBackgroundColor, 0),
-		Color3ToRaylib(editor_theme.TextColor, 0),
-		Color3ToRaylib(editor_theme.currentLineColor, 0)
-
-	local autocompletetheme = editor_theme.autocomplete
-
 	function editor:updateBreakpoints()
 		local active = {}
 		for line, enabled in pairs(self.breakpoints) do
@@ -94,10 +135,12 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.Breakpoints = active
 	end
 
-	editor.buffers = { { name = "untitled.lua", buffer = ideBuffer.create(), breakpoints = {} } }
+	editor.buffers = {}
 	editor.currentBufferIndex = 1
-	editor.text = editor.buffers[1].buffer
-	editor.breakpoints = editor.buffers[1].breakpoints
+	editor.tabSize = 4
+	editor.spaceWidth = nil -- computed from font
+	editor.text = ideBuffer.create()
+	editor.breakpoints = {}
 	editor:updateBreakpoints()
 	editor.text.lines = { "" }
 	editor.isActive = false
@@ -143,6 +186,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	}
 
 	editor.fontSize = 18
+	local spacing = 1
+	editor.spaceWidth = raylib.MeasureTextEx(vend, " ", editor.fontSize, spacing).x
+	editor.tabWidth = editor.spaceWidth * editor.tabSize
 
 	editor.lsp = {
 		errors = {},
@@ -252,11 +298,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self:updateLSP()
 		self:updateSearch() -- Re-search to find next matches
 
-		-- Move to next match automatically
-		-- updateSearch resets currentIndex to 0 or 1.
-		-- If there are results, it sets it to 1.
-		-- But we want to preserve position roughly?
-		-- Actually simplest is just let it jump to 1 (next match).
 		if size and lineHeight then
 			self:nextSearchResult(size, lineHeight)
 		end
@@ -267,14 +308,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			return
 		end
 
-		-- Sort results reversed just in case (though they should be ordered)
-		-- Or iterate backwards
 		for i = #self.search.results, 1, -1 do
 			local res = self.search.results[i]
 			local line = self.text.lines[res.line]
-			-- Careful with multiple matches on same line if we modify the line directly.
-			-- If we modify self.text.lines[res.line], next match on same line (earlier col) needs to know line is changed?
-			-- No, because we go backwards. The valid indices for earlier matches are still valid because we only changed content AFTER them.
 
 			local before = line:sub(1, res.col - 1)
 			local after = line:sub(res.col + res.length)
@@ -425,10 +461,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	function editor:updateLSP()
 		self.lsp.dirty = true
 		self.lsp.lastEditTime = os.clock()
-		-- We clear errors immediately to avoid stale error lines drifting
-		-- but we don't re-parse yet.
-		-- actually, keeping old errors might be better UX until new ones arrive?
-		-- Let's keep them.
 	end
 
 	editor.scrollY = 0
@@ -463,14 +495,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 		end
 
-		-- New Tab button
 		local plusX = x + #editor.buffers * tabWidth
 		local plusRect = { x = plusX, y = y, width = 30, height = tabHeight }
 		raylib.DrawRectangle(plusX, y, 30, tabHeight, theme_background)
 		raylib.DrawTextEx(vend, "+", vector.create(plusX + 10, y + 5), 18, 1, const.WHITE)
-		if raylib.IsMouseButtonPressed(0) == 1 and isMouseInRect(plusRect, raylib.GetMousePosition()) then
-			editor:openTab("untitled.lua")
-		end
 
 		local minimapWidth = 100
 		y = y + tabHeight
@@ -510,6 +538,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
 				then
 					editor.fontSize = math.clamp(editor.fontSize + wheel, 8, 72)
+
+					editor.spaceWidth = raylib.MeasureTextEx(vend, " ", editor.fontSize, spacing).x
+					editor.tabWidth = editor.spaceWidth * editor.tabSize
 				else
 					local scrollSpeed = lineHeight * 3
 					editor.scrollY = editor.scrollY - (wheel * scrollSpeed)
@@ -545,7 +576,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					local x1 = x + gutterwidth + padding + measureTextWidth(line:sub(1, startX - 1), fontSize, spacing)
 					local x2 = x + gutterwidth + padding + measureTextWidth(line:sub(1, endX - 1), fontSize, spacing)
 
-					raylib.DrawRectangle(x1, ly, x2 - x1, lineHeight, Color3ToRaylib(Color3.new(0, 0.4, 0.8), 0.5))
+					raylib.DrawRectangle(x1, ly, x2 - x1, lineHeight, Color3.new(0, 0.4, 0.8):ToRaylib(0.5))
 				end
 			end
 
@@ -566,7 +597,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 						local isCurrent = (idx == editor.search.currentIndex)
 						local color = isCurrent and Color3.new(1, 0.5, 0) or Color3.new(1, 0.8, 0)
-						raylib.DrawRectangle(x1, ly, x2 - x1, lineHeight, Color3ToRaylib(color, 0.4))
+						raylib.DrawRectangle(x1, ly, x2 - x1, lineHeight, color:ToRaylib(0.4))
 					end
 				end
 			end
@@ -608,7 +639,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 									ly,
 									x2 - x1,
 									lineHeight,
-									Color3ToRaylib(Color3.new(0.3, 0.3, 0.3), 0.5)
+									Color3.new(0.3, 0.3, 0.3):ToRaylib(0.5)
 								)
 							end
 							startPos = e + 1
@@ -650,7 +681,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 								+ padding
 								+ measureTextWidth(line:sub(1, c - 1), fontSize, spacing)
 							local w = measureTextWidth(line:sub(c, c), fontSize, spacing)
-							raylib.DrawRectangleLines(x1, ly, w, lineHeight, Color3ToRaylib(Color3.new(1, 1, 0), 0.8))
+							raylib.DrawRectangleLines(x1, ly, w, lineHeight, Color3.new(1, 1, 0):ToRaylib(0.8))
 						end
 					end
 				end
@@ -669,12 +700,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			local circleX = x + gutterwidth - 8
 
 			if editor.breakpoints[i] then
-				raylib.DrawCircle(
-					circleX,
-					yLine + lineHeight / 2,
-					circleRadius,
-					Color3ToRaylib(Color3.new(0.8, 0.1, 0.1), 0)
-				)
+				raylib.DrawCircle(circleX, yLine + lineHeight / 2, circleRadius, Color3.new(0.8, 0.1, 0.1):ToRaylib(0))
 			else
 				local mousePos = raylib.GetMousePosition()
 				if
@@ -687,30 +713,37 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						circleX,
 						yLine + lineHeight / 2,
 						circleRadius,
-						Color3ToRaylib(Color3.new(0.8, 0.1, 0.1), 0.7)
+						Color3.new(0.8, 0.1, 0.1):ToRaylib(0.7)
 					)
 				end
 			end
 
-			local indentLevel = autocomplete.getIndentLevel(line)
-			local indentWidth = 14
-			local indentStartX = x + gutterwidth + padding
+			local startX = x + gutterwidth + padding
+			local relX = 0
+			local tabStop = editor.tabWidth
+			local halfTab = tabStop / 2
 
-			for lvl = 1, indentLevel do
-				local rx = indentStartX + (lvl - 1) * indentWidth
+			for col = 1, #line do
+				local ch = line:sub(col, col)
 
-				raylib.DrawRectangle(
-					rx,
-					yLine,
-					2,
-					lineHeight,
-					structs.Color:new({
-						r = 255,
-						g = 255,
-						b = 255,
-						a = 40, -- transparency
-					})
-				)
+				if ch == " " then
+					relX += editor.spaceWidth
+				elseif ch == "\t" then
+					relX = math.floor(relX / halfTab + 1) * halfTab
+				else
+					break
+				end
+
+				-- draw at each tab boundary
+				if math.abs(relX % tabStop) < 0.01 then
+					raylib.DrawRectangle(
+						startX + relX - 1,
+						yLine,
+						2,
+						lineHeight,
+						structs.Color:new({ r = 255, g = 255, b = 255, a = 40 })
+					)
+				end
 			end
 
 			editor._highlightCache = editor._highlightCache or {}
@@ -725,10 +758,20 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			raylib.DrawTextEx(vend, lineNumberText, vector.create(lineNumberX, yLine), fontSize, spacing, const.WHITE)
 
 			local xPos = x + gutterwidth + padding
-			for _, tok in ipairs(tokens) do
-				raylib.DrawTextEx(vend, tok.text, vector.create(xPos, yLine), fontSize, spacing, tok.color)
 
-				xPos += raylib.MeasureTextEx(vend, tok.text, fontSize, spacing).x
+			for _, seg in ipairs(tokens) do
+				for i = 1, #seg.text do
+					local ch = seg.text:sub(i, i)
+
+					if ch == " " then
+						xPos += editor.spaceWidth
+					elseif ch == "\t" then
+						xPos += editor.tabWidth
+					else
+						raylib.DrawTextEx(vend, ch, vector.create(xPos, yLine), fontSize, spacing, seg.color)
+						xPos += raylib.MeasureTextEx(vend, ch, fontSize, spacing).x
+					end
+				end
 			end
 
 			for _, err in ipairs(editor.lsp.errors) do
@@ -743,7 +786,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					local x1 = x + gutterwidth + padding + measureTextWidth(beforeStart, fontSize, spacing)
 					local x2 = x + gutterwidth + padding + measureTextWidth(beforeEnd, fontSize, spacing)
 
-					local underlineY = yLine + lineHeight + 2
+					local underlineY = yLine + lineHeight + 18
 
 					local mousePos = raylib.GetMousePosition()
 					local isHovering = mousePos.x >= x1
@@ -771,7 +814,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 									vector.create(wx1, wy1),
 									vector.create(wx2, wy2),
 									1.5,
-									Color3ToRaylib(Color3.new(1, 0.2, 0.2), 0)
+									Color3.new(1, 0.2, 0.2):ToRaylib(0)
 								)
 							end
 						end
@@ -862,18 +905,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			editor.text.selection.endLine = clickedLine
 			editor.text.selection.endCol = clickedCol
 
-			-- Handle word highlighting and Go To Definition
 			local word = autocomplete.getCurrentWord(editor)
 			if #word > 0 then
 				editor.highlightedToken = word
 
-				-- Go To Definition (Ctrl + Click)
 				if
 					raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
 					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
 				then
-					local found = false
-					-- 1. Search in current file
 					for i, line in ipairs(editor.text.lines) do
 						-- Simple pattern matching for definition
 						if
@@ -927,21 +966,18 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 		if editor.isActive and editor.caretVisible then
 			local c = editor.text.cursor
-			local textBeforeCursor = editor.text.lines[c.line]:sub(1, c.col - 1)
-			local cx = x + gutterwidth + padding + measureTextWidth(textBeforeCursor, fontSize, spacing)
+			local line = editor.text.lines[c.line]
+			local textBeforeCursor = line:sub(1, c.col - 1)
+
+			local cursorX = x + gutterwidth + padding
+			if #textBeforeCursor > 0 then
+				cursorX = cursorX + measureTextWidth(textBeforeCursor, fontSize, spacing)
+			end
+
 			local cy = y + padding + (c.line - 1) * lineHeight - editor.scrollY
 
 			if cy >= y and cy < y + size.y then
-				raylib.DrawRectangle(cx, cy, 2, lineHeight, const.WHITE)
-			end
-
-			local caretTop = (c.line - 1) * lineHeight
-			local caretBottom = c.line * lineHeight
-
-			if caretTop < editor.scrollY then
-				editor.scrollY = caretTop
-			elseif caretBottom > editor.scrollY + viewportHeight then
-				editor.scrollY = caretBottom - viewportHeight
+				raylib.DrawRectangle(cursorX, cy, 2, lineHeight, const.WHITE)
 			end
 		end
 
@@ -1000,7 +1036,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			)
 		end
 
-		-- Minimap
 		local mmBackground = { x = x + size.x, y = y, width = minimapWidth, height = size.y }
 		raylib.DrawRectangle(mmBackground.x, mmBackground.y, mmBackground.width, mmBackground.height, theme_secondary)
 
@@ -1010,8 +1045,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		local mmLineHeight = math.min(2, mmUsableHeight / lineCount)
 
 		for i = 1, lineCount do
-			-- Optimization: Don't draw every single line if there are too many.
-			-- Draw if it's within a reasonable stride.
 			if lineCount > 2000 and (i % 2 ~= 0) then
 				continue
 			end
@@ -1019,12 +1052,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			local line = editor.text.lines[i]
 			if #line > 0 then
 				local ly = y + mmPadding + (i - 1) * mmLineHeight
-				-- Optimization: Skip tokenizing for minimap, just draw grey block for complexity
-				-- If you want color, just use the first token's color or a simple heuristic
-				-- Re-using _highlightCache is risky if it's not populated for off-screen lines.
-				-- Getting tokens for every line in file is SLOW.
 
-				-- Just draw a generic representation
 				local lx = mmBackground.x + 5
 				local trimmed = line:match("^%s*(.+)") or ""
 				local indent = line:match("^(%s*)") or ""
@@ -1034,12 +1062,12 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				local lw = math.min(minimapWidth - 10, #trimmed * 2)
 
 				-- Simple coloring based on first character
-				local color = Color3ToRaylib(Color3.new(0.6, 0.6, 0.6), 0.5)
+				local color = Color3.new(0.6, 0.6, 0.6):ToRaylib(0.5)
 				local firstChar = trimmed:sub(1, 1)
 				if firstChar == "-" then
-					color = Color3ToRaylib(Color3.new(0.3, 0.6, 0.3), 0.5) -- Comment-ish
+					color = Color3.new(0.3, 0.6, 0.3):ToRaylib(0.5)
 				elseif firstChar == "l" or firstChar == "f" then
-					color = Color3ToRaylib(Color3.new(0.3, 0.5, 0.8), 0.5) -- Keyword-ish
+					color = Color3.new(0.3, 0.5, 0.8):ToRaylib(0.5)
 				end
 
 				raylib.DrawRectangle(lx, ly, lw, math.max(1, mmLineHeight - 0.5), color)
@@ -1047,9 +1075,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 
 		-- Minimap Lens
-		local lensHeight = (viewportHeight / contentHeight) * mmUsableHeight
+		local lensHeight = math.clamp((viewportHeight / contentHeight) * mmUsableHeight, 0, mmUsableHeight)
 		local lensY = y + mmPadding + (editor.scrollY / contentHeight) * mmUsableHeight
-		raylib.DrawRectangle(mmBackground.x, lensY, minimapWidth, lensHeight, Color3ToRaylib(Color3.new(1, 1, 1), 0.8))
+		raylib.DrawRectangle(mmBackground.x, lensY, minimapWidth, lensHeight, Color3.new(1, 1, 1):ToRaylib(0.8))
 
 		-- Minimap Interaction
 		local mousePos = raylib.GetMousePosition()
@@ -1080,7 +1108,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		-- Status Bar
 		local sbY = y + size.y - statusBarHeight
 		raylib.DrawRectangle(x, sbY, size.x, statusBarHeight, theme_secondary)
-		raylib.DrawLine(x, sbY, x + size.x, sbY, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 0))
+		raylib.DrawLine(x, sbY, x + size.x, sbY, Color3.new(0.2, 0.2, 0.2):ToRaylib(0))
 
 		local cursorText = string.format("Ln %d, Col %d", editor.text.cursor.line, editor.text.cursor.col)
 		raylib.DrawTextEx(vend, cursorText, vector.create(x + 10, sbY + 8), 14, 1, const.WHITE)
@@ -1101,7 +1129,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			autocompletetheme,
 			rect,
 			raylib,
-			Color3ToRaylib,
+			Color3.ToRaylib,
 			vend,
 			spacing,
 			theme_text,
@@ -1132,14 +1160,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				tooltipY,
 				tooltipWidth,
 				tooltipHeight,
-				Color3ToRaylib(Color3.new(0.15, 0.15, 0.15), 0)
+				Color3.new(0.30, 0.30, 0.30):ToRaylib(0)
 			)
 			raylib.DrawRectangleLines(
 				tooltipX,
 				tooltipY,
 				tooltipWidth,
 				tooltipHeight,
-				Color3ToRaylib(Color3.new(1, 0.2, 0.2), 0)
+				Color3.new(1, 0.2, 0.2):ToRaylib(0)
 			)
 			raylib.DrawTextEx(
 				vend,
@@ -1403,6 +1431,23 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					if #text > 0 then
 						raylib.SetClipboardText(text)
 					end
+				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_V) == 1 then
+					if editor.text.selection.active then
+						editor.text:deleteSelection()
+					end
+					local text = raylib.GetClipboardText()
+					local bufferLength = buffer.len(text:span())
+					local data = buffer.readstring(text:span(), 0, bufferLength - 1)
+
+					data = sanitizeText(data)
+					data = string.gsub(data, "\r\n", "\n")
+					data = string.gsub(data, "\r", "\n")
+
+					editor.text:insertString(data)
+					autocomplete.indexVariables(editor, game)
+					autocomplete.updateAutocomplete(editor, game)
+					editor._highlightCache = {}
+					editor:updateLSP()
 				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_X) == 1 then
 					local text = editor.text:getSelectedText()
 					if #text > 0 then
@@ -1418,20 +1463,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					editor.text.selection.endLine = #editor.text.lines
 					editor.text.selection.endCol = #editor.text.lines[#editor.text.lines] + 1
 					editor.text:setCursor(#editor.text.lines, #editor.text.lines[#editor.text.lines] + 1)
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_V) == 1 then
-					if editor.text.selection.active then
-						editor.text:deleteSelection()
-					end
-					local text = raylib.GetClipboardText()
-					local bufferLength = buffer.len(text:span())
-					local data = buffer.readstring(text:span(), 0, bufferLength - 1)
-					data = string.gsub(data, "\r\n", "\n")
-					data = string.gsub(data, "\r", "\n")
-					editor.text:insertString(data)
-					autocomplete.indexVariables(editor, game)
-					autocomplete.updateAutocomplete(editor, game)
-					editor._highlightCache = {}
-					editor:updateLSP()
 				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_S) == 1 then
 					editor:format()
 				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_F) == 1 then

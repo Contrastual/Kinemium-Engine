@@ -39,7 +39,7 @@ return {
 				raylib.lib.SetSoundVolume(instance._raylibSound, instance.Volume)
 				raylib.lib.SetSoundPitch(instance._raylibSound, instance.Pitch)
 			else
-				print("Failed to load sound: " .. instance.SoundId)
+				iodebug("Failed to load sound: " .. instance.SoundId)
 			end
 		end
 

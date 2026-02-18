@@ -2,6 +2,7 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
 local LogService = Instance.new("LogService")
+LogService.ExplorerHidden = true
 
 local MessageOut = signal.new()
 local BeforeLog = signal.new()

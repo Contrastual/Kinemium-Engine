@@ -132,17 +132,30 @@ Ki-nem-yum!!
 
 # This project uses
 - Raylib
+- Manifold
+- Box2D
+- Jolt Physics
+- Discord RPC
+- Discord Luau (bots)
+- FMOD
+- Steam SDK
+- FFMPEG
+- Webview
+- Native File Dialog (NFD)
+- raylib-gizmo
 - Lua
 - LuaJIT
 - Python
-- Duktape
-- lua-discordrpc
-- lua-webview
+- QuickJS (maintained)
+- Webview
 - jolt
-- red
 - Luau
 - moonode
+- [Minimal Cursor Icon Pack](http://www.rw-designer.com/cursor-set/material-design-best-edition-by)
 - and most importantly.. Zune
+(Some of these libraries are made with the development of Kinemium, such as KI3D, KiNet, Aereon, and more)
+
+v1.9.0
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />

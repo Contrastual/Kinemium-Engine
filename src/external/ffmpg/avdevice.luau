@@ -39,11 +39,11 @@ local funcs = {
 	avdevice_register_all = { returns = ffi.types.void, args = {} },
 	avdevice_app_to_dev_control_message = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
 	avdevice_dev_to_app_control_message = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
 	avdevice_list_devices = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	avdevice_free_list_devices = { returns = ffi.types.void, args = { ffi.types.pointer } },

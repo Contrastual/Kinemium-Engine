@@ -16,14 +16,15 @@ local color3 = require("@Color3")
 
 return function(objects, data)
 	local config = {
-		obj_rect = rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4]),
-		color = color3.new(1, 1, 1),
-		raylib_color = c3tr(color3.new(1, 1, 1), 0),
-		bgtransparency = 0,
-		clicked = nil,
-		hoveredCallback = nil,
-		rounded = nil,
-		disabled = false,
+		obj_rect = data.rect
+			or rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4]),
+		color = data.color or color3.new(1, 1, 1),
+		raylib_color = data.raylib_color or color3.new(1, 1, 1):ToRaylib(0),
+		bgtransparency = data.bgtransparency or 0,
+		clicked = data.clicked or nil,
+		hoveredCallback = data.hoveredCallback or nil,
+		rounded = data.rounded or nil,
+		disabled = data.disabled or false,
 		modifiers = {},
 	}
 

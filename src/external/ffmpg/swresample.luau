@@ -26,7 +26,6 @@ local funcs = {
 			ffi.types.pointer,
 			ffi.types.i32,
 			ffi.types.i32,
-			ffi.types.void,
 		},
 	},
 	swr_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -51,7 +50,6 @@ local funcs = {
 			ffi.types.double,
 			ffi.types.pointer,
 			ffi.types.pointer,
-			ffi.types.void,
 		},
 	},
 	swr_set_matrix = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 } },
@@ -64,4 +62,4 @@ local funcs = {
 	swr_config_frame = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
 }
 
-return funcs
+return { funcs = funcs }

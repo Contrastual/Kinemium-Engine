@@ -5,6 +5,7 @@ local Enum = require("@EnumMap")
 
 local propTable = {
 	Name = "ModuleScript",
+	BaseClass = "ScriptContainer",
 	Source = [[]],
 	RunContext = Enum.RunContext.Client,
 	Language = Enum.Language.Luau,

@@ -284,6 +284,7 @@ export type JPH_CollisionEstimationResult = typeof(JPH_CollisionEstimationResult
 
 local JPH_FixedConstraintSettings = ffi.struct({
 	{ base = JPH_ConstraintSettings },
+	{ space = ffi.types.i32 },
 	{ autoDetectPoint = ffi.types.u8 },
 	{ point1 = JPH_RVec3 },
 	{ axisX1 = JPH_Vec3 },
@@ -579,9 +580,10 @@ local JPH_SimShapeFilter_Procs = ffi.struct({
 export type JPH_SimShapeFilter_Procs = typeof(JPH_SimShapeFilter_Procs:new({}))
 
 local JPH_ContactListener_Procs = ffi.struct({
-	{ collisionResult = ffi.types.pointer },
-	{ settings = ffi.types.pointer },
-	{ subShapePair = ffi.types.pointer },
+	{ OnContactValidate = ffi.types.pointer },
+	{ OnContactAdded = ffi.types.pointer },
+	{ OnContactPersisted = ffi.types.pointer },
+	{ OnContactRemoved = ffi.types.pointer },
 })
 export type JPH_ContactListener_Procs = typeof(JPH_ContactListener_Procs:new({}))
 

@@ -2,6 +2,7 @@ local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
 local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
+local signal = require("@Kinemium.signal")
 
 local propTable = {
 	Position = Vector3.new(0, 10, 0),
@@ -9,7 +10,7 @@ local propTable = {
 	Color = Color3.new(1, 1, 1),
 	Material = Enum.Material.debug,
 	Transparency = 0,
-	Anchored = false,
+	Anchored = true,
 	CanCollide = true,
 	Velocity = Vector3.new(0, 0, 0),
 	MeshScale = 1,
@@ -27,7 +28,10 @@ local propTable = {
 	CFrame = CFrame.new(0, 10, 0),
 	ElapsedTime = 0,
 	Name = "Part",
+	BaseClass = "BasePart",
 	_mesh = nil,
+
+	Touched = signal.new(),
 
 	-- Velocity
 	AssemblyAngularVelocity = Vector3.new(0, 0, 0),
@@ -52,13 +56,9 @@ return {
 			PhysicsService.ApplyImpulse(instance, v)
 		end
 
-		instance:SetProperties(propTable)
+		renderer.EventBus:Fire("UpdatePart", instance)
 
-		instance.Changed:Connect(function(property)
-			if property == "Anchored" then
-				renderer.Signal:Fire("UpdatePart", instance)
-			end
-		end)
+		instance:SetProperties(propTable)
 
 		return instance
 	end,

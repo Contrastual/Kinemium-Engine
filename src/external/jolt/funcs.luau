@@ -1,4 +1,7 @@
 local ffi = zune.ffi
+
+local structs = require("./structs")
+
 local funcs = {
 	JPH_JobSystem_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_Init = { returns = ffi.types.u8, args = {} },
@@ -233,6 +236,10 @@ local funcs = {
 	JPH_Vec3_MultiplyScalar = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.float, ffi.types.pointer },
+	},
+	JPH_ContactListener_Create = {
+		returns = ffi.types.pointer,
+		args = { ffi.types.pointer }, -- userData
 	},
 	JPH_Vec3_MultiplyMatrix = {
 		returns = ffi.types.void,
@@ -746,6 +753,7 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },
 	},
+
 	JPH_FixedConstraint_Create = {
 		returns = ffi.types.pointer, -- JPH_FixedConstraint*
 		args = {
@@ -1200,7 +1208,7 @@ local funcs = {
 	JPH_BodyInterface_GetMotionType = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_BodyInterface_SetMotionType = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.i32, ffi.types.i32 },
 	},
 	JPH_BodyInterface_GetRestitution = { returns = ffi.types.float, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_BodyInterface_SetRestitution = {
@@ -1257,7 +1265,7 @@ local funcs = {
 	},
 	JPH_BodyInterface_SetShape = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u8, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u8, ffi.types.i32 },
 	},
 	JPH_BodyInterface_NotifyShapeChanged = {
 		returns = ffi.types.void,

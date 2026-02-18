@@ -40,11 +40,9 @@ return function(objects, data)
 			config.onChanged(c, config.a)
 		end
 
-		-- Add to recent colors
 		local r, g, b = c:ToRGB()
 		local newColor = { r = r, g = g, b = b }
 
-		-- Check if color already exists
 		local exists = false
 		for _, col in ipairs(config.recentColors) do
 			if col.r == newColor.r and col.g == newColor.g and col.b == newColor.b then

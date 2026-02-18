@@ -54,7 +54,7 @@ local addIcon = KinemiumIconLoader.ToTexture(png)
 
 local windowRegistry = {}
 
-local aereon = import("@Kinemium.Aereon")
+local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
 
 local blacklisted = {
@@ -111,7 +111,7 @@ RunService.GuiRender:Connect(function()
 	if not windowObject then
 		return
 	end
-	renderer.blur:DrawBlurredRegion(
+	renderer.Blur:DrawBlurredRegion(
 		windowObject.x,
 		windowObject.y,
 		windowObject.width,

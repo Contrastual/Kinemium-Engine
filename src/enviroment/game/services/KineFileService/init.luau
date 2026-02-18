@@ -12,6 +12,25 @@ export type KinemiumPlaceFile = {
 	ToExe: (string) -> (),
 }
 
+local sArgs = {
+	"-s",
+	"src/main.lua",
+	"src/enviroment/**",
+	"src/enviroment/datatypes/**",
+	"src/modules/**/*.lua*",
+	"src/renderer/**/*.lua*",
+	"src/sandboxed/**/*.lua*",
+	"src/shaders/**/*.lua*",
+	"src/runtime/**/*.lua*",
+	"src/external/**/*.lua*",
+	"src/runtime/**",
+	"src/objects/**",
+	"src/libs/**",
+	"src/**",
+	"src/template/**",
+	"src/external/signal.lua",
+}
+
 local function build(placeFile)
 	local args = {
 		"bundle",
@@ -20,32 +39,20 @@ local function build(placeFile)
 		"src/assets/**",
 		"src/assets/images/**",
 		"src/assets/icon/**",
-		"src/assets/lucide/**",
 		"src/assets/materials/**",
 		"src/assets/meshes/**",
 		"src/assets/sky/**",
 		"src/assets/shaders/**",
 		"src/assets/sounds/**",
-		"-s",
-		"src/main.lua",
-		"src/enviroment/**",
-		"src/enviroment/datatypes/**",
-		"src/modules/**/*.lua*",
-		"src/renderer/**/*.lua*",
-		"src/sandboxed/**/*.lua*",
-		"src/shaders/**/*.lua*",
-		"src/runtime/**/*.lua*",
-		"src/external/**/*.lua*",
-		"src/runtime/**",
-		"src/libs/**",
-		"src/**",
-		"src/template/**",
-
-		"src/external/signal.lua",
+		"src/assets/videos/**",
 	}
 
 	table.insert(args, placeFile)
+	for _, line in pairs(sArgs) do
+		table.insert(args, line)
+	end
 	table.insert(args, "--out=./build/KinemiumRuntime.exe")
+	print(args)
 
 	local res = process.run(fs.getExePath(), args)
 	print("Building")
@@ -101,9 +108,8 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 					end)
 				end
 
-				print(pathName)
 				fs.createFile("./build/" .. pathName)
-				fs.writeFile("./build/" .. pathName, "return " .. string.format("%q", buffer.tostring(serialized)))
+				fs.writeFile("./build/" .. pathName, serialized)
 
 				function wrapper:ToExe()
 					build("./build/" .. pathName)

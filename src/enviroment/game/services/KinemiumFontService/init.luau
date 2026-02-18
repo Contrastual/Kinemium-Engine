@@ -1,7 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 local fs = zune.fs
-local task = zune.task
 
 local KinemiumFontService = Instance.new("KinemiumFontService")
 KinemiumFontService.ExplorerHidden = true
@@ -10,7 +9,9 @@ local FontRemoved = signal.new()
 local FontAdded = signal.new()
 
 local function transformFontName(v: string)
-	return v:gsub("-", "")
+	v = string.gsub(v, "%.ttf$", "") -- remove .ttf (literal)
+	v = string.gsub(v, "%-.*$", "") -- remove weight after first dash
+	return v
 end
 
 local engine_fonts = "./src/assets/fonts"
@@ -18,10 +19,10 @@ local fontCount = 0
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
-	local code_font = "./src/assets/fonts/JetBrainsMono-Regular.ttf"
+	local code_font = "./src/assets/fonts/JetBrainsMono-Light.ttf"
 
-	local font = renderer.LoadFont("DefaultEngineFont", default_font)
-	local loaded_cf = renderer.LoadFont("DefaultCodeEngineFont", code_font)
+	local font = renderer.Font.new("DefaultEngineFont", default_font, 32)
+	local loaded_cf = renderer.Font.new("DefaultCodeEngineFont", code_font, 32)
 
 	KinemiumFontService:SetProperties({
 		LoadFont = function(self, name, fontPath)
@@ -29,12 +30,16 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 			FontAdded:Fire(name, fontPath)
 
-			fontInstance.Font = renderer.LoadFont(name, fontPath)
+			fontInstance.Font = renderer.Font.new(name, fontPath)
 			fontInstance.Unload = function()
-				renderer.UnloadFont(name)
+				renderer.Font.Remove(name)
 				FontRemoved:Fire(fontPath)
 			end
 			return fontInstance
+		end,
+
+		GetDefaultFontSmall = function()
+			return font
 		end,
 
 		GetDefaultFont = function()
@@ -46,11 +51,18 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		end,
 
 		LoadAllEngineFonts = function()
+			local cache = {}
+
 			for _, font in pairs(fs.entries(engine_fonts)) do
 				local path = engine_fonts .. "/" .. font.name
-				renderer.LoadFont(transformFontName(font.name), path)
+				local transformed = transformFontName(font.name)
+				if cache[transformed] then
+					continue
+				end
+				cache[transformed] = true
+				renderer.Font.new(transformed, path, 64)
 				fontCount += 1
-				print("FONTSERVICE | Loaded font " .. font.name)
+				print("FONTSERVICE | Loaded font " .. transformed)
 			end
 			print("FONTSERVICE | Loaded " .. fontCount .. " fonts.")
 		end,
@@ -58,7 +70,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		FontRemoved = FontRemoved,
 	})
 
-	print("Adding engine fonts.....")
+	KinemiumFontService.LoadAllEngineFonts()
 end
 
 return KinemiumFontService

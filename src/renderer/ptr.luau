@@ -15,6 +15,15 @@ local function vec3_ptr(x: number, y: number, z: number): FFIPointer
 	return ptr
 end
 
+local function vec4_ptr(x, y, z, w)
+	local arr = ffi.create(ffi.types.float:array(4))
+	arr:writef32(0, x)
+	arr:writef32(4, y)
+	arr:writef32(8, z)
+	arr:writef32(12, w)
+	return arr
+end
+
 local function Vector3RotateByAxisAngle(v: raylib.Vector3, axis: raylib.Vector3, angle: number): raylib.Vector3
 	local length = vector.magnitude(axis)
 	if length == 0.0 then
@@ -42,4 +51,5 @@ return {
 	vec3_ptr = vec3_ptr,
 	float_ptr = float_ptr,
 	Vector3RotateByAxisAngle = Vector3RotateByAxisAngle,
+	vec4_ptr = vec4_ptr,
 }

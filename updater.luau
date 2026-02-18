@@ -60,14 +60,17 @@ end
 local function clone()
 	print("UPDATER: Cloning repository...")
 	local success, result = pcall(function()
-		return process.run("git", {
+		local proc = process.spawn("git", {
 			"clone",
+			"--progress",
 			"--depth",
 			"1",
 			"--branch",
 			"main",
 			"https://github.com/Qquaded/Kinemium-Engine.git",
-		})
+		}, { stdout = io.stdout, stderr = io.stderr })
+		proc:wait()
+		return proc
 	end)
 
 	print("UPDATER: Finished cloning.")

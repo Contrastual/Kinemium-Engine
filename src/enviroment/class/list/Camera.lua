@@ -3,6 +3,8 @@ local Color3 = require("@Color3")
 local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
+local Vector3 = require("@Vector3")
+local bufferUtils = require("@bufferutils")
 
 local lib = raylib.lib
 local structs = raylib.structs
@@ -13,7 +15,7 @@ local propTable = {
 	CFrame = CFrame.new(0, 0, 0),
 	Roll = 0, -- degrees
 	Name = "Camera",
-	CameraType = Enum.CameraType.Orbital,
+	CameraType = Enum.CameraType.Scriptable,
 	CameraSubject = nil,
 	Focus = CFrame.new(0, 0, 0),
 }
@@ -23,45 +25,52 @@ return {
 	callback = function(instance, renderer)
 		instance:SetProperties(propTable)
 
-		local function update()
-			local cf = instance.CFrame
-			local roll = math.rad(instance.Roll)
+		local camera = structs.Camera3D:new({
+			position = vector.create(0, 0, 0),
+			target = vector.create(0, 0, 0),
+			up = vector.create(0, 1, 0),
+			fovy = instance.FieldOfView,
+			projection = const.CameraProjection.CAMERA_PERSPECTIVE,
+		})
 
-			local baseUp = Vector3.new(0, 1, 0)
+		instance._raylibcam = camera
 
-			local cosR = math.cos(roll)
-			local sinR = math.sin(roll)
+		renderer.Pool.new("3d", function()
+			local camCF = instance.CFrame
+			local rollRad = math.rad(instance.Roll)
 
-			local forward = cf:GetLookVector()
-			local right = forward:Cross(baseUp)
-			local up = baseUp * cosR + right * sinR + forward * (forward:Dot(baseUp)) * (1 - cosR)
+			instance.Position = instance.CFrame.Position
 
-			local camera = structs.Camera3D:new({
-				position = vector.create(cf.Position.X, cf.Position.Y, cf.Position.Z),
-				target = vector.create(cf.Position.X + forward.X, cf.Position.Y + forward.Y, cf.Position.Z + forward.Z),
-				up = vector.create(up.X, up.Y, up.Z),
-				fovy = instance.FieldOfView,
-				projection = const.CameraProjection.CAMERA_PERSPECTIVE,
-			})
-			return camera
-		end
-
-		instance._raylibcam = update()
-
-		instance.Changed:Connect(function(prop)
 			if instance.CameraType == Enum.CameraType.Scriptable then
-				if prop == "CFrame" or prop == "Roll" or prop == "FieldOfView" then
-					instance._raylibcam = update()
-				end
-				return
+				-- position
+				zune.mem.writeVector3(camera, 0, vector.create(camCF.Position.X, camCF.Position.Y, camCF.Position.Z))
+
+				-- target
+				local look = camCF:GetLookVector()
+				zune.mem.writeVector3(
+					camera,
+					12,
+					vector.create(camCF.Position.X + look.X, camCF.Position.Y + look.Y, camCF.Position.Z + look.Z)
+				)
+
+				-- up
+				local baseUp = Vector3.new(0, 1, 0) -- hardcoded reference up
+
+				-- apply roll around forward
+				local cosR, sinR = math.cos(rollRad), math.sin(rollRad)
+				local right = look:Cross(baseUp):Unit()
+				local up = Vector3.new(
+					baseUp.X * cosR + right.X * sinR,
+					baseUp.Y * cosR + right.Y * sinR,
+					baseUp.Z * cosR + right.Z * sinR
+				)
+
+				zune.mem.writeVector3(camera, 24, vector.create(up.X, up.Y, up.Z))
+
+				-- fov
+				buffer.writef32(camera, 36, instance.FieldOfView)
 			end
-
-			-- non-scriptable cameras update differently (later)
 		end)
-
-		local activeCamera = instance._raylibcam
-
-		instance.Position = instance.CFrame.Position
 
 		return instance
 	end,

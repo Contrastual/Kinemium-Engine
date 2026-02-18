@@ -1,0 +1,162 @@
+return function(objects, config)
+	local cells = {}
+	local cellRefs = {}
+	local raylib = require("@raylib")
+	local MergedCell = require("./cellitem")
+
+	local arect = require("@Arect")(raylib.lib)
+
+	local defaults = {
+		x = config.x or 0,
+		y = config.y or 0,
+		width = config.width or 800,
+		cellHeight = config.cellHeight or 70,
+		spacing = config.spacing or 0, -- Spacing between groups
+		groupSpacing = config.groupSpacing or 20, -- Spacing between different groups
+	}
+
+	local function createCell(cellConfig, position, yOffset)
+		local cell = MergedCell(objects, {
+			x = cellConfig.x or defaults.x,
+			y = (cellConfig.y or defaults.y) + yOffset,
+			width = cellConfig.width or defaults.width,
+			height = cellConfig.height or defaults.cellHeight,
+
+			propertyName = cellConfig.name or cellConfig.propertyName or "Property",
+			propertyDescription = cellConfig.description or cellConfig.propertyDescription,
+			propertyValue = cellConfig.value or cellConfig.propertyValue,
+			font = cellConfig.font,
+			roundness = 0.3,
+
+			position = position,
+			showSeparator = cellConfig.showSeparator,
+
+			-- Visual customization
+			backgroundColor = cellConfig.backgroundColor,
+			hoverColor = cellConfig.hoverColor,
+			separatorColor = cellConfig.separatorColor,
+			textColor = cellConfig.textColor,
+			descriptionColor = cellConfig.descriptionColor,
+
+			-- Editor
+			editorComponent = cellConfig.editor or cellConfig.editorComponent,
+			editorWidth = cellConfig.editorWidth or 200,
+
+			-- Callbacks
+			onValueChange = cellConfig.onValueChange,
+			onClick = cellConfig.onClick,
+		})
+
+		return cell
+	end
+
+	local currentY = 0
+
+	for groupName, groupConfig in pairs(config) do
+		if
+			groupName == "x"
+			or groupName == "y"
+			or groupName == "width"
+			or groupName == "cellHeight"
+			or groupName == "spacing"
+			or groupName == "groupSpacing"
+		then
+			continue
+		end
+
+		if type(groupConfig) == "table" then
+			local groupCells = {}
+			local groupItems = {}
+
+			if groupConfig.items then
+				groupItems = groupConfig.items
+			elseif groupConfig[1] then
+				groupItems = groupConfig
+			else
+				groupItems = { groupConfig }
+			end
+
+			local itemCount = #groupItems
+			for i, itemConfig in ipairs(groupItems) do
+				local position = "middle"
+				if itemCount == 1 then
+					position = "single"
+				elseif i == 1 then
+					position = "first"
+				elseif i == itemCount then
+					position = "last"
+				end
+
+				if itemConfig.showSeparator == nil then
+					itemConfig.showSeparator = i < itemCount
+				end
+
+				local cell = createCell(itemConfig, position, currentY)
+				table.insert(groupCells, cell)
+				table.insert(cells, cell)
+
+				currentY = currentY + (itemConfig.height or defaults.cellHeight)
+			end
+
+			-- Store reference to group
+			cellRefs[groupName] = groupCells
+
+			-- Add spacing after group
+			currentY = currentY + (groupConfig.spacing or defaults.groupSpacing)
+		end
+	end
+
+	-- Return wrapper with helper methods
+	local wrapper = {}
+
+	-- Render all cells
+	wrapper.render = function(dt)
+		for _, cell in ipairs(cells) do
+			cell.render(dt)
+		end
+	end
+
+	-- Get a specific cell or group
+	wrapper.get = function(name)
+		return cellRefs[name]
+	end
+
+	-- Get all cells
+	wrapper.getAll = function()
+		return cells
+	end
+
+	-- Update position of entire cell list
+	wrapper.setPosition = function(x, y)
+		local offsetY = 0
+		for _, cell in ipairs(cells) do
+			local cellRect = cell.getRect()
+			cell.set("obj_rect", arect.new(x, y + offsetY, cellRect.width, cellRect.height))
+			offsetY = offsetY + cellRect.height
+		end
+	end
+
+	wrapper.setWidth = function(width)
+		for _, cell in ipairs(cells) do
+			local cellRect = cell.getRect()
+			cell.set("obj_rect", arect.new(cellRect.x, cellRect.y, width, cellRect.height))
+		end
+	end
+
+	wrapper.setValue = function(groupName, index, value)
+		local group = cellRefs[groupName]
+		if group and group[index] then
+			group[index].setPropertyValue(value)
+		end
+	end
+
+	wrapper.getValue = function(groupName, index)
+		local group = cellRefs[groupName]
+		if group and group[index] then
+			return group[index].getPropertyValue()
+		end
+		return nil
+	end
+
+	return wrapper
+end

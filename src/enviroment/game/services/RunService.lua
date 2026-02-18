@@ -10,6 +10,9 @@ local PreRender = signal.new()
 local PreGuiRender = signal.new()
 local GuiRender = signal.new()
 
+local raylib = require("@raylib")
+local lib = raylib.lib
+
 local renderBindings = {}
 
 function RunService:BindToRenderStep(name, priority, callback)
@@ -40,7 +43,10 @@ local status = {
 	IsRunMode = false,
 	IsRunning = false,
 	IsEdit = true,
+	IsPaused = false,
 }
+
+local scheduled = {}
 
 RunService.InitRenderer = function(renderer, renderer_signal)
 	RunService:SetProperties({
@@ -69,6 +75,10 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 		IsEdit = function()
 			return status.IsEdit
 		end,
+
+		GetFPS = function()
+			return lib.GetFPS()
+		end,
 	})
 
 	renderer_signal:Connect(function(route, dt)
@@ -78,15 +88,31 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 		elseif route == "PreRender" then
 			PreRender:Fire(dt)
 		elseif route == "Heartbeat" then
-			Heartbeat:Fire(dt)
+			if not status.IsPaused then
+				Heartbeat:Fire(dt)
+			end
 		elseif route == "Stepped" then
-			Stepped:Fire(dt)
+			if not status.IsPaused then
+				Stepped:Fire(dt)
+			end
 		elseif route == "GuiRender" then
 			GuiRender:Fire(dt)
 		elseif route == "PreGuiRender" then
 			PreGuiRender:Fire(dt)
 		end
 	end)
+end
+
+function RunService:Pause()
+	status.IsPaused = true
+end
+
+function RunService:Resume()
+	status.IsPaused = false
+end
+
+function RunService:IsPaused()
+	return status.IsPaused
 end
 
 function RunService:SetSchedulerFPS(fps)

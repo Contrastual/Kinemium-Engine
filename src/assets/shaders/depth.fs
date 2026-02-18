@@ -2,10 +2,7 @@
 
 out vec4 fragColor;
 
-void main()
-{
-    // Write the fragment depth directly
-    // OpenGL automatically handles depth, but for color attachment we need to output it
-    float depth = gl_FragCoord.z;
-    fragColor = vec4(depth, depth, depth, 1.0);
+void main() {
+    // Output linear depth
+    fragColor = vec4(vec3(gl_FragCoord.z), 1.0);
 }

@@ -117,13 +117,35 @@ local completions = {
 	{ label = "Lighting", type = "global", icon = "Service.png" },
 	{ label = "Players", type = "global", icon = "Service.png" },
 	{ label = "ReplicatedStorage", type = "global", icon = "Service.png" },
-	{ label = "Vector3", type = "class", icon = "Struct.png", members = { { label = "new", icon = "Method.png", args = { "x", "y", "z" } } } },
-	{ label = "CFrame", type = "class", icon = "Struct.png", members = { { label = "new", icon = "Method.png", args = { "pos", "lookAt" } } } },
-	{ label = "Color3", type = "class", icon = "Struct.png", members = { { label = "new", icon = "Method.png", args = { "r", "g", "b" } }, { label = "fromRGB", icon = "Method.png", args = { "r", "g", "b" } } } },
-	{ label = "Instance", type = "class", icon = "Class.png", members = { { label = "new", icon = "Method.png", args = { "className", "parent" } } } },
+	{
+		label = "Vector3",
+		type = "class",
+		icon = "Struct.png",
+		members = { { label = "new", icon = "Method.png", args = { "x", "y", "z" } } },
+	},
+	{
+		label = "CFrame",
+		type = "class",
+		icon = "Struct.png",
+		members = { { label = "new", icon = "Method.png", args = { "pos", "lookAt" } } },
+	},
+	{
+		label = "Color3",
+		type = "class",
+		icon = "Struct.png",
+		members = {
+			{ label = "new", icon = "Method.png", args = { "r", "g", "b" } },
+			{ label = "fromRGB", icon = "Method.png", args = { "r", "g", "b" } },
+		},
+	},
+	{
+		label = "Instance",
+		type = "class",
+		icon = "Class.png",
+		members = { { label = "new", icon = "Method.png", args = { "className", "parent" } } },
+	},
 	{ label = "Enum", type = "class", icon = "Enum.png" },
 }
-
 
 local dynamicVariables = {}
 
@@ -163,7 +185,8 @@ local function indexVariables(editor, game)
 	dynamicVariables = {}
 	for _, line in ipairs(editor.text.lines) do
 		-- Match local X = game:GetService("Y")
-		local varName, serviceName = line:match("local%s+([%w_]+)%s*=%s*game:GetService%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
+		local varName, serviceName =
+			line:match("local%s+([%w_]+)%s*=%s*game:GetService%s*%(%s*[\"']([^\"']+)[\"']%s*%)")
 		if varName and serviceName then
 			local success, service = pcall(function()
 				return game:GetService(serviceName)
@@ -266,7 +289,6 @@ local function updateAutocomplete(editor, game)
 		addIfMatch(completions)
 		addIfMatch(getDynamicCompletions(editor))
 
-		-- Add dynamic variables themselves to root completions
 		for varName, data in pairs(dynamicVariables) do
 			if varName:lower():sub(1, #word) == word:lower() and varName ~= word and not seen[varName] then
 				table.insert(items, {
@@ -306,21 +328,21 @@ local function completeWord(editor)
 	if item.args and #item.args > 0 then
 		local snippetStr = item.label .. "("
 		local argPositions = {}
-		
+
 		for i, arg in ipairs(item.args) do
-			local startPos = #snippetStr 
+			local startPos = #snippetStr
 			snippetStr = snippetStr .. arg
 			local endPos = #snippetStr
 			table.insert(argPositions, { start = startPos, ["end"] = endPos, label = arg })
-			
+
 			if i < #item.args then
 				snippetStr = snippetStr .. ", "
 			end
 		end
 		snippetStr = snippetStr .. ")"
-		
+
 		editor.text:insertString(snippetStr)
-		
+
 		editor.snippet = {
 			active = true,
 			index = 1,
@@ -328,7 +350,7 @@ local function completeWord(editor)
 			line = editor.text.cursor.line,
 			startCol = editor.text.cursor.col - #snippetStr,
 		}
-		
+
 		local firstArg = argPositions[1]
 		editor.text.cursor.col = editor.snippet.startCol + firstArg["end"]
 		editor.text.selection.active = true
@@ -339,13 +361,15 @@ local function completeWord(editor)
 	else
 		editor.text:insertString(item.label)
 	end
-	
+
 	editor.autocomplete.visible = false
 end
 
 local function cycleSnippet(editor)
-	if not editor.snippet or not editor.snippet.active then return false end
-	
+	if not editor.snippet or not editor.snippet.active then
+		return false
+	end
+
 	editor.snippet.index = editor.snippet.index + 1
 	if editor.snippet.index > #editor.snippet.positions then
 		editor.snippet.active = false
@@ -355,16 +379,16 @@ local function cycleSnippet(editor)
 		editor.text.cursor.col = editor.snippet.startCol + lastArg["end"] + 2
 		return true
 	end
-	
+
 	local arg = editor.snippet.positions[editor.snippet.index]
-	
+
 	editor.text.cursor.col = editor.snippet.startCol + arg["end"]
 	editor.text.selection.active = true
 	editor.text.selection.startLine = editor.snippet.line
 	editor.text.selection.startCol = editor.snippet.startCol + arg.start
 	editor.text.selection.endLine = editor.snippet.line
 	editor.text.selection.endCol = editor.snippet.startCol + arg["end"]
-	
+
 	return true
 end
 

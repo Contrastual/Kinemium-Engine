@@ -347,6 +347,11 @@ return function(objects, data)
 				)
 				itemY = itemY + config.categoryHeight
 			else
+				if item.appearif then
+					if not item.appearif() then
+						continue
+					end
+				end
 				local itemRect = rect.new(r.x, itemY, r.width, config.itemHeight)
 				local isHovered = rect.MouseIsInRect(itemRect) and not item.disabled
 

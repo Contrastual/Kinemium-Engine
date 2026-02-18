@@ -1,7 +1,7 @@
 local raylib = require("@raylib")
 local lib = raylib.lib
 local const = raylib.const
-local aereon = require("@Kinemium.Aereon")
+local aereon = require("@Aereon")
 local color3 = require("@Color3")
 
 local gui = aereon.gui

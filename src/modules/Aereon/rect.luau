@@ -196,34 +196,28 @@ return function(raylib: typeof(rl.lib))
 		end
 	end
 
+	local sharedColor = structs.Color:new({ r = 0, g = 0, b = 0, a = 0 })
+
 	function rect.render(object, color)
 		color = color or { r = 255, g = 255, b = 255, a = 255 }
 
-		raylib.DrawRectangleRec(
-			object.rect,
-			structs.Color:new({
-				r = math.floor(color.r),
-				g = math.floor(color.g),
-				b = math.floor(color.b),
-				a = math.floor(color.a),
-			})
-		)
+		sharedColor.r = math.floor(color.r)
+		sharedColor.g = math.floor(color.g)
+		sharedColor.b = math.floor(color.b)
+		sharedColor.a = math.floor(color.a)
+
+		raylib.DrawRectangleRec(object.rect, sharedColor)
 	end
 
 	function rect.renderRounded(object, radius, segments, color)
 		color = color or { r = 255, g = 255, b = 255, a = 255 }
 
-		raylib.DrawRectangleRounded(
-			object.rect,
-			radius or 0.1,
-			segments or 8,
-			structs.Color:new({
-				r = math.floor(color.r),
-				g = math.floor(color.g),
-				b = math.floor(color.b),
-				a = math.floor(color.a),
-			})
-		)
+		sharedColor.r = math.floor(color.r)
+		sharedColor.g = math.floor(color.g)
+		sharedColor.b = math.floor(color.b)
+		sharedColor.a = math.floor(color.a)
+
+		raylib.DrawRectangleRounded(object.rect, radius or 0.1, segments or 8, sharedColor)
 	end
 
 	function rect.NearestSide(rect)

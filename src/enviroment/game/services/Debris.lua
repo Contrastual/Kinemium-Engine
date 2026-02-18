@@ -4,6 +4,7 @@ local signal = require("@Kinemium.signal")
 local RunService = require("@RunService")
 
 local DebrisService = Instance.new("Debris")
+DebrisService.ExplorerHidden = true
 
 local ObjectRemoved = signal.new()
 

@@ -4,13 +4,13 @@ local raylib = require("@raylib")
 local Enum = require("@EnumMap")
 
 local propTable = {
-	MeshId = "./src/assets/meshes/cube.glb",
+	MeshId = "./src/assets/meshes/bee.glb",
 	_showhitbox = false,
 	CollisionFidelity = Enum.CollisionFidelity.Default,
 	RenderFidelity = Enum.RenderFidelity.Automatic,
 	CollisionScale = 1,
 	MeshScale = 1,
-	Size = Vector3.new(1, 1, 1)
+	Size = Vector3.new(1, 1, 1),
 }
 
 Part.inherit(propTable)
@@ -43,7 +43,7 @@ return {
 		update()
 
 		instance.Changed:Connect(function(propname, propvalue)
-			if propname == "MeshId" then
+			if propname == "MeshId" or propname == "MeshScale" then
 				update()
 			end
 		end)

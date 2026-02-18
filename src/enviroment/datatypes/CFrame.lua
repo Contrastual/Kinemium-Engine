@@ -751,12 +751,6 @@ function CFrame:ToRaylibMatrixScale(scale, structs)
 	local p = self.Position
 	scale = scale or { X = 1, Y = 1, Z = 1 }
 
-	-- i love when i require raylib just to get the structs every frame
-	-- isnt that right quaded
-	-- Yes, that is very right
-	-- Do i look like dumbass?
-	-- Yes
-
 	return structs.Matrix:new({
 		m0 = r[1][1] * scale.X,
 		m1 = r[2][1] * scale.X,

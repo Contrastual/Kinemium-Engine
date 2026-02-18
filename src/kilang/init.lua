@@ -8,9 +8,11 @@ local threads = {}
 kilang.renderer = nil
 kilang.threads = threads
 
-function kilang:init()
-	sandboxer.enviroment = Kinemium_env(kilang.renderer)
+function kilang:init(cam)
+	local luaEnv, CEnv = Kinemium_env(kilang.renderer, cam)
+	sandboxer.enviroment = luaEnv
 	kilang.env = sandboxer.enviroment
+	return CEnv
 end
 
 function kilang:execute(code, opts)

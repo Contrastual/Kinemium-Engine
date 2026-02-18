@@ -44,11 +44,6 @@ local function getFaceCFrame(cf, size, face)
 	end
 end
 
-local function DrawModelExCFrame(model, cf, scaleVec, color)
-	scaleVec = scaleVec or vector.create(1, 1, 1)
-	color = color or raylib.const.WHITE
-end
-
 return {
 	class = "Decal",
 	callback = function(instance)
@@ -57,7 +52,6 @@ return {
 		local mesh
 		local imageTex
 		local material
-		local pastLoaded
 		local default = raylib.lib.LoadMaterialDefault()
 		local currentTexturePath
 		local model
@@ -67,7 +61,7 @@ return {
 		pastLoaded = instance.Texture
 
 		instance.render = function()
-			local adornee: Part = instance.Adornee
+			local adornee: Part = instance.Adornee or instance.Parent
 
 			if not imageTex or pastLoaded ~= instance.Texture then
 				imageTex = raylib.lib.LoadTexture(instance.Texture)

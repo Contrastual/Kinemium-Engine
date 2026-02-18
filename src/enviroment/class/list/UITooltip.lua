@@ -5,7 +5,7 @@ local Enum = require("@EnumMap")
 local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
 
-local aereon = require("@Kinemium.Aereon")
+local aereon = require("@Aereon")
 local arect = aereon.rect()
 
 local propTable = {

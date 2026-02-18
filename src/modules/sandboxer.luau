@@ -16,13 +16,6 @@ local function gsub(code)
 	return code
 end
 
-local function merge(v1, v2)
-	for k, v in pairs(v2) do
-		v1[k] = v
-	end
-	return v1
-end
-
 function sandboxer.run(code, chunk, env)
 	local options = {
 		env = env or sandboxer.enviroment,
@@ -31,7 +24,9 @@ function sandboxer.run(code, chunk, env)
 	}
 
 	local success, result = pcall(function(...)
-		local bytecode = luau.compile(code)
+		local bytecode = luau.compile(code, {
+			optimization_level = 2,
+		})
 		local thread = luau.load(bytecode, options)
 
 		setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))

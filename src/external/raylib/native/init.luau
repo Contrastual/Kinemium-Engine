@@ -50,7 +50,7 @@ else
 
 	local store = `{platform.os}-{platform.cpu.arch}`
 	local mapped = BIN_MAP[store] or store
-	local file = `raylib-{RAYLIB_VERSION}_{mapped}`
+	local file = `raylib`
 
 	if fs.stat(`{BIN_LOCATION}/{file}.{ffi.suffix}`).kind == "none" then
 		print(`Downloading '{file}'...`)

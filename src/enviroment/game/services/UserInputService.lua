@@ -19,8 +19,8 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 	end
 	local Enum = require("@EnumMap")
 
-	local lib = renderer.lib
-	local const = renderer.const
+	local lib = renderer.Raylib.lib
+	local const = renderer.Raylib.const
 
 	UserInputService:SetProperties({
 		IsKeyDown = false,
@@ -64,9 +64,9 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 	end
 
 	local function findSuitable(value: number)
-		for _, enumItem in pairs(Enum._numberIndex) do
-			if enumItem.Value == value then
-				return enumItem
+		for _, keycode in pairs(Enum.KeyCode:GetEnumItems()) do
+			if keycode.Value == value then
+				return keycode
 			end
 		end
 	end

@@ -43,13 +43,12 @@ local AVChannelCustom = ffi.struct({
 	{ name = ffi.types.i8:array(16) },
 })
 export type AVChannelCustom = typeof(AVChannelCustom:new({}))
-
-local u = ffi.struct({
-	{ order = ffi.types.pointer },
-	{ nb_channels = ffi.types.i32 },
-	{ mask = ffi.types.u64 },
+local AVPrimaryCoefficients = ffi.struct({
+	{ x = ffi.types.pointer },
+	{ y = ffi.types.pointer },
+	{ z = ffi.types.pointer },
 })
-export type u = typeof(u:new({}))
+export type AVPrimaryCoefficients = typeof(AVPrimaryCoefficients:new({}))
 
 local AVColorPrimariesDesc = ffi.struct({
 	{ wp = ffi.types.pointer },
@@ -391,6 +390,7 @@ local AVFrame = ffi.struct({
 	{ pict_type = ffi.types.pointer },
 	{ sample_aspect_ratio = ffi.types.pointer },
 	{ pts = ffi.types.i64 },
+
 	{ pkt_dts = ffi.types.i64 },
 	{ time_base = ffi.types.pointer },
 	{ quality = ffi.types.i32 },
@@ -1018,12 +1018,6 @@ local funcs = {
 	av_audio_fifo_size = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_audio_fifo_space = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_assert0_fpu = { returns = ffi.types.void, args = {} },
-	av_strstart = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
-	av_stristart = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
-	av_strlcpy = { returns = ffi.types.u64, args = { ffi.types.i8, ffi.types.pointer, ffi.types.u64 } },
-	av_strlcat = { returns = ffi.types.u64, args = { ffi.types.i8, ffi.types.pointer, ffi.types.u64 } },
-	av_strcasecmp = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
-	av_strncasecmp = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
 	av_match_name = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_escape = {
 		returns = ffi.types.i32,
@@ -1072,8 +1066,7 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
-	AV_BSWAP32C = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_buffer_default_free = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.u8 } },
+	av_buffer_default_free = { returns = ffi.types.void, args = { ffi.types.u8 } },
 	av_buffer_unref = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_buffer_is_writable = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_buffer_get_ref_count = { returns = ffi.types.i32, args = { ffi.types.pointer } },
@@ -1125,17 +1118,16 @@ local funcs = {
 	},
 	av_log2 = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	av_log2_16bit = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_zero_extend_c = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_container_fifo_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_container_fifo_write = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer },
 	},
 	av_container_fifo_read = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer },
 	},
-	av_container_fifo_peek = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.void, ffi.types.u64 } },
+	av_container_fifo_peek = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_container_fifo_drain = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_container_fifo_can_read = { returns = ffi.types.u64, args = { ffi.types.pointer } },
 	av_get_cpu_flags = { returns = ffi.types.i32, args = {} },
@@ -1191,7 +1183,7 @@ local funcs = {
 	av_encryption_info_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_encryption_init_info_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_strerror = { returns = ffi.types.i32, args = { ffi.types.i32, ffi.types.i8, ffi.types.u64 } },
-	av_expr_eval = { returns = ffi.types.double, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void } },
+	av_expr_eval = { returns = ffi.types.double, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_expr_count_vars = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 } },
 	av_expr_count_func = {
 		returns = ffi.types.i32,
@@ -1202,7 +1194,6 @@ local funcs = {
 	av_executor_alloc = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.i32 } },
 	av_executor_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_executor_execute = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
-	AVFifoCB = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.void, ffi.types.u64 } },
 	av_fifo_elem_size = { returns = ffi.types.u64, args = { ffi.types.pointer } },
 	av_fifo_auto_grow_limit = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_fifo_can_read = { returns = ffi.types.u64, args = { ffi.types.pointer } },
@@ -1211,27 +1202,27 @@ local funcs = {
 	av_fifo_write = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
 	av_fifo_write_from_cb = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
-	av_fifo_read = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.void, ffi.types.u64 } },
+	av_fifo_read = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_fifo_read_to_cb = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
 	av_fifo_peek = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.u64, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.u64, ffi.types.u64 },
 	},
 	av_fifo_peek_to_cb = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.void, ffi.types.u64, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64, ffi.types.u64 },
 	},
 	av_fifo_drain2 = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_fifo_reset2 = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_fifo_freep2 = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_file_map = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.u8, ffi.types.u64, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.pointer, ffi.types.u8, ffi.types.u64, ffi.types.i32 },
 	},
 	av_file_unmap = { returns = ffi.types.void, args = { ffi.types.u8, ffi.types.u64 } },
 	av_frame_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -1310,6 +1301,7 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
+	av_frame_alloc = { returns = ffi.types.pointer, args = {} },
 	av_hwframe_transfer_get_formats = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
@@ -1322,17 +1314,6 @@ local funcs = {
 	},
 	av_av_to_amf_format = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	av_amf_to_av_format = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_map_videotoolbox_format_to_pixfmt = { returns = ffi.types.pointer, args = { ffi.types.u32 } },
-	av_map_videotoolbox_format_from_pixfmt = { returns = ffi.types.u32, args = { ffi.types.pointer } },
-	av_map_videotoolbox_format_from_pixfmt2 = { returns = ffi.types.u32, args = { ffi.types.pointer, ffi.types.u8 } },
-	av_map_videotoolbox_chroma_loc_from_av = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_map_videotoolbox_color_matrix_from_av = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_map_videotoolbox_color_primaries_from_av = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_map_videotoolbox_color_trc_from_av = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_vt_pixbuf_set_attachments = {
-		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer },
-	},
 	av_iamf_audio_element_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_iamf_mix_presentation_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_image_fill_max_pixsteps = {
@@ -1423,11 +1404,11 @@ local funcs = {
 	},
 	av_image_check_size = {
 		returns = ffi.types.i32,
-		args = { ffi.types.u32, ffi.types.u32, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.u32, ffi.types.u32, ffi.types.i32 },
 	},
 	av_image_check_size2 = {
 		returns = ffi.types.i32,
-		args = { ffi.types.u32, ffi.types.u32, ffi.types.i64, ffi.types.pointer, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.u32, ffi.types.u32, ffi.types.i64, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_image_check_sar = { returns = ffi.types.i32, args = { ffi.types.u32, ffi.types.u32, ffi.types.pointer } },
 	av_image_fill_black = {
@@ -1458,20 +1439,19 @@ local funcs = {
 	av_bmg_get = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.double } },
 	av_vlog = {
 		returns = ffi.types.void,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.i32, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_log_get_level = { returns = ffi.types.i32, args = {} },
 	av_log_set_level = { returns = ffi.types.void, args = { ffi.types.i32 } },
 	av_log_default_callback = {
 		returns = ffi.types.void,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.i32, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_default_item_name = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_default_get_category = { returns = ffi.types.pointer, args = { ffi.types.void } },
+	av_default_get_category = { returns = ffi.types.pointer, args = {} },
 	av_log_format_line = {
 		returns = ffi.types.void,
 		args = {
-			ffi.types.void,
 			ffi.types.i32,
 			ffi.types.pointer,
 			ffi.types.pointer,
@@ -1483,7 +1463,6 @@ local funcs = {
 	av_log_format_line2 = {
 		returns = ffi.types.i32,
 		args = {
-			ffi.types.void,
 			ffi.types.i32,
 			ffi.types.pointer,
 			ffi.types.pointer,
@@ -1496,7 +1475,7 @@ local funcs = {
 	av_log_get_flags = { returns = ffi.types.i32, args = {} },
 	av_lzo1x_decode = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.i32, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_gcd = { returns = ffi.types.pointer, args = { ffi.types.i64, ffi.types.i64 } },
 	av_compare_ts = {
@@ -1517,28 +1496,21 @@ local funcs = {
 	av_md5_update = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
 	av_md5_final = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u8 } },
 	av_md5_sum = { returns = ffi.types.void, args = { ffi.types.u8, ffi.types.pointer, ffi.types.u64 } },
-	av_alloc_size = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_alloc_size = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_alloc_size = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
-	av_reallocp = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.u64 } },
-	av_reallocp_array = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.u64, ffi.types.u64 } },
-	av_fast_malloc = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.u32, ffi.types.u64 } },
-	av_fast_mallocz = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.u32, ffi.types.u64 } },
-	av_free = { returns = ffi.types.void, args = { ffi.types.void } },
-	av_freep = { returns = ffi.types.void, args = { ffi.types.void } },
+	av_fast_malloc = { returns = ffi.types.void, args = { ffi.types.u32, ffi.types.u64 } },
+	av_fast_mallocz = { returns = ffi.types.void, args = { ffi.types.u32, ffi.types.u64 } },
+	av_free = { returns = ffi.types.void, args = {} },
+	av_freep = { returns = ffi.types.void, args = {} },
 	av_memcpy_backptr = { returns = ffi.types.void, args = { ffi.types.u8, ffi.types.i32, ffi.types.i32 } },
-	av_dynarray_add = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.i32, ffi.types.void } },
-	av_dynarray_add_nofree = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.i32, ffi.types.void } },
 	av_size_mult = { returns = ffi.types.i32, args = { ffi.types.u64, ffi.types.u64, ffi.types.u64 } },
 	av_max_alloc = { returns = ffi.types.void, args = { ffi.types.u64 } },
 	av_murmur3_init_seeded = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
 	av_murmur3_init = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_murmur3_update = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
 	av_murmur3_final = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u8 } },
-	av_opt_set_defaults = { returns = ffi.types.void, args = { ffi.types.void } },
-	av_opt_set_defaults2 = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.i32, ffi.types.i32 } },
-	av_opt_free = { returns = ffi.types.void, args = { ffi.types.void } },
-	av_opt_show2 = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.void, ffi.types.i32, ffi.types.i32 } },
+	av_opt_set_defaults = { returns = ffi.types.void, args = {} },
+	av_opt_set_defaults2 = { returns = ffi.types.void, args = { ffi.types.i32, ffi.types.i32 } },
+	av_opt_free = { returns = ffi.types.void, args = {} },
+	av_opt_show2 = { returns = ffi.types.i32, args = { ffi.types.i32, ffi.types.i32 } },
 	av_opt_get_key_value = {
 		returns = ffi.types.i32,
 		args = {
@@ -1552,63 +1524,62 @@ local funcs = {
 	},
 	av_set_options_string = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_opt_set_from_string = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	av_opt_set_dict = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer } },
-	av_opt_set_dict2 = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer, ffi.types.i32 } },
-	av_opt_copy = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer } },
+	av_opt_set_dict = { returns = ffi.types.i32, args = { ffi.types.pointer } },
+	av_opt_set_dict2 = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
+	av_opt_copy = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_opt_set = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_int = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i64, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.i64, ffi.types.i32 },
 	},
 	av_opt_set_double = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.double, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.double, ffi.types.i32 },
 	},
 	av_opt_set_q = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_bin = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
 	av_opt_set_image_size = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
 	av_opt_set_pixel_fmt = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_sample_fmt = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_video_rate = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_chlayout = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_dict_val = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_set_array = {
 		returns = ffi.types.i32,
 		args = {
-			ffi.types.void,
 			ffi.types.pointer,
 			ffi.types.i32,
 			ffi.types.u32,
@@ -1617,115 +1588,113 @@ local funcs = {
 			ffi.types.pointer,
 		},
 	},
-	av_opt_get = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.u8 } },
+	av_opt_get = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32, ffi.types.u8 } },
 	av_opt_get_int = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
 	},
 	av_opt_get_double = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.double },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.double },
 	},
 	av_opt_get_q = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_image_size = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
 	av_opt_get_pixel_fmt = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_sample_fmt = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_video_rate = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_chlayout = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_dict_val = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	av_opt_get_array_size = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32, ffi.types.u32 },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.u32 },
 	},
 	av_opt_get_array = {
 		returns = ffi.types.i32,
 		args = {
-			ffi.types.void,
 			ffi.types.pointer,
 			ffi.types.i32,
 			ffi.types.u32,
 			ffi.types.u32,
 			ffi.types.pointer,
-			ffi.types.void,
 		},
 	},
 	av_opt_eval_flags = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_eval_int = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_eval_uint = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_opt_eval_int64 = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.i64 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i64 },
 	},
 	av_opt_eval_float = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.float },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.float },
 	},
 	av_opt_eval_double = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.double },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.double },
 	},
 	av_opt_eval_q = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	av_opt_is_set_to_default = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer } },
+	av_opt_is_set_to_default = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_opt_is_set_to_default_by_name = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.i32 },
 	},
-	av_opt_flag_is_set = { returns = ffi.types.i32, args = { ffi.types.void, ffi.types.pointer, ffi.types.pointer } },
+	av_opt_flag_is_set = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_opt_serialize = {
 		returns = ffi.types.i32,
-		args = { ffi.types.void, ffi.types.i32, ffi.types.i32, ffi.types.i8, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.i32, ffi.types.i32, ffi.types.i8, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_opt_freep_ranges = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_opt_query_ranges = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_opt_query_ranges_default = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_parse_ratio = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
 	av_parse_video_size = { returns = ffi.types.i32, args = { ffi.types.i32, ffi.types.i32, ffi.types.pointer } },
 	av_parse_video_rate = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_parse_color = {
 		returns = ffi.types.i32,
-		args = { ffi.types.u8, ffi.types.pointer, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.u8, ffi.types.pointer, ffi.types.i32 },
 	},
 	av_parse_time = { returns = ffi.types.i32, args = { ffi.types.i64, ffi.types.pointer, ffi.types.i32 } },
 	av_find_info_tag = {
@@ -1755,7 +1724,6 @@ local funcs = {
 	av_read_image_line2 = {
 		returns = ffi.types.void,
 		args = {
-			ffi.types.void,
 			ffi.types.pointer,
 			ffi.types.pointer,
 			ffi.types.pointer,
@@ -1816,7 +1784,7 @@ local funcs = {
 	},
 	av_pixelutils_get_sad_fn = {
 		returns = ffi.types.pointer,
-		args = { ffi.types.i32, ffi.types.i32, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
 	av_get_random_seed = { returns = ffi.types.u32, args = {} },
 	av_random_bytes = { returns = ffi.types.i32, args = { ffi.types.u8, ffi.types.u64 } },
@@ -1839,12 +1807,9 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.u8, ffi.types.pointer, ffi.types.i32, ffi.types.u8, ffi.types.i32 },
 	},
-	av_refstruct_alloc_ext = {
-		returns = ffi.types.pointer,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
-	},
-	av_refstruct_unref = { returns = ffi.types.void, args = { ffi.types.void } },
-	av_refstruct_replace = { returns = ffi.types.void, args = { ffi.types.void, ffi.types.pointer } },
+
+	av_refstruct_unref = { returns = ffi.types.void, args = {} },
+	av_refstruct_replace = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_refstruct_exclusive = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_ripemd_init = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
 	av_ripemd_update = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
@@ -1929,11 +1894,11 @@ local funcs = {
 	av_thread_message_queue_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_thread_message_queue_send = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer },
 	},
 	av_thread_message_queue_recv = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.void, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer },
 	},
 	av_thread_message_queue_set_err_send = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.i32 } },
 	av_thread_message_queue_set_err_recv = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.i32 } },
@@ -1951,7 +1916,7 @@ local funcs = {
 	},
 	av_timecode_init = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.void },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
 	av_timecode_init_from_components = {
 		returns = ffi.types.i32,
@@ -1963,18 +1928,14 @@ local funcs = {
 			ffi.types.i32,
 			ffi.types.i32,
 			ffi.types.i32,
-			ffi.types.void,
 		},
 	},
 	av_timecode_init_from_string = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.void },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	av_timecode_check_frame_rate = { returns = ffi.types.i32, args = { ffi.types.pointer } },
-	snprintf = {
-		returns = ffi.types.pointer,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
-	},
+
 	av_ts_make_time_string2 = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },

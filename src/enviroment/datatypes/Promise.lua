@@ -128,7 +128,6 @@ function Promise:_then(onFulfilled, onRejected)
 				handleRejected(self._value)
 			end)
 		elseif self._state == CANCELED then
-			-- Canceled promises don't propagate
 			reject("Promise was canceled")
 		end
 	end)
@@ -192,7 +191,6 @@ function Promise:isSettled()
 	return self._state ~= PENDING
 end
 
--- Static helpers
 function Promise.resolve(value)
 	if isPromise(value) then
 		return value
@@ -256,7 +254,7 @@ function Promise.race(promises)
 		end
 
 		if #promises == 0 then
-			return -- Never settles
+			return
 		end
 
 		local settled = false
@@ -354,7 +352,6 @@ end
 function Promise.delay(ms, value)
 	return Promise.new(function(resolve)
 		defer(function()
-			-- Simple delay implementation (you may want to use actual timer)
 			local start = os.clock()
 			while (os.clock() - start) * 1000 < ms do
 			end

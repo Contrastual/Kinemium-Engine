@@ -1,8 +1,9 @@
 -- devcell
-
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
-local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
+
 local KinemiumFontService = game:GetService("KinemiumFontService")
+
+local ProjectLoaderService = game:GetService("ProjectLoaderService")
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -60,100 +61,15 @@ if game.Context ~= Enum.GameContext.Editor then
 	return
 end
 
-KinemiumIconLoader.new("Play", "src/assets/images/icons/vanilla3/general/32x/200/Play.png")
-KinemiumIconLoader.new("Stop", "src/assets/images/icons/vanilla3/general/32x/200/Stop.png")
+local categoryRegistry = {}
 
-local png = KinemiumIconLoader.Get("Play")
-local stop = KinemiumIconLoader.Get("Stop")
+local NewCategoryToolbar = Signal.new()
+ishared.NewCategoryToolbar = NewCategoryToolbar
+NewCategoryToolbar:Connect(function(category, data)
+	categoryRegistry[category] = data
+end)
 
-local PlayIcon = KinemiumIconLoader.ToTexture(png)
-local StopIcon = KinemiumIconLoader.ToTexture(stop)
-
-local IsPlaytesting = false
-local clients = {}
-
-local categoryRegistry = {
-	Category = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					if IsPlaytesting then
-						return
-					end
-					print("playtesting..")
-
-					playtestService.CreatePlaytestAsync()
-					IsPlaytesting = true
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Play.png"),
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					if not IsPlaytesting then
-						return
-					end
-					print("Stopping the simulation")
-
-					playtestService.StopCurrentPlaytest()
-					IsPlaytesting = false
-				end,
-				hoverTransparency = 0.5,
-				text = "Stop",
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
-				texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Stop.png"),
-			},
-			{
-				type = "ImageButton",
-				text = "New Client",
-				callback = function()
-					table.insert(
-						clients,
-						task.spawn(function()
-							local process = zune.process.create(zune.fs.getExePath(), {
-								"run",
-								"game",
-								"--client",
-							})
-						end)
-					)
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/100/Client.png"),
-			},
-			{
-				type = "ImageButton",
-				text = "Clear Clients",
-				callback = function()
-					for _, client in pairs(clients) do
-						task.cancel(client)
-					end
-					clients = {}
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = KinemiumIconLoader.ToTexture(
-					"src/assets/images/icons/vanilla3/general/32x/150/DeleteSelectedBreakpoints.png"
-				),
-			},
-		},
-	},
-}
-
-local aereon = import("@Kinemium.Aereon")
+local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
 local aRect = aereon.rect()
 local gui = aereon.gui
@@ -201,13 +117,12 @@ local function Color3ToRaylib(c, transparency)
 	})
 end
 
-local function renderButton(i, name, element, windowData)
+-- Render button at specific X position and return width consumed
+local function renderButton(xPos, name, element, windowData)
 	local winX, winY = windowData.x, windowData.y + 80
 	local cellWidth = element.width or 50
 	local cellHeight = element.height or 50
-	local paddingLeft = 15
-	local padding = element.padding or 20
-	local rectX = winX + paddingLeft + i * (cellWidth + padding)
+	local rectX = winX + xPos
 	local rectY = winY
 	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
 
@@ -228,9 +143,9 @@ local function renderButton(i, name, element, windowData)
 
 	if element.texture then
 		rl.DrawTexturePro(
-			element.texture.texture, -- wow
-			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }), -- source rect
-			aRect:translate(rectData), -- destination
+			element.texture.texture,
+			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
+			aRect:translate(rectData),
 			vector.create(0, 0),
 			element.rotation or 0,
 			ImageColor
@@ -239,25 +154,30 @@ local function renderButton(i, name, element, windowData)
 
 	-- text
 	if name then
-		local textX = rectData.x + cellWidth / 2 - (#name * 9) / 2 -- center text horizontally
-		local textY = rectData.y + cellHeight + 5 -- below the element with 5px padding
+		local textX = rectData.x + cellWidth / 2 - (#name * 9) / 2
+		local textY = rectData.y + cellHeight + 5
 		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
 	end
 
 	if element.render then
 		element.render(aRect)
 	end
+
+	-- Return width consumed (element width + padding)
+	return cellWidth + (element.padding or 20)
 end
 
-local function renderSeperator(i, windowData, element)
-	local winX, winY = windowData.x, windowData.y + 30
-	local paddingLeft = 15
-	local padding = element.padding or 20
-	local rectX = winX + paddingLeft + i * (50 + padding)
+-- Render separator at specific X position and return width consumed
+local function renderSeperator(xPos, windowData, element)
+	local winX, winY = windowData.x, windowData.y + 80
+	local rectX = winX + xPos
 	local rectY = winY
 
 	local sepColor = Color3ToRaylib(element.color or Color3.new(0.7, 0.7, 0.7), 0)
-	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 50, sepColor)
+	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 70, sepColor)
+
+	-- Return width consumed (separator width + padding)
+	return (element.width or 2) + (element.padding or 20)
 end
 
 game.EngineSignal:Connect(function(route, name, data)
@@ -318,7 +238,7 @@ RunService.GuiRender:Connect(function()
 	if not windowObject then
 		return
 	end
-	renderer.blur:DrawBlurredRegion(
+	renderer.Blur:DrawBlurredRegion(
 		windowObject.x,
 		windowObject.y,
 		windowObject.width,
@@ -335,27 +255,9 @@ local fileMenu = gui.menu({
 	Font = vend,
 	items = {
 		{ type = "category", label = "PROJECT" },
-
-		{
-			label = "New Project",
-			shortcut = "Ctrl+N",
-			onClick = function()
-				print("New Project")
-			end,
-		},
 		{
 			label = "Open Project",
-			shortcut = "Ctrl+O",
-			onClick = function()
-				print("Open Project")
-			end,
-		},
-		{
-			label = "Open Recent",
-			submenu = {
-				{ label = "Project A" },
-				{ label = "Project B" },
-			},
+			submenu = ProjectLoaderService.GetGamesAsSubmenu(function(project) end),
 		},
 
 		{ type = "separator" },
@@ -398,10 +300,22 @@ local fileMenu = gui.menu({
 			end,
 		},
 		{
-			label = "Publish Game",
-			onClick = function()
-				print("Publish Game")
-			end,
+			label = "Export Game",
+			submenu = {
+				{
+					label = "Export as .EXE",
+					onClick = function()
+						print("Export as EXE")
+					end,
+				},
+
+				{
+					label = "Export as .KINE",
+					onClick = function()
+						print("Export as KINE")
+					end,
+				},
+			},
 		},
 
 		{ type = "separator" },
@@ -411,19 +325,13 @@ local fileMenu = gui.menu({
 		{
 			label = "Documentation",
 			onClick = function()
-				print("Docs")
-			end,
-		},
-		{
-			label = "Credits",
-			onClick = function()
-				print("Credits")
+				rl.OpenURL("https://deepwiki.com/Qquaded/Kinemium-Engine")
 			end,
 		},
 		{
 			label = "About Engine",
 			onClick = function()
-				print("About")
+				game.EngineSignal:Fire("EnableAboutMenu")
 			end,
 		},
 
@@ -433,7 +341,7 @@ local fileMenu = gui.menu({
 			label = "Exit",
 			shortcut = "Alt+F4",
 			onClick = function()
-				print("Exit")
+				zune.process.exit(0)
 			end,
 		},
 	},
@@ -485,24 +393,42 @@ window.stepped = function(windowData)
 			})
 		end
 
-		local i = 0
+		-- Use cumulative positioning instead of index-based
+		local currentX = 15 -- Initial left padding
 		local category = categoryRegistry[currentlySelected]
 
 		if category then
 			local elements = category.elements
 			for _, element in pairs(elements) do
 				if element.type == "ImageButton" then
-					renderButton(i, element.text, element, windowData)
+					local width = renderButton(currentX, element.text, element, windowData)
+					currentX = currentX + width
 				elseif element.type == "Separator" then
-					renderSeperator(i, windowData, element)
+					local width = renderSeperator(currentX, windowData, element)
+					currentX = currentX + width
 				elseif element.type == "Custom" then
 					if element.render then
-						element.render(aRect)
+						local cellWidth = element.width or 50
+						local cellHeight = element.height or 50
+						local padding = element.padding or 20
+
+						local x = windowData.x + currentX
+						local y = windowData.y + 80
+
+						element.render(aRect, {
+							x = x,
+							y = y,
+							width = cellWidth,
+							height = cellHeight,
+							window = windowData,
+						})
+
+						currentX = currentX + cellWidth + padding
 					end
 				end
-				i += 1
 			end
 		end
+
 		drawCategories(windowData)
 		drawTopbar(windowData, rl.GetFrameTime())
 	end

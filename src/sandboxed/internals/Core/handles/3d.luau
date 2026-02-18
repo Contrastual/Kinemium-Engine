@@ -1,16 +1,98 @@
-local ffi = game:GetService("KinemiumFFI")
--- first time this service has ever been used in any script lmao
-
+local KinemiumFontService = game:GetService("KinemiumFontService")
+local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
+
 local lib = raylib.lib
 local const = raylib.const
-local structs = raylib.structs
 local renderer = rlservice.renderer
 local Selection = game:GetService("Selection")
 local os = zune.platform.os
+local freecam = renderer.Freecam
+local focusTargetCF = nil
+local vend = KinemiumFontService.GetDefaultFont()
+local focusAlpha = 0
+local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
+local grid = 1
+local aereon = require("@Aereon")
 
--- limit this to windows until gizmo.so
+local MoveOffsets = {}
+local MoveStartPivot = nil
+local MoveDragging = false
+
+local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
+
+local function snap(v)
+	return math.round(v / grid) * grid
+end
+
+local function snapVec3(v)
+	return Vector3.new(snap(v.X), snap(v.Y), snap(v.Z))
+end
+
+local function getSelectionCenter()
+	local selection = Selection:Get()
+	if #selection == 0 then
+		return nil
+	end
+
+	local sum = Vector3.zero
+	local count = 0
+
+	for _, obj in ipairs(selection) do
+		if obj.BaseClass == "BasePart" then
+			sum += obj.CFrame.Position
+			count += 1
+		end
+	end
+
+	if count == 0 then
+		return nil
+	end
+	return sum / count
+end
+
+local gridInput = textbox.new({
+	multiline = false,
+	placeholder = "1",
+	fontSize = 16,
+	font = vend,
+	maxLength = 56,
+	numeric = true,
+	numericMin = 0,
+	numericMax = 10000,
+	numericPrecision = 1,
+	showStepButtons = true,
+	onChange = function(new)
+		if tonumber(new) and tonumber(new) > 0 then
+			grid = tonumber(new)
+		else
+			grid = 1
+		end
+	end,
+})
+
+local rotateGrid = textbox.new({
+	multiline = false,
+	placeholder = "15",
+	fontSize = 16,
+	font = vend,
+	maxLength = 56,
+	numeric = true,
+	suffix = "°",
+	numericMin = 0,
+	numericMax = 10000,
+	numericPrecision = 1,
+	showStepButtons = true,
+	onChange = function(new)
+		if tonumber(new) and tonumber(new) > 0 then
+			grid = tonumber(new)
+		else
+			grid = 1
+		end
+	end,
+})
+
 if os ~= "windows" then
 	return
 end
@@ -25,9 +107,43 @@ local Movement, Resize = Instance.new("Handles"), Instance.new("Handles")
 Movement.Style = Enum.HandlesStyle.Movement
 Resize.Style = Enum.HandlesStyle.Resize
 
-local type = "MOVEMENT"
+connection = Movement.MouseDrag:Connect(function(newCF)
+	local selection = Selection:Get()
+	if #selection == 0 then
+		return
+	end
+
+	if not MoveDragging then
+		MoveDragging = true
+		MoveOffsets = {}
+
+		local center = getSelectionCenter()
+		MoveStartPivot = CFrame.new(center)
+
+		for _, obj in ipairs(selection) do
+			if obj.BaseClass == "BasePart" then
+				table.insert(
+					MoveOffsets,
+					{ obj = obj, pos = MoveStartPivot:ToObjectSpace(obj.CFrame), size = obj.Size }
+				)
+			end
+		end
+	end
+
+	local snappedPos = snapVec3(newCF.Position)
+	local snappedPivot = CFrame.new(snappedPos) * (newCF - newCF.Position)
+
+	for _, offset in ipairs(MoveOffsets) do
+		local part = offset.obj
+		if part and part.Parent then
+			local finalCF = snappedPivot * offset.pos
+			part.CFrame = finalCF
+		end
+	end
+end)
+
+local handlestype = "MOVEMENT"
 local ScaleDragging = true
-local PreviousScale = vector.create(0, 0, 0)
 
 -- Read Offsets:
 -- 0, 4, 8 = Position (x,y,z) (Vector3)
@@ -39,23 +155,47 @@ local connection
 Selection.SelectionAdded:Connect(function(selected)
 	Movement.Adornee = nil
 	Resize.Adornee = nil
+
 	if connection then
 		connection:Disconnect()
 	end
+
+	MoveDragging = false
+	MoveOffsets = {}
+
 	if selected then
 		if not selected:IsA("Part") then
 			return
 		end
-		if type == "MOVEMENT" then
+		if handlestype == "MOVEMENT" then
 			Resize.Adornee = nil
 			Movement.Adornee = selected
-		elseif type == "SCALE" then
+		elseif handlestype == "SCALE" then
 			Resize.Adornee = selected
 		end
 	end
 end)
 
-workspace.Add3DStack(function()
+local function Focus()
+	local selected = Selection:Get()[1]
+	local padding = 20
+
+	local partPos = selected.CFrame.Position
+	local camCF = freecam.GetCFrame()
+
+	local dir = (camCF.Position - partPos)
+	if dir:Magnitude() < 1e-4 then
+		dir = Vector3.new(0, 0, -1)
+	else
+		dir = dir:Unit()
+	end
+
+	local newCamPos = partPos + dir * padding
+	focusTargetCF = CFrame.lookAt(newCamPos, partPos)
+	focusAlpha = 0
+end
+
+renderer.Pool.new("gizmo", function()
 	Movement.render(Movement, renderer, game)
 	Resize.render(Resize, renderer, game)
 
@@ -66,22 +206,13 @@ workspace.Add3DStack(function()
 			return
 		end
 
-		local size = selected.Size
-
-		if type == "MOVEMENT" then
+		if handlestype == "MOVEMENT" then
 			if not Movement.Transform then
 				return
 			end
-			local pos = Movement.Transform.Position
-			lib.DrawCubeWires(vector.create(pos.X, pos.Y, pos.Z), size.X, size.Y, size.Z, const.BLUE)
 
-			if connection then
-				connection:Disconnect()
-			end
-			connection = Movement.MouseDrag:Connect(function(newCF)
-				selected.CFrame = newCF
-			end)
-		elseif type == "SCALE" then
+			lib.DrawGrid(1000, grid)
+		elseif handlestype == "SCALE" then
 			if connection then
 				connection:Disconnect()
 			end
@@ -100,10 +231,12 @@ workspace.Add3DStack(function()
 				local dy = (t.Y - startPos.Y)
 				local dz = (t.Z - startPos.Z)
 
-				local newSize = Vector3.new(
-					math.max(StartSize.X + dx, 0.01),
-					math.max(StartSize.Y + dy, 0.01),
-					math.max(StartSize.Z + dz, 0.01)
+				local newSize = snapVec3(
+					Vector3.new(
+						math.max(StartSize.X + dx, grid),
+						math.max(StartSize.Y + dy, grid),
+						math.max(StartSize.Z + dz, grid)
+					)
 				)
 
 				local offset = Vector3.new(
@@ -116,7 +249,114 @@ workspace.Add3DStack(function()
 				selected.CFrame = StartCFrame + offset
 			end)
 		end
+		if lib.IsKeyDown(const.KeyboardKey.KEY_F) == 1 then
+			Focus()
+		end
+		if lib.IsKeyPressed(const.KeyboardKey.KEY_Z) == 1 then
+			local center = getSelectionCenter()
+			if center then
+				local camCF = freecam.GetCFrame()
+
+				local dir = (center - camCF.Position):Unit()
+				local zoomAmount = 10
+
+				if lib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1 then
+					zoomAmount = -zoomAmount
+				end
+
+				local newPos = camCF.Position + dir * zoomAmount
+				focusTargetCF = CFrame.lookAt(newPos, center)
+				focusAlpha = 0
+			end
+		end
+		if lib.IsKeyPressed(const.KeyboardKey.KEY_HOME) == 1 then
+			freecam.SetCFrame(CFrame.new(Vector3.new(0, 20, 40), Vector3.zero))
+		end
 	else
+		MoveDragging = false
+		MoveOffsets = {}
 		ScaleDragging = false
 	end
+	if focusTargetCF then
+		local camCF = freecam.GetCFrame()
+
+		focusAlpha = math.min(focusAlpha + 0.08, 1) -- speed (0.08 slower, 0.2 faster)
+		local lerped = camCF:Lerp(focusTargetCF, focusAlpha)
+
+		freecam.SetCFrame(lerped)
+
+		if focusAlpha >= 1 then
+			focusTargetCF = nil
+		end
+	end
 end)
+
+game.EngineSignal:Connect(function(Route)
+	if Route == "CameraFocus" then
+		Focus()
+	end
+end)
+
+-- Toolbar functionality
+repeat
+	task.wait()
+until ishared.NewCategoryToolbar
+local NewCategoryToolbar = ishared.NewCategoryToolbar
+
+NewCategoryToolbar:Fire("Tools", {
+	elements = {
+		{
+			type = "ImageButton",
+			text = "Move",
+			callback = function()
+				handlestype = "MOVEMENT"
+			end,
+			hoverTransparency = 0.5,
+			hoverColor = Color3.new(0, 0, 0),
+			roundness = 0.2,
+			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Move.png"),
+		},
+		{
+			type = "ImageButton",
+
+			callback = function()
+				handlestype = "ROTATE"
+			end,
+			hoverTransparency = 0.5,
+			text = "Rotate",
+			hoverColor = Color3.new(0, 0, 0),
+			roundness = 0.2,
+			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Rotate.png"),
+		},
+		{
+			type = "ImageButton",
+			text = "Resize",
+			callback = function()
+				handlestype = "SCALE"
+			end,
+			hoverTransparency = 0.5,
+			hoverColor = Color3.new(0, 0, 0),
+			roundness = 0.2,
+			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Scale.png"),
+		},
+		{
+			type = "Separator",
+		},
+		{
+			type = "Custom",
+			width = 250,
+			render = function(arect, data)
+				local x, y = data.x, data.y
+				local width, height = data.width, data.height + 25
+
+				local textboxHeight = (height / 2)
+
+				local textboxY = y + height - textboxHeight
+
+				lib.DrawRectangle(x, y, width, height, raylib.const.WHITE)
+				gridInput:drawWithExtras(x, textboxY, width, textboxHeight)
+				rotateGrid:drawWithExtras(x + width + 10, textboxY, width, textboxHeight)
+			end,
+		},
+	},
+})

@@ -5,6 +5,7 @@ local Enum = require("@EnumMap")
 
 local propTable = {
 	Name = "Script",
+	BaseClass = "ScriptContainer",
 	Source = [[
 		print("Hello Kinemium!")
 	]],
