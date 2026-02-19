@@ -5,7 +5,6 @@
 --[[
     raygizmo.luau
     Luau port of raygizmo.c by Claudio Z. (@cloudofoz), zlib license.
-    Adapted for Zune's FFI/raylib binding conventions.
 
     Usage:
         local gizmo = require("./raygizmo")
