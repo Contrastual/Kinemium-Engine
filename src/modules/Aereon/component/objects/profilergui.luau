@@ -1,22 +1,15 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
 local rect = require("@arect")(raylib.lib)
 local color3 = require("@Color3")
+
+local defaultFont = raylib.lib.GetFontDefault()
 
 return function(objects, data)
 	local config = {
 		profiler = data.profiler,
+		font = data.font or defaultFont,
 
 		-- Colors
 		backgroundColor = color3.new(0.09, 0.09, 0.11),
@@ -26,45 +19,43 @@ return function(objects, data)
 		textColor = color3.new(0.86, 0.86, 0.86),
 		dimTextColor = color3.new(0.5, 0.5, 0.5),
 
-		-- Zone colors
+		-- Zone colors (vibrant for flame graph)
 		zoneColors = {
-			color3.new(0.3, 0.6, 1.0),
-			color3.new(1.0, 0.4, 0.3),
-			color3.new(0.3, 1.0, 0.5),
-			color3.new(1.0, 0.7, 0.2),
-			color3.new(0.7, 0.3, 1.0),
-			color3.new(0.2, 0.9, 0.9),
-			color3.new(1.0, 0.5, 0.8),
-			color3.new(0.5, 1.0, 0.3),
+			color3.new(0.95, 0.35, 0.24), -- Red-orange
+			color3.new(0.98, 0.68, 0.24), -- Orange
+			color3.new(0.36, 0.78, 0.35), -- Green
+			color3.new(0.25, 0.65, 0.95), -- Blue
+			color3.new(0.58, 0.32, 0.95), -- Purple
+			color3.new(0.95, 0.45, 0.75), -- Pink
+			color3.new(0.32, 0.85, 0.82), -- Cyan
+			color3.new(0.95, 0.82, 0.24), -- Yellow
 		},
 		zoneColorMap = {},
 
-		-- Timeline view
-		timelineViewStart = 0, -- frame index
-		timelineViewEnd = 120, -- frame index
-		timelineZoom = 1.0,
-		timelineScroll = 0,
+		-- Flame graph view
+		flameGraphViewStart = 0,
+		flameGraphZoom = 1.0,
+		flameGraphScroll = 0,
 
 		-- Interaction
-		hoveredZone = nil,
-		hoveredWorker = nil,
-		selectedZone = nil,
+		hoveredFrame = nil,
+		selectedFrame = nil,
 		isDragging = false,
 		dragStartX = 0,
 		dragStartScroll = 0,
 
 		-- Layout
-		topBarHeight = 35,
-		workerRowHeight = 40,
-		timelineHeight = 0, -- calculated
-		statsHeight = 200,
-		sidebarWidth = 280,
+		topBarHeight = 40,
+		flameGraphRowHeight = 24,
+		minFrameWidth = 3,
+		sidebarWidth = 300,
 
 		-- Settings
 		targetFrameTime = 1 / 60,
-		showGrid = true,
+		showGrid = false,
 		showStats = true,
 		showTooltip = true,
+		maxDepth = 20,
 
 		modifiers = {},
 	}
@@ -101,6 +92,87 @@ return function(objects, data)
 		return wrapper
 	end
 
+	-- Draw text with custom font support
+	local function drawText(text, x, y, fontSize, color)
+		if config.font and config.font ~= defaultFont then
+			raylib.lib.DrawTextEx(config.font, text, vector.create(x, y), fontSize, 1, color)
+		else
+			raylib.lib.DrawText(text, x, y, fontSize, color)
+		end
+	end
+
+	-- Measure text width
+	local function measureText(text, fontSize)
+		if config.font and config.font ~= defaultFont then
+			return raylib.lib.MeasureTextEx(config.font, text, fontSize, 1).x
+		else
+			return raylib.lib.MeasureText(text, fontSize)
+		end
+	end
+
+	-- Build flame graph data from profiler frames
+	local function buildFlameGraphData(frames)
+		if not frames or #frames == 0 then
+			return {}
+		end
+
+		-- Use the latest frame for flame graph
+		local latestFrame = frames[#frames]
+		if not latestFrame then
+			return {}
+		end
+
+		-- Build hierarchical data from zones
+		local flameData = {}
+		local maxDepth = 0
+
+		-- Process main thread zones (they have parent-child relationships)
+		if latestFrame.zones then
+			-- Group zones by their call stack
+			local stackMap = {}
+
+			for _, zone in ipairs(latestFrame.zones) do
+				local stack = zone.callStack or { zone.name }
+				local key = table.concat(stack, ";")
+
+				if not stackMap[key] then
+					stackMap[key] = {
+						stack = stack,
+						name = zone.name,
+						duration = 0,
+						selfDuration = 0,
+						count = 0,
+					}
+				end
+
+				stackMap[key].duration = stackMap[key].duration + (zone.duration or 0)
+				stackMap[key].count = stackMap[key].count + 1
+
+				if #stack > maxDepth then
+					maxDepth = #stack
+				end
+			end
+
+			-- Convert to flame graph format
+			for key, data in pairs(stackMap) do
+				table.insert(flameData, {
+					stack = data.stack,
+					name = data.name,
+					duration = data.duration,
+					selfDuration = data.duration, -- Simplified for now
+					count = data.count,
+				})
+			end
+		end
+
+		-- Sort by duration (longest first)
+		table.sort(flameData, function(a, b)
+			return a.duration > b.duration
+		end)
+
+		return flameData, maxDepth
+	end
+
 	wrapper.render = function(dt)
 		if not config.profiler then
 			return
@@ -118,35 +190,31 @@ return function(objects, data)
 		local latestFrame = config.profiler:GetLatestFrame()
 
 		if not frames or #frames == 0 then
+			-- Draw empty state
+			raylib.lib.ClearBackground(config.backgroundColor:ToRaylib(0))
+
+			local emptyText = "No profiler data available"
+			local textWidth = measureText(emptyText, 18)
+			drawText(emptyText, (screenWidth - textWidth) / 2, screenHeight / 2, 18, config.dimTextColor:ToRaylib(0))
 			return
 		end
 
 		-- Background
-		raylib.lib.ClearBackground(c3tr(config.backgroundColor, 0))
+		raylib.lib.ClearBackground(config.backgroundColor:ToRaylib(0))
 
-		-- Calculate layout
-		local padding = 8
+		local padding = 12
 		local topBarY = 0
-		local timelineY = topBarY + config.topBarHeight
+		local flameGraphY = topBarY + config.topBarHeight
 
-		-- Count workers
-		local workers = {}
-		if latestFrame and latestFrame.workerZones then
-			for workerName, _ in pairs(latestFrame.workerZones) do
-				table.insert(workers, workerName)
-			end
-		end
-		table.sort(workers)
-		table.insert(workers, 1, "Main Thread") -- main thread at top
+		-- Calculate flame graph height based on depth
+		local flameData, maxDepth = buildFlameGraphData(frames)
+		local flameGraphHeight =
+			math.min(maxDepth * config.flameGraphRowHeight + 20, screenHeight - config.topBarHeight - 60)
 
-		local numWorkers = #workers
-		config.timelineHeight = numWorkers * config.workerRowHeight
-
-		local statsY = timelineY + config.timelineHeight + padding
-		local mainWidth = screenWidth - config.sidebarWidth - padding
+		local mainWidth = screenWidth - config.sidebarWidth - padding * 2
 
 		-- === TOP BAR ===
-		raylib.lib.DrawRectangle(0, topBarY, screenWidth, config.topBarHeight, c3tr(config.headerColor, 0))
+		raylib.lib.DrawRectangle(0, topBarY, screenWidth, config.topBarHeight, config.headerColor:ToRaylib(0))
 
 		-- FPS and frame time
 		local fps = 0
@@ -158,63 +226,40 @@ return function(objects, data)
 					totalTime = totalTime + (zone.duration or 0)
 				end
 			end
-			if latestFrame.workerZones then
-				for _, workerZones in pairs(latestFrame.workerZones) do
-					for _, zone in ipairs(workerZones) do
-						totalTime = math.max(
-							totalTime,
-							(zone.start or 0)
-								+ (zone.duration or 0)
-								- (latestFrame.zones[1] and latestFrame.zones[1].start or 0)
-						)
-					end
-				end
-			end
 			frameTime = totalTime
 			fps = totalTime > 0 and (1 / totalTime) or 0
 		end
 
-		raylib.lib.DrawText("Tracy-Style Profiler", padding, topBarY + 10, 16, c3tr(config.textColor, 0))
+		-- Title
+		drawText("Flame Graph Profiler", padding, topBarY + 10, 16, config.textColor:ToRaylib(0))
 
+		-- Stats
 		local fpsColor = fps >= 55 and color3.new(0.3, 0.9, 0.3)
 			or (fps >= 30 and color3.new(0.9, 0.7, 0.2) or color3.new(0.9, 0.3, 0.3))
-		raylib.lib.DrawText(string.format("%.1f FPS", fps), screenWidth - 200, topBarY + 10, 14, c3tr(fpsColor, 0))
-		raylib.lib.DrawText(
+		drawText(string.format("%.1f FPS", fps), screenWidth - 220, topBarY + 8, 14, fpsColor:ToRaylib(0))
+		drawText(
 			string.format("%.2fms", frameTime * 1000),
 			screenWidth - 100,
-			topBarY + 10,
+			topBarY + 8,
 			14,
-			c3tr(config.textColor, 0)
+			config.textColor:ToRaylib(0)
 		)
 
-		-- === TIMELINE ===
-		local timelineRect = rect.new(0, timelineY, mainWidth, config.timelineHeight)
-		raylib.lib.DrawRectangle(
-			timelineRect.x,
-			timelineRect.y,
-			timelineRect.width,
-			timelineRect.height,
-			c3tr(config.panelColor, 0)
-		)
+		-- === FLAME GRAPH ===
+		local flameGraphRect = rect.new(padding, flameGraphY, mainWidth, flameGraphHeight)
+		raylib.lib.DrawRectangleRounded(rect:translate(flameGraphRect), 0.08, 8, config.panelColor:ToRaylib(0))
 
-		-- Handle timeline interaction
-		if rect.MouseIsInRect(timelineRect) then
-			-- Zoom with mouse wheel
+		-- Handle interaction
+		if rect.MouseIsInRect(flameGraphRect) then
 			if mouseWheel ~= 0 then
-				local oldZoom = config.timelineZoom
-				config.timelineZoom = math.max(0.5, math.min(10, config.timelineZoom + mouseWheel * 0.1))
-
-				-- Adjust scroll to zoom toward mouse
-				local mouseFramePos = (mousePos.x - timelineRect.x) / timelineRect.width
-				config.timelineScroll = config.timelineScroll
-					+ (#frames * mouseFramePos * (1 / oldZoom - 1 / config.timelineZoom))
+				local oldZoom = config.flameGraphZoom
+				config.flameGraphZoom = math.max(0.5, math.min(10, config.flameGraphZoom + mouseWheel * 0.1))
 			end
 
-			-- Pan with drag
 			if mousePressed then
 				config.isDragging = true
 				config.dragStartX = mousePos.x
-				config.dragStartScroll = config.timelineScroll
+				config.flameGraphScroll = config.flameGraphScroll
 			end
 		end
 
@@ -224,365 +269,343 @@ return function(objects, data)
 
 		if config.isDragging then
 			local dragDelta = mousePos.x - config.dragStartX
-			local framesPerPixel = (#frames / config.timelineZoom) / timelineRect.width
-			config.timelineScroll = config.dragStartScroll - dragDelta * framesPerPixel
+			config.flameGraphScroll = config.dragStartScroll - dragDelta * 0.5
 		end
 
-		config.timelineScroll = math.max(0, math.min(#frames - #frames / config.timelineZoom, config.timelineScroll))
+		-- Total time for scaling
+		local totalTime = 0
+		for _, data in ipairs(flameData) do
+			totalTime = totalTime + data.duration
+		end
+		totalTime = math.max(totalTime, config.targetFrameTime)
 
-		-- Calculate visible frame range
-		local visibleFrames = math.ceil(#frames / config.timelineZoom)
-		local startFrame = math.floor(config.timelineScroll) + 1
-		local endFrame = math.min(#frames, startFrame + visibleFrames - 1)
+		-- Draw flame graph bars
+		config.hoveredFrame = nil
 
-		-- Draw grid lines
-		if config.showGrid then
-			local msPerLine = 5
-			local maxTime = 0
-			for i = startFrame, endFrame do
-				local frame = frames[i]
-				if frame and frame.zones then
-					for _, zone in ipairs(frame.zones) do
-						maxTime = math.max(maxTime, (zone.duration or 0))
-					end
-				end
-			end
-			maxTime = math.max(maxTime, config.targetFrameTime * 2)
-
-			for ms = msPerLine, math.ceil(maxTime * 1000), msPerLine do
-				local x = timelineRect.x + (ms / 1000 / maxTime) * timelineRect.width
-				raylib.lib.DrawLine(
-					x,
-					timelineRect.y,
-					x,
-					timelineRect.y + timelineRect.height,
-					c3tr(config.gridColor, 0)
-				)
-				raylib.lib.DrawText(
-					string.format("%dms", ms),
-					x + 2,
-					timelineRect.y + 2,
-					9,
-					c3tr(config.dimTextColor, 0)
-				)
-			end
+		-- Sort flame data by stack for proper stacking
+		local sortedFlameData = {}
+		for _, data in ipairs(flameData) do
+			table.insert(sortedFlameData, data)
 		end
 
-		-- Draw worker rows
-		config.hoveredZone = nil
-		config.hoveredWorker = nil
-
-		for workerIdx, workerName in ipairs(workers) do
-			local rowY = timelineRect.y + (workerIdx - 1) * config.workerRowHeight
-			local rowHeight = config.workerRowHeight
-
-			-- Alternating row background
-			if workerIdx % 2 == 0 then
-				raylib.lib.DrawRectangle(0, rowY, mainWidth, rowHeight, c3tr(color3.new(0.1, 0.1, 0.12), 0.3))
-			end
-
-			-- Worker label
-			raylib.lib.DrawText(workerName, padding, rowY + 12, 11, c3tr(config.textColor, 0))
-
-			-- Separator line
-			raylib.lib.DrawLine(0, rowY + rowHeight, mainWidth, rowY + rowHeight, c3tr(config.gridColor, 0))
-
-			-- Draw zones for visible frames
-			for frameIdx = startFrame, endFrame do
-				local frame = frames[frameIdx]
-				if not frame then
-					continue
-				end
-
-				local zones = nil
-				if workerName == "Main Thread" then
-					zones = frame.zones
-				elseif frame.workerZones then
-					zones = frame.workerZones[workerName]
-				end
-
-				if zones then
-					-- Calculate frame time offset
-					local frameStartTime = 0
-					local frameWidth = timelineRect.width / visibleFrames
-					local frameX = timelineRect.x + (frameIdx - startFrame) * frameWidth
-
-					-- Find max time for this frame to scale zones
-					local maxFrameTime = config.targetFrameTime * 2
-					for _, zone in ipairs(zones) do
-						maxFrameTime = math.max(maxFrameTime, (zone.start or 0) + (zone.duration or 0))
-					end
-
-					for _, zone in ipairs(zones) do
-						local zoneStart = (zone.start or frameStartTime) - frameStartTime
-						local zoneDuration = zone.duration or 0
-
-						if zoneDuration > 0 then
-							local zoneX = frameX + (zoneStart / maxFrameTime) * frameWidth
-							local zoneWidth = math.max(1, (zoneDuration / maxFrameTime) * frameWidth)
-							local zoneY = rowY + 4
-							local zoneHeight = rowHeight - 8
-
-							local zoneColor = getConsistentZoneColor(zone.name)
-
-							-- Draw zone
-							raylib.lib.DrawRectangle(zoneX, zoneY, zoneWidth, zoneHeight, c3tr(zoneColor, 0))
-
-							-- Zone border
-							raylib.lib.DrawRectangleLines(
-								zoneX,
-								zoneY,
-								zoneWidth,
-								zoneHeight,
-								c3tr(color3.new(0, 0, 0), 0.5)
-							)
-
-							-- Draw zone name if wide enough
-							if zoneWidth > 30 then
-								raylib.lib.DrawText(zone.name, zoneX + 2, zoneY + 8, 9, c3tr(color3.new(1, 1, 1), 0))
-							end
-
-							-- Check hover
-							if
-								mousePos.x >= zoneX
-								and mousePos.x <= zoneX + zoneWidth
-								and mousePos.y >= zoneY
-								and mousePos.y <= zoneY + zoneHeight
-							then
-								config.hoveredZone = zone
-								config.hoveredWorker = workerName
-
-								-- Highlight on hover
-								raylib.lib.DrawRectangle(
-									zoneX,
-									zoneY,
-									zoneWidth,
-									zoneHeight,
-									c3tr(color3.new(1, 1, 1), 0.7)
-								)
-							end
-						end
-
-						frameStartTime = frameStartTime + zoneDuration
-					end
-				end
-
-				continue
-			end
-		end
-
-		-- === STATISTICS PANEL ===
-		if config.showStats then
-			local statsRect = rect.new(0, statsY, mainWidth, config.statsHeight)
-			raylib.lib.DrawRectangle(
-				statsRect.x,
-				statsRect.y,
-				statsRect.width,
-				statsRect.height,
-				c3tr(config.headerColor, 0)
-			)
-
-			raylib.lib.DrawText(
-				"Statistics",
-				statsRect.x + padding,
-				statsRect.y + padding,
-				13,
-				c3tr(config.textColor, 0)
-			)
-
-			if latestFrame then
-				-- Aggregate all zones
-				local zoneStats = {}
-
-				-- Main thread zones
-				if latestFrame.zones then
-					for _, zone in ipairs(latestFrame.zones) do
-						local name = zone.name
-						if not zoneStats[name] then
-							zoneStats[name] = { count = 0, totalTime = 0, minTime = math.huge, maxTime = 0 }
-						end
-						local stat = zoneStats[name]
-						stat.count = stat.count + 1
-						stat.totalTime = stat.totalTime + (zone.duration or 0)
-						stat.minTime = math.min(stat.minTime, zone.duration or 0)
-						stat.maxTime = math.max(stat.maxTime, zone.duration or 0)
-					end
-				end
-
-				-- Worker zones
-				if latestFrame.workerZones then
-					for workerName, workerZones in pairs(latestFrame.workerZones) do
-						for _, zone in ipairs(workerZones) do
-							local name = workerName .. "::" .. zone.name
-							if not zoneStats[name] then
-								zoneStats[name] = { count = 0, totalTime = 0, minTime = math.huge, maxTime = 0 }
-							end
-							local stat = zoneStats[name]
-							stat.count = stat.count + 1
-							stat.totalTime = stat.totalTime + (zone.duration or 0)
-							stat.minTime = math.min(stat.minTime, zone.duration or 0)
-							stat.maxTime = math.max(stat.maxTime, zone.duration or 0)
-						end
-					end
-				end
-
-				-- Sort by total time
-				local sortedStats = {}
-				for name, stat in pairs(zoneStats) do
-					table.insert(sortedStats, { name = name, stat = stat })
-				end
-				table.sort(sortedStats, function(a, b)
-					return a.stat.totalTime > b.stat.totalTime
-				end)
-
-				-- Draw table
-				local tableY = statsRect.y + padding + 25
-				local colX = {
-					statsRect.x + padding,
-					statsRect.x + 200,
-					statsRect.x + 300,
-					statsRect.x + 380,
-					statsRect.x + 460,
-					statsRect.x + 560,
+		-- Group by top-level function
+		local topLevelGroups = {}
+		for _, data in ipairs(sortedFlameData) do
+			local topFunc = data.stack[1] or data.name
+			if not topLevelGroups[topFunc] then
+				topLevelGroups[topFunc] = {
+					name = topFunc,
+					stack = data.stack,
+					children = {},
+					totalDuration = 0,
 				}
+			end
+			topLevelGroups[topFunc].totalDuration = topLevelGroups[topFunc].totalDuration + data.duration
+			table.insert(topLevelGroups[topFunc].children, data)
+		end
 
-				-- Headers
-				raylib.lib.DrawText("Zone", colX[1], tableY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText("Total", colX[2], tableY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText("Avg", colX[3], tableY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText("Min", colX[4], tableY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText("Max", colX[5], tableY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText("Calls", colX[6], tableY, 10, c3tr(config.dimTextColor, 0))
-				tableY = tableY + 18
+		-- Sort groups by total duration
+		local sortedGroups = {}
+		for _, group in pairs(topLevelGroups) do
+			table.insert(sortedGroups, group)
+		end
+		table.sort(sortedGroups, function(a, b)
+			return a.totalDuration > b.totalDuration
+		end)
 
-				for i, entry in ipairs(sortedStats) do
-					if tableY > statsRect.y + statsRect.height - 20 then
+		-- Draw the flame graph
+		local currentX = flameGraphRect.x
+		local barHeight = config.flameGraphRowHeight - 2
+
+		for groupIdx, group in ipairs(sortedGroups) do
+			if currentX > flameGraphRect.x + flameGraphRect.width then
+				break
+			end
+
+			local groupWidth = (group.totalDuration / totalTime) * flameGraphRect.width * config.flameGraphZoom
+
+			if groupWidth >= config.minFrameWidth then
+				local baseColor = getConsistentZoneColor(group.name)
+
+				-- Draw base bar (the function)
+				local barY = flameGraphRect.y
+
+				-- Draw the bar with gradient effect based on depth
+				local depth = #group.stack
+				local colorMultiplier = 1.0 - (depth * 0.08)
+				local barColor = color3.new(
+					baseColor.R * colorMultiplier,
+					baseColor.G * colorMultiplier,
+					baseColor.B * colorMultiplier
+				)
+
+				raylib.lib.DrawRectangleRounded(
+					currentX,
+					barY + 2,
+					groupWidth - 1,
+					barHeight,
+					0.04,
+					4,
+					barColor:ToRaylib(0)
+				)
+
+				-- Draw function name if bar is wide enough
+				if groupWidth > 40 then
+					local textY = barY + (barHeight - 11) / 2 + 2
+					local displayName = group.name
+					if #displayName > math.floor(groupWidth / 7) then
+						displayName = string.sub(displayName, 1, math.floor(groupWidth / 7) - 2) .. ".."
+					end
+					drawText(displayName, currentX + 4, textY, 11, color3.new(1, 1, 1):ToRaylib(0))
+				end
+
+				-- Check hover
+				if
+					mousePos.x >= currentX
+					and mousePos.x <= currentX + groupWidth
+					and mousePos.y >= barY
+					and mousePos.y <= barY + barHeight + 4
+				then
+					config.hoveredFrame = group
+
+					-- Highlight
+					raylib.lib.DrawRectangleRounded(
+						currentX,
+						barY + 2,
+						groupWidth - 1,
+						barHeight,
+						0.04,
+						4,
+						color3.new(1, 1, 1):ToRaylib(0.7)
+					)
+				end
+
+				-- Draw child bars (stacked above)
+				local childX = currentX
+				for _, child in ipairs(group.children) do
+					if childX > currentX + groupWidth then
 						break
 					end
 
-					local name = entry.name
-					local stat = entry.stat
-					local avg = stat.totalTime / stat.count
+					local childWidth = (child.duration / totalTime) * flameGraphRect.width * config.flameGraphZoom
+					if childWidth >= config.minFrameWidth and #child.stack > 1 then
+						local childDepth = math.min(#child.stack - 1, config.maxDepth - 1)
+						local childY = barY - childDepth * (barHeight - 2)
 
-					local displayName = name
-					if #displayName > 25 then
-						displayName = string.sub(displayName, 1, 22) .. "..."
+						local childColor = getConsistentZoneColor(child.name)
+						local childColorMult = 1.0 - (childDepth * 0.06)
+						childColor = color3.new(
+							childColor.R * childColorMult,
+							childColor.G * childColorMult,
+							childColor.B * childColorMult
+						)
+
+						raylib.lib.DrawRectangleRounded(
+							childX,
+							childY + 2,
+							childWidth - 1,
+							barHeight - 2,
+							0.03,
+							3,
+							childColor:ToRaylib(0)
+						)
+
+						-- Draw child name if wide enough
+						if childWidth > 30 and childY > flameGraphRect.y then
+							local childTextY = childY + (barHeight - 9) / 2 + 2
+							local childName = child.name
+							if #childName > math.floor(childWidth / 6) then
+								childName = string.sub(childName, 1, math.floor(childWidth / 6) - 2) .. ".."
+							end
+							drawText(childName, childX + 2, childTextY, 9, color3.new(1, 1, 1):ToRaylib(0))
+						end
 					end
 
-					raylib.lib.DrawText(displayName, colX[1], tableY, 9, c3tr(config.textColor, 0))
-					raylib.lib.DrawText(
-						string.format("%.2fms", stat.totalTime * 1000),
-						colX[2],
-						tableY,
-						9,
-						c3tr(config.textColor, 0)
-					)
-					raylib.lib.DrawText(
-						string.format("%.2fms", avg * 1000),
-						colX[3],
-						tableY,
-						9,
-						c3tr(config.textColor, 0)
-					)
-					raylib.lib.DrawText(
-						string.format("%.2fms", stat.minTime * 1000),
-						colX[4],
-						tableY,
-						9,
-						c3tr(config.textColor, 0)
-					)
-					raylib.lib.DrawText(
-						string.format("%.2fms", stat.maxTime * 1000),
-						colX[5],
-						tableY,
-						9,
-						c3tr(config.textColor, 0)
-					)
-					raylib.lib.DrawText(tostring(stat.count), colX[6], tableY, 9, c3tr(config.textColor, 0))
-
-					tableY = tableY + 16
+					childX = childX + childWidth
 				end
+
+				currentX = currentX + groupWidth
 			end
 		end
 
-		-- === SIDEBAR ===
-		local sidebarX = mainWidth + padding
-		raylib.lib.DrawRectangle(sidebarX, 0, config.sidebarWidth, screenHeight, c3tr(config.headerColor, 0))
+		-- === TIME SCALE ===
+		local scaleY = flameGraphRect.y + flameGraphRect.height + 5
 
-		local sideY = padding + 10
-		raylib.lib.DrawText("Counters", sidebarX + padding, sideY, 13, c3tr(config.textColor, 0))
-		sideY = sideY + 25
+		-- Draw time markers
+		local numMarkers = 5
+		for i = 0, numMarkers do
+			local x = flameGraphRect.x + (i / numMarkers) * flameGraphRect.width
+			local time = (i / numMarkers) * totalTime * 1000
 
-		-- Draw counters
-		local counters = config.profiler:GetCounters()
-		if counters then
-			for name, value in pairs(counters) do
-				if sideY > screenHeight - 30 then
-					break
-				end
+			raylib.lib.DrawLine(x, scaleY, x, scaleY + 5, config.gridColor:ToRaylib(0))
+			drawText(string.format("%.1fms", time), x + 2, scaleY + 6, 9, config.dimTextColor:ToRaylib(0))
+		end
 
-				raylib.lib.DrawText(name, sidebarX + padding, sideY, 10, c3tr(config.dimTextColor, 0))
-				raylib.lib.DrawText(tostring(value), sidebarX + padding + 140, sideY, 10, c3tr(config.textColor, 0))
+		-- === SIDEBAR - CALL STACK DETAILS ===
+		local sidebarX = mainWidth + padding * 2
+
+		-- Sidebar background
+		raylib.lib.DrawRectangleRounded(
+			sidebarX,
+			topBarY,
+			config.sidebarWidth,
+			screenHeight - topBarY,
+			0,
+			0,
+			config.headerColor:ToRaylib(0)
+		)
+
+		local sideY = topBarY + padding + 10
+
+		-- Title
+		drawText("Call Stack", sidebarX + padding, sideY, 15, config.textColor:ToRaylib(0))
+		sideY = sideY + 30
+
+		-- Draw selected or hovered frame details
+		local displayFrame = config.hoveredFrame or config.selectedFrame
+
+		if displayFrame then
+			-- Function name
+			drawText(displayFrame.name, sidebarX + padding, sideY, 14, config.textColor:ToRaylib(0))
+			sideY = sideY + 22
+
+			-- Duration
+			local durationText =
+				string.format("Total: %.2fms", (displayFrame.totalDuration or displayFrame.duration or 0) * 1000)
+			drawText(durationText, sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+			sideY = sideY + 18
+
+			-- Call count
+			local countText = string.format("Calls: %d", displayFrame.count or 1)
+			drawText(countText, sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+			sideY = sideY + 25
+
+			-- Self duration
+			local selfText = string.format("Self: %.2fms", (displayFrame.selfDuration or 0) * 1000)
+			drawText(selfText, sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+			sideY = sideY + 25
+
+			-- Percentage
+			local pctText = string.format("%.1f%% of frame", ((displayFrame.duration or 0) / frameTime * 100))
+			drawText(pctText, sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+			sideY = sideY + 30
+
+			-- Call stack (if available)
+			if displayFrame.stack and #displayFrame.stack > 1 then
+				drawText("Stack:", sidebarX + padding, sideY, 12, config.textColor:ToRaylib(0))
 				sideY = sideY + 18
+
+				for i = #displayFrame.stack, 1, -1 do
+					if sideY > screenHeight - 40 then
+						break
+					end
+
+					local depth = #displayFrame.stack - i
+					local indent = depth * 12
+
+					local stackColor = getConsistentZoneColor(displayFrame.stack[i])
+					drawText(displayFrame.stack[i], sidebarX + padding + indent, sideY, 11, stackColor:ToRaylib(0))
+					sideY = sideY + 16
+				end
 			end
+		else
+			-- Show summary when nothing selected
+			drawText("Hover over a function", sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+			sideY = sideY + 20
+			drawText("to see details", sidebarX + padding, sideY, 12, config.dimTextColor:ToRaylib(0))
+		end
+
+		-- === TOP FUNCTIONS LIST ===
+		sideY = sideY + 30
+		drawText("Top Functions", sidebarX + padding, sideY, 14, config.textColor:ToRaylib(0))
+		sideY = sideY + 22
+
+		for i = 1, math.min(8, #sortedGroups) do
+			local func = sortedGroups[i]
+			if sideY > screenHeight - 50 then
+				break
+			end
+
+			local funcColor = getConsistentZoneColor(func.name)
+
+			-- Color indicator
+			raylib.lib.DrawRectangle(sidebarX + padding, sideY + 2, 4, 14, funcColor:ToRaylib(0))
+
+			-- Function name
+			local displayName = func.name
+			if #displayName > 25 then
+				displayName = string.sub(displayName, 1, 22) .. "..."
+			end
+			drawText(displayName, sidebarX + padding + 10, sideY, 11, config.textColor:ToRaylib(0))
+
+			-- Duration
+			local durText = string.format("%.1fms", func.totalDuration * 1000)
+			drawText(durText, sidebarX + padding + 180, sideY, 10, config.dimTextColor:ToRaylib(0))
+
+			sideY = sideY + 18
 		end
 
 		-- === TOOLTIP ===
-		if config.showTooltip and config.hoveredZone then
-			local zone = config.hoveredZone
-			local tooltipWidth = 200
-			local tooltipHeight = 70
+		if config.showTooltip and config.hoveredFrame then
+			local frame = config.hoveredFrame
+			local tooltipWidth = 220
+			local tooltipHeight = 85
 			local tooltipX = math.min(mousePos.x + 15, screenWidth - tooltipWidth - 10)
 			local tooltipY = math.min(mousePos.y + 15, screenHeight - tooltipHeight - 10)
 
 			-- Tooltip background
-			raylib.lib.DrawRectangle(
+			raylib.lib.DrawRectangleRounded(
 				tooltipX,
 				tooltipY,
 				tooltipWidth,
 				tooltipHeight,
-				c3tr(color3.new(0.15, 0.15, 0.17), 0)
+				0.08,
+				6,
+				color3.new(0.12, 0.12, 0.14):ToRaylib(0)
 			)
-			raylib.lib.DrawRectangleLines(
+			raylib.lib.DrawRectangleRoundedLines(
 				tooltipX,
 				tooltipY,
 				tooltipWidth,
 				tooltipHeight,
-				c3tr(color3.new(0.4, 0.4, 0.4), 0)
+				0.08,
+				6,
+				1,
+				color3.new(0.4, 0.4, 0.4):ToRaylib(0)
 			)
 
 			-- Tooltip content
-			local ty = tooltipY + 8
-			raylib.lib.DrawText(zone.name, tooltipX + 8, ty, 11, c3tr(config.textColor, 0))
+			local ty = tooltipY + 10
+			drawText(frame.name, tooltipX + 10, ty, 12, config.textColor:ToRaylib(0))
 			ty = ty + 18
 
-			if config.hoveredWorker then
-				raylib.lib.DrawText(
-					"Worker: " .. config.hoveredWorker,
-					tooltipX + 8,
+			drawText(
+				string.format("Total: %.2fms", (frame.totalDuration or frame.duration or 0) * 1000),
+				tooltipX + 10,
+				ty,
+				11,
+				config.dimTextColor:ToRaylib(0)
+			)
+			ty = ty + 16
+
+			drawText(
+				string.format("Calls: %d", frame.count or 1),
+				tooltipX + 10,
+				ty,
+				11,
+				config.dimTextColor:ToRaylib(0)
+			)
+			ty = ty + 16
+
+			if frame.stack and #frame.stack > 1 then
+				drawText(
+					"Stack depth: " .. tostring(#frame.stack),
+					tooltipX + 10,
 					ty,
-					9,
-					c3tr(config.dimTextColor, 0)
+					10,
+					config.dimTextColor:ToRaylib(0)
 				)
-				ty = ty + 14
 			end
-
-			raylib.lib.DrawText(
-				string.format("Duration: %.3fms", (zone.duration or 0) * 1000),
-				tooltipX + 8,
-				ty,
-				9,
-				c3tr(config.textColor, 0)
-			)
-			ty = ty + 14
-
-			raylib.lib.DrawText(
-				string.format("%.1f%%", (zone.duration or 0) / frameTime * 100),
-				tooltipX + 8,
-				ty,
-				9,
-				c3tr(config.dimTextColor, 0)
-			)
 		end
 
 		for _, m in pairs(config.modifiers) do

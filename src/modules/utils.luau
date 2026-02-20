@@ -70,6 +70,220 @@ function bufferUtils.string.ReadOSBased(outPath)
 	end
 end
 
+-- ffi types
+local function makeType(t)
+	return function(...)
+		local args = { ... }
+
+		if #args == 1 then
+			return { type = t, value = args[1] }
+		end
+
+		return { type = t, value = args }
+	end
+end
+
+bufferUtils.typei8 = makeType("i8")
+bufferUtils.typeu8 = makeType("u8")
+bufferUtils.typei16 = makeType("i16")
+bufferUtils.typeu16 = makeType("u16")
+bufferUtils.typei32 = makeType("i32")
+bufferUtils.typebool = makeType("bool")
+bufferUtils.typeu32 = makeType("u32")
+bufferUtils.typei64 = makeType("i64")
+bufferUtils.typeu64 = makeType("u64")
+bufferUtils.typefloat = makeType("float")
+bufferUtils.typedouble = makeType("double")
+bufferUtils.typepointer = makeType("pointer")
+bufferUtils.typevector2_32 = makeType("vector2_32")
+bufferUtils.typevector3_32 = makeType("vector3_32")
+
+function bufferUtils.wrap(object: buffer | FFIPointer, template: FFIStructureType)
+	local wrapper = {}
+	local changed = {}
+
+	local mt = {}
+
+	function wrapper:getptr(field, struct)
+		local offset = template:offset(field)
+
+		local sliced = zune.mem.slice(object, offset, struct:size())
+		if sliced then
+			return bufferUtils.wrap(sliced, struct)
+		end
+		return
+	end
+
+	function wrapper:read(field, valueType)
+		local offset = template:offset(field)
+		if not offset then
+			error("Invalid field: " .. tostring(field))
+		end
+
+		if type(object) == "buffer" then
+			if valueType == "i8" then
+				return buffer.readi8(object, offset)
+			elseif valueType == "u8" then
+				return buffer.readu8(object, offset)
+			elseif valueType == "i16" then
+				return buffer.readi16(object, offset)
+			elseif valueType == "u16" then
+				return buffer.readu16(object, offset)
+			elseif valueType == "i32" then
+				return buffer.readi32(object, offset)
+			elseif valueType == "u32" then
+				return buffer.readu32(object, offset)
+			elseif valueType == "float" then
+				return buffer.readf32(object, offset)
+			elseif valueType == "double" then
+				return buffer.readf64(object, offset)
+			elseif valueType == "bool" then
+				return buffer.readu8(object, offset) ~= 0
+			elseif valueType == "vector2_32" then
+				return {
+					buffer.readf32(object, offset),
+					buffer.readf32(object, offset + 4),
+				}
+			elseif valueType == "vector3_32" then
+				return {
+					buffer.readf32(object, offset),
+					buffer.readf32(object, offset + 4),
+					buffer.readf32(object, offset + 8),
+				}
+			elseif valueType == "pointer" then
+				return zune.mem.slice(object, offset, 8) -- x64
+			end
+		elseif typeof(object) == "FFIPointer" then
+			if valueType == "i8" then
+				return object:readi8(offset)
+			elseif valueType == "u8" then
+				return object:readu8(offset)
+			elseif valueType == "i16" then
+				return object:readi16(offset)
+			elseif valueType == "u16" then
+				return object:readu16(offset)
+			elseif valueType == "i32" then
+				return object:readi32(offset)
+			elseif valueType == "u32" then
+				return object:readu32(offset)
+			elseif valueType == "i64" then
+				return object:readi64(offset)
+			elseif valueType == "u64" then
+				return object:readu64(offset)
+			elseif valueType == "float" then
+				return object:readf32(offset)
+			elseif valueType == "double" then
+				return object:readf64(offset)
+			elseif valueType == "bool" then
+				return object:readu8(offset) ~= 0
+			elseif valueType == "vector2_32" then
+				return {
+					object:readf32(offset),
+					object:readf32(offset + 4),
+				}
+			elseif valueType == "vector3_32" then
+				return {
+					object:readf32(offset),
+					object:readf32(offset + 4),
+					object:readf32(offset + 8),
+				}
+			elseif valueType == "pointer" then
+				return object:readptr(offset)
+			end
+		end
+
+		error("Unsupported type: " .. tostring(valueType))
+	end
+
+	function wrapper:getraw()
+		return object
+	end
+
+	function mt.__index(_, key)
+		return changed[key]
+	end
+
+	function mt.__newindex(_, key, value)
+		-- detect write
+		changed[key] = true
+
+		if type(value) == "table" then
+			if value.type then
+				local valueType = value.type
+				local offset = template:offset(key)
+				local v = value.value
+
+				if type(object) == "buffer" then
+					if valueType == "i8" then
+						buffer.writei8(object, offset, v)
+					elseif valueType == "u8" then
+						buffer.writeu8(object, offset, v)
+					elseif valueType == "i16" then
+						buffer.writei16(object, offset, v)
+					elseif valueType == "u16" then
+						buffer.writeu16(object, offset, v)
+					elseif valueType == "i32" then
+						buffer.writei32(object, offset, v)
+					elseif valueType == "u32" then
+						buffer.writeu32(object, offset, v)
+					elseif valueType == "float" then
+						buffer.writef32(object, offset, v)
+					elseif valueType == "double" then
+						buffer.writef64(object, offset, v)
+					elseif valueType == "bool" then
+						local n = v and 1 or 0
+						buffer.writeu8(object, offset, n)
+					elseif valueType == "pointer" then
+						buffer.copy(object, offset, v)
+					elseif valueType == "vector2_32" then
+						buffer.writef32(object, offset, v[1])
+						buffer.writef32(object, offset + 4, v[2])
+					elseif valueType == "vector3_32" then
+						buffer.writef32(object, offset, v[1])
+						buffer.writef32(object, offset + 4, v[2])
+						buffer.writef32(object, offset + 8, v[3])
+					end
+				elseif typeof(object) == "FFIPointer" then
+					if valueType == "i8" then
+						object:writei8(offset, v)
+					elseif valueType == "u8" then
+						object:writeu8(offset, v)
+					elseif valueType == "i16" then
+						object:writei16(offset, v)
+					elseif valueType == "u16" then
+						object:writeu16(offset, v)
+					elseif valueType == "i32" then
+						object:writei32(offset, v)
+					elseif valueType == "u32" then
+						object:writeu32(offset, v)
+					elseif valueType == "i64" then
+						object:writei64(offset, v)
+					elseif valueType == "u64" then
+						object:writeu64(offset, v)
+					elseif valueType == "float" then
+						object:writef32(offset, v)
+					elseif valueType == "double" then
+						object:writef64(offset, v)
+					elseif valueType == "bool" then
+						object:writeu8(offset, v and 1 or 0)
+					elseif valueType == "pointer" then
+						object:writeptr(offset, v)
+					elseif valueType == "vector2_32" then
+						object:writef32(offset, v[1])
+						object:writef32(offset + 4, v[2])
+					elseif valueType == "vector3_32" then
+						object:writef32(offset, v[1])
+						object:writef32(offset + 4, v[2])
+						object:writef32(offset + 8, v[3])
+					end
+				end
+			end
+		end
+	end
+
+	return setmetatable(wrapper, mt)
+end
+
 -- Unsigned integers
 function bufferUtils:u8(number)
 	local buf = buffer.create(1)

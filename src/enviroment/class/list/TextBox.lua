@@ -3,7 +3,6 @@ local logic = require("@Kinemium.2dinput")
 
 local GuiObject = require("@GuiObject")
 local TextLabel = require("@TextLabel")
-local aereon = require("@aereon")
 
 local propTable = {
 	Name = "TextBox",
@@ -17,8 +16,6 @@ local propTable = {
 }
 TextLabel.inherit(propTable)
 GuiObject.inherit(propTable)
-
-local datamodel
 
 propTable.render = function(lib, object, dt, structs, renderer)
 	local framePos, frameSize = TextLabel.render(lib, object, dt, structs, renderer)

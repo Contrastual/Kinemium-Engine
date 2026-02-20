@@ -50,11 +50,58 @@ function CFrameint16.fromCFrame(cf)
 end
 
 function CFrameint16:ToCFrame()
-	return CFrame.new(self.Position.X, self.Position.Y, self.Position.Z, int16ToFloat(self.R00), int16ToFloat(self.R01), int16ToFloat(self.R02), int16ToFloat(self.R10), int16ToFloat(self.R11), int16ToFloat(self.R12), int16ToFloat(self.R20), int16ToFloat(self.R21), int16ToFloat(self.R22))
+	return CFrame.new(
+		self.Position.X,
+		self.Position.Y,
+		self.Position.Z,
+		int16ToFloat(self.R00),
+		int16ToFloat(self.R01),
+		int16ToFloat(self.R02),
+		int16ToFloat(self.R10),
+		int16ToFloat(self.R11),
+		int16ToFloat(self.R12),
+		int16ToFloat(self.R20),
+		int16ToFloat(self.R21),
+		int16ToFloat(self.R22)
+	)
 end
 
 function CFrameint16:__tostring()
 	return string.format("CFrameint16(Pos=%s)", tostring(self.Position))
+end
+
+function CFrameint16:ToTable()
+	return {
+		type = "CFrameint16",
+		Position = self.Position:ToTable(),
+		R00 = self.R00,
+		R01 = self.R01,
+		R02 = self.R02,
+		R10 = self.R10,
+		R11 = self.R11,
+		R12 = self.R12,
+		R20 = self.R20,
+		R21 = self.R21,
+		R22 = self.R22,
+	}
+end
+
+function CFrameint16.FromTable(tbl)
+	assert(tbl.type == "CFrameint16", "Table is not a CFrameint16")
+	return CFrameint16.new(
+		tbl.Position.X,
+		tbl.Position.Y,
+		tbl.Position.Z,
+		tbl.R00,
+		tbl.R01,
+		tbl.R02,
+		tbl.R10,
+		tbl.R11,
+		tbl.R12,
+		tbl.R20,
+		tbl.R21,
+		tbl.R22
+	)
 end
 
 return CFrameint16

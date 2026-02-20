@@ -103,7 +103,5 @@ RunService.RenderStepped:Connect(function(dt: number)
 	local addr, port = NetworkService.GetServerDataAsync()
 	mainFps = RunService.GetFPS()
 	fpsText.Text = `FPS: {math.round(mainFps)}`
-	renderPoolText.Text = `RenderPool2D: {renderer.get2DCount()}`
-	renderPoolText3D.Text = `RenderPool3D: {workspace.GetPoolCount()}`
 	connectedToText.Text = `Connected to: \n{addr}:{port}`
 end)

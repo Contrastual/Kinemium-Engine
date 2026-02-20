@@ -62,4 +62,18 @@ function Vector3int16:ToVector3()
 	return Vector3.new(self.X, self.Y, self.Z)
 end
 
+function Vector3int16:ToTable()
+	return {
+		type = "Vector3int16",
+		X = self.X,
+		Y = self.Y,
+		Z = self.Z,
+	}
+end
+
+function Vector3int16.FromTable(tbl)
+	assert(tbl.type == "Vector3int16", "Table is not a Vector3int16")
+	return Vector3int16.new(tbl.X, tbl.Y, tbl.Z)
+end
+
 return Vector3int16

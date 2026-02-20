@@ -76,4 +76,20 @@ function CFrameQuat16:__tostring()
 	)
 end
 
+function CFrameQuat16:ToTable()
+	return {
+		type = "CFrameQuat16",
+		Position = self.Position:ToTable(),
+		QX = self.QX,
+		QY = self.QY,
+		QZ = self.QZ,
+		QW = self.QW,
+	}
+end
+
+function CFrameQuat16.FromTable(tbl)
+	assert(tbl.type == "CFrameQuat16", "Table is not a CFrameQuat16")
+	return CFrameQuat16.new(tbl.Position.X, tbl.Position.Y, tbl.Position.Z, tbl.QX, tbl.QY, tbl.QZ, tbl.QW)
+end
+
 return CFrameQuat16

@@ -1,12 +1,12 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local RunService = game:GetService("RunService")
 local renderer = KinemiumRaylib.renderer
-local freecam = renderer.freecam
+local freecam = renderer.Freecam
 local raylib = require("@raylib")
 local playtestService = game:GetService("PlaytestService")
 
 RunService.RenderStepped:Connect(function(a0: number)
-	local camera = workspace.CurrentCamera
+	local camera = workspace.Camera
 	if camera then
 		if playtestService.IsPlaytesting then
 			return

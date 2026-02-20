@@ -251,11 +251,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local materialList = renderer.Texture.GetMaterials()
 	local loadedMaterials = {}
 	local MAX_INSTANCES = 150000
-	local MATRIX_SIZE = 64 -- 16 x float32
-	local COLOR_SIZE = 4 -- 4 x u8
+	local MATRIX_SIZE = 64 -- 16 floats x 4 bytes = 64 bytes per matrix
+	local COLOR_SIZE = 4 -- 4 bytes: R, G, B, A
 
+	-- Pre-allocate instance buffers (SSBO-like behavior)
 	local instanceMatricesBuf = zune.ffi.alloc(MAX_INSTANCES * MATRIX_SIZE)
 	local instanceColorsBuf = zune.ffi.alloc(MAX_INSTANCES * COLOR_SIZE)
+
+	-- Batch storage: key = "shape|material", value = batch object
+	local shapeMaterialBatches = {}
 
 	local preloadedMeshes
 	if not IsHeadless then
@@ -267,6 +271,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local default = lib.LoadMaterialDefault()
 			lib.SetMaterialTexture(default, 0, texture)
 
+			local wrapper = bufferUtils.wrap(default, structs.Material)
+			wrapper.shader = bufferUtils.typepointer(lights.shader)
+
 			loadedMaterials[material_name] = {
 				index = material_index,
 				material = default,
@@ -274,8 +281,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			}
 
 			lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
-
-			buffer.copy(default, structs.Material:offset("shader"), lights.shader)
 
 			material_index += 1
 			iodebug(`Loaded custom material: {material_name}`)
@@ -306,6 +311,55 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 		table.remove(renderablePool, table.find(renderablePool, v))
 	end)
+
+	-- Get or create a batch for shape+material combination
+	local function getOrCreateBatch(batchKey, meshBuf, matData)
+		local batch = shapeMaterialBatches[batchKey]
+		if not batch then
+			batch = {
+				mesh = meshBuf,
+				material = matData.material,
+				matrices = instanceMatricesBuf,
+				colors = instanceColorsBuf,
+				count = 0,
+			}
+			shapeMaterialBatches[batchKey] = batch
+		end
+		return batch
+	end
+
+	-- GPU-driven instanced rendering function
+	local function drawRaylibInstanced(part, meshBuf, matData)
+		-- Update matrix only when needed (cached per-part)
+		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
+			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+			part._lastCFrame = part.CFrame
+			part._lastSize = part.Size
+		end
+
+		local batchKey = part.Shape.Value .. "|" .. part.Material.Value
+		local batch = getOrCreateBatch(batchKey, meshBuf, matData)
+
+		-- Copy 4x4 transform matrix to instance buffer (64 bytes per instance)
+		-- FFIPointer:write(destOffset, src, srcOffset, count)
+		local matrixOffset = batch.count * MATRIX_SIZE
+		batch.matrices:write(matrixOffset, part._raylibMatrix, 0, MATRIX_SIZE)
+
+		-- Write per-instance color (4 bytes: RGBA)
+		local tint = part.Color:ToRaylib(part.Transparency)
+		local colorOffset = batch.count * COLOR_SIZE
+		-- Read color values from buffer using struct offsets
+		local r = buffer.readu8(tint, structs.Color:offset("r"))
+		local g = buffer.readu8(tint, structs.Color:offset("g"))
+		local b = buffer.readu8(tint, structs.Color:offset("b"))
+		local a = buffer.readu8(tint, structs.Color:offset("a"))
+		batch.colors:writeu8(colorOffset + 0, r)
+		batch.colors:writeu8(colorOffset + 1, g)
+		batch.colors:writeu8(colorOffset + 2, b)
+		batch.colors:writeu8(colorOffset + 3, a)
+
+		batch.count = batch.count + 1
+	end
 
 	local function drawRaylib(part, model, mesh)
 		local data = loadedMaterials[part.Material.Value]
@@ -363,8 +417,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
-	local shapeMaterialBatches = {}
-
 	local function drawChunks()
 		local Kinemium_camera = Workspace.Camera
 		local camPos = Kinemium_camera.CFrame.Position
@@ -391,70 +443,27 @@ Workspace.InitRenderer = function(renderer, signal, game)
 							lib.GetRenderHeight()
 						)
 					then
-						if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
-							part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-							part._lastCFrame = part.CFrame
-							part._lastSize = part.Size
-						end
 						local meshData = preloadedMeshes[part.Shape.Value]
-						local mesh = meshData[2]
+						local meshBuf = meshData[2]
+						local matData = loadedMaterials[part.Material.Value]
 						local model = meshData[1]
+
+						local mesh = meshData[2]
 						drawRaylib(part, model, mesh)
-						--[[
-						if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
-							part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-							part._lastCFrame = part.CFrame
-							part._lastSize = part.Size
-						end
-
-						local batchKey = part.Shape.Value .. "|" .. part.Material.Value
-						local batch = shapeMaterialBatches[batchKey]
-
-						if not batch then
-							local meshBuf = preloadedMeshes[part.Shape.Value][2]
-							local matData = loadedMaterials[part.Material.Value]
-
-							batch = {
-								mesh = meshBuf,
-								material = matData.material,
-								matricesBuf = buffer.create(MAX_INSTANCES * MATRIX_SIZE),
-								colors = zune.ffi.alloc(MAX_INSTANCES * COLOR_SIZE),
-								count = 0,
-							}
-
-							shapeMaterialBatches[batchKey] = batch
-						end
-
-						print("Copying")
-
-						buffer.copy(batch.matricesBuf, batch.count * MATRIX_SIZE, part._raylibMatrix, 0, MATRIX_SIZE)
-
-						local tint = part.Color:ToRaylib(part.Transparency)
-						bufferUtils.WriteColorToBuffer(batch.colors, batch.count * COLOR_SIZE, tint)
-
-						batch.count += 1
-
-						print("Created batch")
-						--]]
+						--drawRaylibInstanced(part, meshBuf, matData)
 					end
 				end
 			end
 		end
+
 		--[[
 		for _, batch in pairs(shapeMaterialBatches) do
 			if batch.count > 0 then
-				lib.DrawMeshInstanced(batch.mesh, batch.material, batch.matricesBuf, batch.count)
+				lib.DrawMeshInstanced(batch.mesh, batch.material, batch.matrices, batch.count)
 			end
 		end
 		--]]
 	end
-
-	renderer.Hook.new("After3D", function(runtime)
-		local Kinemium_camera = Workspace.Camera
-		if not game.Stop3DInput then
-			renderer.Freecam.Update(runtime.dt, Kinemium_camera)
-		end
-	end)
 
 	Workspace:SetProperties(proptable)
 

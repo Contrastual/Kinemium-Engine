@@ -80,18 +80,6 @@ local function c3tr(c, transparency)
 	})
 end
 
--- Elastic easing function (bounces back at boundaries)
-local function elasticClamp(value, min, max, strength)
-	if value < min then
-		local overshoot = min - value
-		return min - overshoot * strength
-	elseif value > max then
-		local overshoot = value - max
-		return max + overshoot * strength
-	end
-	return value
-end
-
 GuiObject.inherit(propTable)
 
 return {

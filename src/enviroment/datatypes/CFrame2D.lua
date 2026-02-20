@@ -182,4 +182,19 @@ function CFrame2D:__tostring()
 	return ("CFrame2D.new(%s, %s)"):format(self.Position.X, self.Position.Y)
 end
 
+function CFrame2D:ToTable()
+	return {
+		type = "CFrame2D",
+		Position = self.Position:ToTable(),
+		Rotation = self.Rotation,
+	}
+end
+
+function CFrame2D.FromTable(tbl)
+	assert(tbl.type == "CFrame2D", "Table is not a CFrame2D")
+	local cf = CFrame2D.new(Vector2.FromTable(tbl.Position))
+	cf.Rotation = tbl.Rotation
+	return cf
+end
+
 return CFrame2D

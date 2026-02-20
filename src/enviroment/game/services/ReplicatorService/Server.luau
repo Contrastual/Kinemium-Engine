@@ -43,12 +43,12 @@ function Server.init(context)
 
 	for _, v in pairs(game:GetDescendants()) do
 		lookup[v.UniqueId] = v
-		log("[Replicator] Created lookup pointer: " .. v.UniqueId)
+		log("[Replicator] Created lookup pointer: " .. v.UniqueId .. " to " .. v.Name)
 	end
 
 	game.DescendantAdded:Connect(function(object)
 		lookup[object.UniqueId] = object
-		log("[Replicator] Created lookup pointer: " .. object.UniqueId)
+		log("[Replicator] Created lookup pointer: " .. object.UniqueId .. " to " .. object.Name)
 
 		task.spawn(function()
 			if object.CanReplicate == false then

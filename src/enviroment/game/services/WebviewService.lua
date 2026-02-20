@@ -9,12 +9,10 @@ WebviewService.InitRenderer = function(renderer, renderer_signal)
 		return
 	end
 
-	local webview = require("@webview")
-	local lib = webview.lib
-	local raylib = require("@raylib").lib
-
 	WebviewService:SetProperties({
 		CreateWindow = function(title, x, y)
+			local webview = require("@webview")
+			local lib = webview.lib
 			if zune.platform.os == "windows" then
 				local ole32 = require("@ole32")
 

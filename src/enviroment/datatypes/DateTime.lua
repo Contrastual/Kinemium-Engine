@@ -45,4 +45,17 @@ function DateTime:FormatUniversalTime(formatString, locale)
 	return os.date("!" .. formatString, self.UnixTimestamp)
 end
 
+function DateTime:ToTable()
+	return {
+		type = "DateTime",
+		UnixTimestamp = self.UnixTimestamp,
+		UnixTimestampMillis = self.UnixTimestampMillis,
+	}
+end
+
+function DateTime.FromTable(tbl)
+	assert(tbl.type == "DateTime", "Table is not a DateTime")
+	return DateTime.fromUnixTimestamp(tbl.UnixTimestamp)
+end
+
 return DateTime

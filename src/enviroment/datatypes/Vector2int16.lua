@@ -60,4 +60,17 @@ function Vector2int16:ToVector2()
 	return Vector2.new(self.X, self.Y)
 end
 
+function Vector2int16:ToTable()
+	return {
+		type = "Vector2int16",
+		X = self.X,
+		Y = self.Y,
+	}
+end
+
+function Vector2int16.FromTable(tbl)
+	assert(tbl.type == "Vector2int16", "Table is not a Vector2int16")
+	return Vector2int16.new(tbl.X, tbl.Y)
+end
+
 return Vector2int16

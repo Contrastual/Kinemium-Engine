@@ -16,4 +16,26 @@ function RaycastResult.new(instance, position, normal, material, distance)
 	return self
 end
 
+function RaycastResult:ToTable()
+	return {
+		type = "RaycastResult",
+		Instance = self.Instance,
+		Position = self.Position:ToTable(),
+		Normal = self.Normal:ToTable(),
+		Material = self.Material,
+		Distance = self.Distance,
+	}
+end
+
+function RaycastResult.FromTable(tbl)
+	assert(tbl.type == "RaycastResult", "Table is not a RaycastResult")
+	return RaycastResult.new(
+		tbl.Instance,
+		Vector3.FromTable(tbl.Position),
+		Vector3.FromTable(tbl.Normal),
+		tbl.Material,
+		tbl.Distance
+	)
+end
+
 return RaycastResult

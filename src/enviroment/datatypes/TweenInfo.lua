@@ -16,4 +16,21 @@ function TweenInfo.new(time, easingStyle, easingDirection, repeatCount, reverses
 	return self
 end
 
+function TweenInfo:ToTable()
+	return {
+		type = "TweenInfo",
+		Time = self.Time,
+		EasingStyle = self.EasingStyle,
+		EasingDirection = self.EasingDirection,
+		RepeatCount = self.RepeatCount,
+		Reverses = self.Reverses,
+		DelayTime = self.DelayTime,
+	}
+end
+
+function TweenInfo.FromTable(tbl)
+	assert(tbl.type == "TweenInfo", "Table is not a TweenInfo")
+	return TweenInfo.new(tbl.Time, tbl.EasingStyle, tbl.EasingDirection, tbl.RepeatCount, tbl.Reverses, tbl.DelayTime)
+end
+
 return TweenInfo

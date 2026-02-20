@@ -15,6 +15,7 @@ local shader = require("./renderer/shader")
 local freecam = require("./renderer/freecam")
 local meshlib = require("./renderer/mesh")
 local ki3d = require("@ki3d")
+local utils = require("@bufferutils")
 
 -- TYPES
 export type KiRendConf = { width: number, height: number, maxFps: number, title: string }
@@ -64,6 +65,7 @@ function KiRend.new(config: KiRendConf)
 	local renderer_storage = {
 		fonts = {},
 	}
+	local renderer_meshes = {}
 	local ENGINE_PROFILER = {}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -107,15 +109,15 @@ function KiRend.new(config: KiRendConf)
 
 		Font = {
 			new = function(name, fontPath, size)
-				local buf = lib.LoadFontEx(fontPath, size, nil, 0)
+				local buf = utils.wrap(lib.LoadFontEx(fontPath, size, nil, 0), structs.Font)
 
-				local texture = zune.mem.slice(buf, structs.Font:offset("texture"), structs.Texture2D:size())
-				raylib.lib.SetTextureFilter(texture, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-				raylib.lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-				raylib.lib.GenTextureMipmaps(texture)
+				local texture = buf:getptr("texture", structs.Texture2D)
+				raylib.lib.SetTextureFilter(texture:getraw(), raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+				raylib.lib.SetTextureWrap(texture:getraw(), raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+				raylib.lib.GenTextureMipmaps(texture:getraw())
 
-				renderer_storage.fonts[name] = buf
-				return buf
+				renderer_storage.fonts[name] = buf:getraw()
+				return buf:getraw()
 			end,
 
 			Get = function(name)
@@ -151,6 +153,50 @@ function KiRend.new(config: KiRendConf)
 				end
 
 				return id
+			end,
+
+			AddMesh = function(mesh: buffer, mat_texture, mat_shader: buffer?)
+				local default = lib.LoadMaterialDefault()
+				lib.SetMaterialTexture(default, 0, texture)
+
+				local wrapper = utils.wrap(default, structs.Material)
+				wrapper.shader = utils.typepointer(mat_shader)
+
+				local data = {
+					id = math.random(0, 1000),
+					mat = default,
+				}
+
+				table.insert(renderer_meshes, data)
+
+				return data
+			end,
+
+			GetMesh = function(MeshId)
+				for i, v in pairs(renderer_meshes) do
+					if v.id == MeshId then
+						return v
+					end
+				end
+				return
+			end,
+
+			SetConfigMesh = function(meshId, prop, Value)
+				for i, v in pairs(renderer_meshes) do
+					if v.id == meshId then
+						renderer_meshes[i][prop] = Value
+						break
+					end
+				end
+			end,
+
+			RemoveMesh = function(id)
+				for i, v in pairs(renderer_meshes) do
+					if v.id == id then
+						table.remove(renderer_meshes, i)
+						break
+					end
+				end
 			end,
 
 			SetPriority = function(id, newPriority: number)

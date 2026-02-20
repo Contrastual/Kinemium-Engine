@@ -154,4 +154,19 @@ function Quaternion:__tostring()
 	return string.format("Quaternion(%.5f, %.5f, %.5f, %.5f)", self.X, self.Y, self.Z, self.W)
 end
 
+function Quaternion:ToTable()
+	return {
+		type = "Quaternion",
+		X = self.X,
+		Y = self.Y,
+		Z = self.Z,
+		W = self.W,
+	}
+end
+
+function Quaternion.FromTable(tbl)
+	assert(tbl.type == "Quaternion", "Table is not a Quaternion")
+	return Quaternion.new(tbl.X, tbl.Y, tbl.Z, tbl.W)
+end
+
 return Quaternion

@@ -71,13 +71,16 @@ local function serialize_object(object)
 		if type(propname) == "buffer" then
 			continue
 		end
-		if propvalue == {} then
+		if type(propvalue) == "table" then
 			continue
 		end
 		result.p[propname] = serialize_value(propvalue)
 	end
 
 	for propname, propvalue in pairs(object:GetAttributes()) do
+		if type(propvalue) == "table" then
+			continue
+		end
 		result.at[propname] = serialize_value(propvalue)
 	end
 

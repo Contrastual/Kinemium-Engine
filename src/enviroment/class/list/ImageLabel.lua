@@ -3,6 +3,8 @@ local Color3 = require("@Color3")
 local UDim2 = require("@UDim2")
 local Enum = require("@EnumMap")
 local GuiObject = require("@GuiObject")
+local raylib = require("@raylib")
+local lib = raylib.lib
 
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
@@ -10,7 +12,7 @@ local propTable = {
 	AnchorPoint = Vector2.new(0, 0),
 	BackgroundColor3 = Color3.new(1, 1, 1),
 	BackgroundTransparency = 0,
-	Image = "",
+	Image = "./src/assets/images/placeholder.png",
 	ImageColor3 = Color3.new(1, 1, 1),
 	ImageTransparency = 0.5,
 	--ScaleType = Enum.ScaleType.Stretch,
@@ -43,24 +45,16 @@ propTable.render = function(lib, object, dt, structs, renderer)
 			height = frameSize.Y,
 		})
 
-		local function Color3ToRaylib(c, transparency)
-			local r, g, b = c:ToRGB()
-			return structs.Color:new({
-				r = r,
-				g = g,
-				b = b,
-				a = math.floor(255 * (1 - transparency)),
-			})
+		if object.ImageTransparency ~= 1 then
+			lib.DrawTexturePro(
+				object._cached,
+				rec,
+				dest,
+				vector.create(0, 0), -- origin top-left
+				object.Rotation or 0,
+				object.ImageColor3:ToRaylib(object.ImageTransparency)
+			)
 		end
-
-		lib.DrawTexturePro(
-			object._cached,
-			rec,
-			dest,
-			vector.create(0, 0), -- origin top-left
-			object.Rotation or 0,
-			Color3ToRaylib(object.ImageColor3, object.ImageTransparency)
-		)
 	end
 
 	return framePos, frameSize, object._cached
@@ -72,11 +66,17 @@ return {
 	class = "ImageLabel",
 	render = propTable.render,
 	callback = function(instance, renderer)
-		instance._cached = renderer.lib.LoadTexture(instance.Image)
+		instance._cached = lib.LoadTexture(instance.Image)
+		lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+		lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+		lib.GenTextureMipmaps(instance._cached)
 
 		instance.Changed:Connect(function(property)
 			if property == "Image" then
-				instance._cached = renderer.lib.LoadTexture(instance.Image)
+				instance._cached = lib.LoadTexture(instance.Image)
+				lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+				lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+				lib.GenTextureMipmaps(instance._cached)
 			end
 		end)
 

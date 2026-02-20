@@ -1,6 +1,7 @@
 local Client = {}
 
-type Client = typeof(require("@kinet").Client)
+local kinet = require("@kinet")
+type Client = typeof(kinet.Client)
 
 local OPCODES = {
 	CREATE = 1,
@@ -13,7 +14,7 @@ function Client.init(context)
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
 	local Enum = require("@Enum")
-	local kinet_client = networkService.KiNet.Client :: Client
+	local kinet_client = kinet.Client :: Client
 
 	local lookup = {}
 	local userdata = serializationService.userdata
@@ -38,6 +39,8 @@ function Client.init(context)
 			local objects = data.objects
 			local deserialized = serializationService.Deserialize(objects)
 			if deserialized then
+				print("Got data")
+				print(deserialized)
 				for _, object in pairs(deserialized) do
 					if lookup[object.UniqueId] then
 						continue

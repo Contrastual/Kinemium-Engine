@@ -13,6 +13,22 @@ local function c3tr(c, transparency)
 	})
 end
 
+local function srgbToLinearChannel(c)
+	if c <= 0.04045 then
+		return c / 12.92
+	else
+		return ((c + 0.055) / 1.055) ^ 2.4
+	end
+end
+
+local function linearToSrgbChannel(c)
+	if c <= 0.0031308 then
+		return 12.92 * c
+	else
+		return 1.055 * (c ^ (1 / 2.4)) - 0.055
+	end
+end
+
 local function clamp(v)
 	if v < 0 then
 		return 0
@@ -144,6 +160,72 @@ function Color3.__div(a, b)
 	return Color3.new(a.R / b, a.G / b, a.B / b)
 end
 
+function Color3.__eq(a, b)
+	return a.R == b.R and a.G == b.G and a.B == b.B
+end
+
+function Color3:Dot(other)
+	return self.R * other.R + self.G * other.G + self.B * other.B
+end
+
+function Color3:Magnitude()
+	return math.sqrt(self.R * self.R + self.G * self.G + self.B * self.B)
+end
+
+function Color3:Unit()
+	local m = self:Magnitude()
+	if m == 0 then
+		return Color3.new(0, 0, 0)
+	end
+	return self / m
+end
+
+function Color3:Clamp()
+	return Color3.new(clamp(self.R), clamp(self.G), clamp(self.B))
+end
+
+function Color3:Invert()
+	return Color3.new(1 - self.R, 1 - self.G, 1 - self.B)
+end
+
+function Color3.fromHex(hex)
+	hex = hex:gsub("#", "")
+	assert(#hex == 6, "Hex must be 6 characters")
+
+	local r = tonumber(hex:sub(1, 2), 16)
+	local g = tonumber(hex:sub(3, 4), 16)
+	local b = tonumber(hex:sub(5, 6), 16)
+
+	return Color3.fromRGB(r, g, b)
+end
+
+function Color3:ToHex()
+	local r, g, b = self:ToRGB()
+	return string.format("#%02X%02X%02X", r, g, b)
+end
+
+function Color3:ToGrayscale()
+	local l = 0.299 * self.R + 0.587 * self.G + 0.114 * self.B
+	return Color3.new(l, l, l)
+end
+
+function Color3:AdjustBrightness(amount)
+	return Color3.new(self.R + amount, self.G + amount, self.B + amount)
+end
+
+function Color3:AdjustContrast(amount)
+	-- amount: 0 = no change, >0 increases contrast
+	return Color3.new(
+		(self.R - 0.5) * (1 + amount) + 0.5,
+		(self.G - 0.5) * (1 + amount) + 0.5,
+		(self.B - 0.5) * (1 + amount) + 0.5
+	)
+end
+
+function Color3:ToLinear()
+	return Color3.new(srgbToLinearChannel(self.R), srgbToLinearChannel(self.G), srgbToLinearChannel(self.B))
+end
+
 function Color3.__unm(a)
 	return Color3.new(-a.R, -a.G, -a.B)
 end
@@ -159,6 +241,10 @@ function Color3:ToTable()
 		G = self.G,
 		B = self.B,
 	}
+end
+
+function Color3:ToSRGB()
+	return Color3.new(linearToSrgbChannel(self.R), linearToSrgbChannel(self.G), linearToSrgbChannel(self.B))
 end
 
 function Color3:ToRaylib(transparency)

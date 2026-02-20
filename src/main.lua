@@ -27,6 +27,10 @@ _G.runtime = function(...)
 	print("[\x1b[91mRUNTIME\x1b[0m]", ...)
 end
 
+_G.evalError = function(...)
+	print("[\x1b[91mERROR\x1b[0m]", ...)
+end
+
 _G.iodebug = function(...)
 	print("\x1b[38;5;208m[DEBUG]\x1b[0m", ...)
 end
@@ -267,13 +271,11 @@ end)
 if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
-			local success, result = pcall(function()
-				kilang:execute(line, {
-					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-				})
-			end)
+			local id, success, result = kilang:execute(line, {
+				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+			})
 			if not success then
-				warn("REPL error:", result)
+				evalError(result)
 			end
 		end)
 	end)
