@@ -98,6 +98,8 @@ bufferUtils.typepointer = makeType("pointer")
 bufferUtils.typevector2_32 = makeType("vector2_32")
 bufferUtils.typevector3_32 = makeType("vector3_32")
 
+bufferUtils.pointersize = ffi.types.pointer:size()
+
 function bufferUtils.wrap(object: buffer | FFIPointer, template: FFIStructureType)
 	local wrapper = {}
 	local changed = {}
@@ -444,6 +446,11 @@ end
 function bufferUtils.extract.texture(v)
 	local texture = zune.mem.slice(v, structs.RenderTexture:offset("texture"), structs.Texture:size())
 	return texture
+end
+
+function bufferUtils.extract.depth(v)
+	local depth = zune.mem.slice(v, structs.RenderTexture:offset("depth"), structs.Texture:size())
+	return depth
 end
 
 function bufferUtils.extract.maps(model, texture)

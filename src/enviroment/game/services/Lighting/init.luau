@@ -319,21 +319,21 @@ local function initShaders(ki3d, shader, game, renderer)
 		--]]
 
 	ki3d.filters.new("sunrays", {
+		priority = 20,
 		shader = {
 			vertex = nil, -- Use default vertex shader
 			fragment = "./src/assets/shaders/sunrays.fs",
 		},
 
 		sunScreenPos = vector.create(0.5, 0.5),
-		density = 0.5,
-		weight = 0.5,
+		density = 1,
+		weight = 1,
 		decay = 0.95,
 		exposure = 0.03,
 		threshold = 0.8,
 
 		begin = function(self, runtime)
-			local lighting = game:GetService("Lighting")
-			local sunDir = lighting:GetSunDirection()
+			local sunDir = Lighting:GetSunDirection()
 
 			local workspace = game and game:GetService("Workspace")
 			local Kinemium_camera = workspace.Camera
@@ -387,18 +387,148 @@ local function initShaders(ki3d, shader, game, renderer)
 		end,
 	})
 
+	-- SSAO Filter (priority 10 — runs before sunrays/bloom/fog)
 	ki3d.filters.new("ssao", {
+		priority = 10,
+		blendMode = "multiply", -- multiplies the greyscale AO mask onto the scene
+
 		shader = {
-			vertex = "shaders/fullscreen_quad.vs", -- basic full-screen quad
-			fragment = "shaders/ssao.fs",
+			vertex = "./src/assets/shaders/ssao.vs",
+			fragment = "./src/assets/shaders/ssao.frag",
 		},
 
 		begin = function(self, runtime)
-			local shaderobj = runtime.shaderobj
+			local shaderobj = self.shader
+
+			-- Bind G-Buffer textures (SetShaderTextureRaw takes the shader buffer directly)
+			shader.SetShaderTextureRaw(shaderobj, "depthTexture", runtime.depth)
+			shader.SetShaderTextureRaw(shaderobj, "normalTexture", runtime.normal)
+
+			-- Pass resolution so the noise hash is pixel-accurate
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"resolution",
+				{ runtime.width, runtime.height },
+				const.ShaderUniformDataType.SHADER_UNIFORM_VEC2
+			)
+
+			raylib.lib.BeginShaderMode(shaderobj)
 		end,
 
-		finish = function() end,
+		finish = function(self, runtime)
+			runtime.lib.EndShaderMode()
+		end,
 	})
+
+	ki3d.filters.new("bloom", {
+		priority = 30,
+		shader = {
+			vertex = "./src/assets/shaders/fullscreen_quad.vs",
+			fragment = "./src/assets/shaders/bloom.fs",
+		},
+
+		threshold = 0.1,
+		intensity = 0.5,
+		radius = 1.0,
+
+		begin = function(self, runtime)
+			local shaderobj = self.shader
+
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"threshold",
+				self.threshold,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"intensity",
+				self.intensity,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(shaderobj, "radius", self.radius, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+
+			raylib.lib.BeginShaderMode(shaderobj)
+		end,
+
+		finish = function(self, runtime)
+			runtime.lib.EndShaderMode()
+		end,
+	})
+
+	-- Fog Filter
+	ki3d.filters.new("fog", {
+		priority = 40,
+		shader = {
+			vertex = "./src/assets/shaders/ssao.vs",
+			fragment = "./src/assets/shaders/fog.frag",
+		},
+
+		fogEnabled = true,
+		fogMode = 2, -- FOG_EXP2
+		fogColor = { 0.7, 0.8, 0.9 },
+		fogDensity = 0.01,
+		fogStart = 10.0,
+		fogEnd = 100.0,
+		skyAffect = 1.0,
+
+		begin = function(self, runtime)
+			local shaderobj = self.shader
+
+			-- Set depth texture
+			shader.SetShaderTexture(shaderobj, "uTexDepth", runtime.depth)
+
+			-- Set near/far planes (approximate for now)
+			shader.SetShaderValueRaw(shaderobj, "uNear", 0.1, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+			shader.SetShaderValueRaw(shaderobj, "uFar", 500.0, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+
+			-- Set fog parameters
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uFogMode",
+				self.fogMode,
+				const.ShaderUniformDataType.SHADER_UNIFORM_INT
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uFogColor",
+				self.fogColor,
+				const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uFogDensity",
+				self.fogDensity,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uFogStart",
+				self.fogStart,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uFogEnd",
+				self.fogEnd,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+			shader.SetShaderValueRaw(
+				shaderobj,
+				"uSkyAffect",
+				self.skyAffect,
+				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
+			)
+
+			raylib.lib.BeginShaderMode(shaderobj)
+		end,
+
+		finish = function(self, runtime)
+			runtime.lib.EndShaderMode()
+		end,
+	})
+
+	ki3d.EnableFilters()
 end
 
 Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
@@ -426,11 +556,53 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		GeographicLatitude = 0.0,
 		EnableDayCycle = false,
 
+		-- Bloom settings
+		BloomEnabled = true,
+		BloomThreshold = 0.6,
+		BloomIntensity = 1.5,
+		BloomRadius = 2.0,
+
+		-- Fog settings
+		FogEnabled = true,
+		FogMode = 2, -- 1=Linear, 2=Exp2, 3=Exp
+		FogColor = Color3.fromRGB(180, 200, 230),
+		FogDensity = 0.01,
+		FogStart = 10.0,
+		FogEnd = 100.0,
+
 		GetDaylight = function()
 			local t = getDayAlpha(Lighting.ClockTime)
 			return t
 		end,
 	})
+
+	local function updateBloomSettings()
+		local bloomFilter = renderer.Ki3d.filters.get("bloom")
+
+		if Lighting.BloomEnabled then
+			bloomFilter.threshold = Lighting.BloomThreshold
+			bloomFilter.intensity = Lighting.BloomIntensity
+			bloomFilter.radius = Lighting.BloomRadius
+		end
+	end
+
+	local function updateFogSettings()
+		local fogFilter = renderer.Ki3d.filters.get("fog")
+		if not fogFilter then
+			return
+		end
+
+		if Lighting.FogEnabled then
+			fogFilter.fogMode = Lighting.FogMode
+			fogFilter.fogColor = { Lighting.FogColor.R / 255, Lighting.FogColor.G / 255, Lighting.FogColor.B / 255 }
+			fogFilter.fogDensity = Lighting.FogDensity
+			fogFilter.fogStart = Lighting.FogStart
+			fogFilter.fogEnd = Lighting.FogEnd
+		end
+	end
+
+	updateBloomSettings()
+	updateFogSettings()
 
 	renderer_signal:Connect(function(route, dt)
 		if route == "PreGuiRender" then
@@ -451,6 +623,9 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	renderer.Skybox.Load()
 
 	renderer.Hook.new("Before3D", function()
+		updateBloomSettings()
+		updateFogSettings()
+
 		local workspace = datamodel.Workspace
 		local camera = workspace.Camera._raylibcam
 

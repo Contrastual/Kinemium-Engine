@@ -114,13 +114,10 @@ return function(objects, data)
 				+ config.padding
 		end
 
-		-- Smooth animations
 		if config.isClosing then
-			-- Animate out
 			config.animSlideY = config.animSlideY + (0 - config.animSlideY) * 0.2
 			config.animAlpha = config.animAlpha + (0 - config.animAlpha) * 0.2
 
-			-- When animation is complete, hide completely
 			if config.animSlideY < 0.01 and config.animAlpha < 0.01 then
 				config.visible = false
 				config.isClosing = false

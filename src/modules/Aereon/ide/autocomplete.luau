@@ -93,6 +93,7 @@ local completions = {
 			{ label = "format", type = "method", icon = "Method.png", args = { "s", "..." } },
 		},
 	},
+
 	{
 		label = "task",
 		type = "library",
@@ -102,6 +103,552 @@ local completions = {
 			{ label = "spawn", type = "method", icon = "Method.png", args = { "f", "..." } },
 			{ label = "defer", type = "method", icon = "Method.png", args = { "f", "..." } },
 			{ label = "delay", type = "method", icon = "Method.png", args = { "t", "f", "..." } },
+		},
+	},
+
+	{
+		label = "CFrame",
+		type = "library",
+		icon = "Module.png",
+		members = {
+			{
+				label = "new",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"x",
+					"y",
+					"z",
+				},
+			},
+			{
+				label = "ToQuaternion",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "__mul",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"a",
+					"b",
+				},
+			},
+			{
+				label = "Inverse",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "Lerp",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"target",
+					"alpha",
+				},
+			},
+			{
+				label = "PointToWorldSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"point",
+				},
+			},
+			{
+				label = "ToWorldSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"cf",
+				},
+			},
+			{
+				label = "lookAt",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"pos",
+					"target",
+					"up",
+				},
+			},
+			{
+				label = "GetComponents",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "GetRightVector",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "GetUpVector",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "GetLookVector",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "IsSamePosition",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+					"epsilon",
+				},
+			},
+			{
+				label = "IsSameRotation",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+					"epsilon",
+				},
+			},
+			{
+				label = "IsSameTransform",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+					"epsilon",
+				},
+			},
+			{
+				label = "PointToObjectSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"point",
+				},
+			},
+			{
+				label = "GetPosition",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "GetRotation",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "Orthonormalize",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "FastInverse",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "DistanceTo",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+				},
+			},
+			{
+				label = "IsClose",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+					"epsilon",
+				},
+			},
+			{
+				label = "TransformPoint",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"point",
+				},
+			},
+			{
+				label = "TransformVector",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"vec",
+				},
+			},
+			{
+				label = "WithPosition",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"pos",
+				},
+			},
+			{
+				label = "WithRotation",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"rot",
+				},
+			},
+			{
+				label = "GetAxes",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "GetBasisVectors",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "FacingDirection",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"dir",
+					"up",
+				},
+			},
+			{
+				label = "RotateAroundAxis",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"axis",
+					"angle",
+				},
+			},
+			{
+				label = "RotateAroundPoint",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"point",
+					"axis",
+					"angle",
+				},
+			},
+			{
+				label = "ProjectPointOntoPlane",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"point",
+					"normal",
+				},
+			},
+			{
+				label = "Mirror",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"normal",
+				},
+			},
+			{
+				label = "ClampPosition",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"min",
+					"max",
+				},
+			},
+			{
+				label = "Delta",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"other",
+				},
+			},
+			{
+				label = "ApproximatelyIdentity",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"epsilon",
+				},
+			},
+			{
+				label = "GetYawPitchRoll",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "WithYawPitchRoll",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"yaw",
+					"pitch",
+					"roll",
+				},
+			},
+			{
+				label = "FlattenY",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "IsFinite",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "ToObjectSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"cf",
+				},
+			},
+			{
+				label = "VectorToWorldSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"vec",
+				},
+			},
+			{
+				label = "VectorToObjectSpace",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"vec",
+				},
+			},
+			{
+				label = "fromEulerAnglesXYZ",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"x",
+					"y",
+					"z",
+				},
+			},
+			{
+				label = "fromEulerAnglesYXZ",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"y",
+					"x",
+					"z",
+				},
+			},
+			{
+				label = "fromAxisAngle",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"axis",
+					"angle",
+				},
+			},
+			{
+				label = "__add",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"a",
+					"b",
+				},
+			},
+			{
+				label = "__sub",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"a",
+					"b",
+				},
+			},
+			{
+				label = "__eq",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"a",
+					"b",
+				},
+			},
+			{
+				label = "fromMatrix",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"pos",
+					"x",
+					"y",
+					"z",
+				},
+			},
+			{
+				label = "ToEulerAnglesXYZ",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "Sanitize",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "MoveLocal",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"offset",
+				},
+			},
+			{
+				label = "TranslateLocal",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"x",
+					"y",
+					"z",
+				},
+			},
+			{
+				label = "AlignUp",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"normal",
+				},
+			},
+			{
+				label = "SnapPosition",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"grid",
+				},
+			},
+			{
+				label = "SnapRotation",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"step",
+				},
+			},
+			{
+				label = "ToRelative",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"parent",
+				},
+			},
+			{
+				label = "FromRelative",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"parent",
+					"relative",
+				},
+			},
+			{
+				label = "Slerp",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"target",
+					"alpha",
+				},
+			},
+			{
+				label = "Angles",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"x",
+					"y",
+					"z",
+				},
+			},
+			{
+				label = "__tostring",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "ToTable",
+				type = "method",
+				icon = "Method.png",
+				args = {},
+			},
+			{
+				label = "FromTable",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"tbl",
+				},
+			},
+			{
+				label = "ToRaylibMatrixScale",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"scale",
+					"structs",
+				},
+			},
+			{
+				label = "fromQuaternion",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"x",
+					"y",
+					"z",
+					"w",
+					"pos",
+				},
+			},
+			{
+				label = "ToRaylibMatrix",
+				type = "method",
+				icon = "Method.png",
+				args = {
+					"structs",
+				},
+			},
 		},
 	},
 
@@ -123,12 +670,7 @@ local completions = {
 		icon = "Struct.png",
 		members = { { label = "new", icon = "Method.png", args = { "x", "y", "z" } } },
 	},
-	{
-		label = "CFrame",
-		type = "class",
-		icon = "Struct.png",
-		members = { { label = "new", icon = "Method.png", args = { "pos", "lookAt" } } },
-	},
+
 	{
 		label = "Color3",
 		type = "class",

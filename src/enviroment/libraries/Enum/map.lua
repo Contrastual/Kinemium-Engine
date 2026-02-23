@@ -188,7 +188,10 @@ enumTable.Material = {
 	Grass = "grass",
 	Concrete = "concrete",
 	Slate = "slate",
+	Glass = "glass",
+	Neon = "neon",
 	Sand = "sand",
+	Water = "water",
 	debug = "debug",
 }
 

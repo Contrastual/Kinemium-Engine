@@ -1,11 +1,11 @@
-#version 330 core
+#version 330
 
-layout(location = 0) in vec2 aPosition;
-layout(location = 1) in vec2 aTexCoord;
+in vec3 vertexPosition;
+in vec2 vertexTexCoord;
 
-noperspective out vec2 vTexCoord;
+out vec2 texCoord;
 
 void main() {
-    vTexCoord = aTexCoord;
-    gl_Position = vec4(aPosition, 0.0, 1.0);
+    texCoord = vertexTexCoord;
+    gl_Position = vec4(vertexPosition, 1.0);
 }

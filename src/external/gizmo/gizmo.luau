@@ -510,15 +510,10 @@ end
 -- World mouse
 -- ============================================================
 
-local V2X = 4
-local V2Y = 8
-
 local function getWorldMouse(data: GizmoData, transform: GizmoTransform): V3
 	local dist = vDist(data.camPos, transform.translation)
-	local mp = lib.GetMousePosition() -- returns a Vector2 buffer
-	local sx = mp.x
-	local sy = mp.y
-	local rpos, rdir = screenToRay(sx, sy, data.invViewProj, lib.GetRenderWidth(), lib.GetRenderHeight())
+	local mp = lib.GetMousePosition()
+	local rpos, rdir = screenToRay(mp.x, mp.y, data.invViewProj, lib.GetRenderWidth(), lib.GetRenderHeight())
 	return rpos + rdir * dist
 end
 
@@ -877,16 +872,20 @@ local function gizmoHandleInput(data: GizmoData, transform: GizmoTransform)
 		elseif action == GZ_ACTION_SCALE then
 			at.scale = GIZMO.startScale
 			if GIZMO.activeAxis == GZ_ACTIVE_XYZ then
-				at.scale = vAddScalar(at.scale, vDot(pVec, GIZMO.axisCfg[GZ_AXIS_X].normal))
+				local delta = vDot(pVec, GIZMO.axisCfg[GZ_AXIS_X].normal)
+				at.scale = vAddScalar(at.scale, delta)
 			else
 				if band(GIZMO.activeAxis, GZ_ACTIVE_X) ~= 0 then
-					at.scale = at.scale + vProject(pVec, GIZMO.axisCfg[GZ_AXIS_X].normal)
+					local prj = vProject(pVec, GIZMO.axisCfg[GZ_AXIS_X].normal)
+					at.scale = at.scale + prj
 				end
 				if band(GIZMO.activeAxis, GZ_ACTIVE_Y) ~= 0 then
-					at.scale = at.scale + vProject(pVec, GIZMO.axisCfg[GZ_AXIS_Y].normal)
+					local prj = vProject(pVec, GIZMO.axisCfg[GZ_AXIS_Y].normal)
+					at.scale = at.scale + prj
 				end
 				if band(GIZMO.activeAxis, GZ_ACTIVE_Z) ~= 0 then
-					at.scale = at.scale + vProject(pVec, GIZMO.axisCfg[GZ_AXIS_Z].normal)
+					local prj = vProject(pVec, GIZMO.axisCfg[GZ_AXIS_Z].normal)
+					at.scale = at.scale + prj
 				end
 			end
 		elseif action == GZ_ACTION_ROTATE then

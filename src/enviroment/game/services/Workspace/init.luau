@@ -12,6 +12,8 @@ local lib = raylib.lib
 local structs = raylib.structs
 local bufferUtils = require("@bufferUtils")
 
+local material_shader_manager = require("./Workspace/materialShaders")
+
 local CHUNK_SIZE = 32
 local chunks = {}
 
@@ -66,6 +68,8 @@ end
 
 Workspace.InitRenderer = function(renderer, signal, game)
 	local IdPool = {}
+
+	local mtsh_sh = material_shader_manager:AddFilters(renderer, game, raylib)
 
 	local ki3d = renderer.Ki3d
 	local shader = renderer.Shader
@@ -271,13 +275,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local default = lib.LoadMaterialDefault()
 			lib.SetMaterialTexture(default, 0, texture)
 
-			local wrapper = bufferUtils.wrap(default, structs.Material)
-			wrapper.shader = bufferUtils.typepointer(lights.shader)
-
 			loadedMaterials[material_name] = {
 				index = material_index,
 				material = default,
 				texture = texture,
+				shader = mtsh_sh[material_name] and mtsh_sh[material_name].shader or nil,
 			}
 
 			lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
@@ -311,103 +313,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 		table.remove(renderablePool, table.find(renderablePool, v))
 	end)
-
-	-- Get or create a batch for shape+material combination
-	local function getOrCreateBatch(batchKey, meshBuf, matData)
-		local batch = shapeMaterialBatches[batchKey]
-		if not batch then
-			batch = {
-				mesh = meshBuf,
-				material = matData.material,
-				matrices = instanceMatricesBuf,
-				colors = instanceColorsBuf,
-				count = 0,
-			}
-			shapeMaterialBatches[batchKey] = batch
-		end
-		return batch
-	end
-
-	-- GPU-driven instanced rendering function
-	local function drawRaylibInstanced(part, meshBuf, matData)
-		-- Update matrix only when needed (cached per-part)
-		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
-			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-			part._lastCFrame = part.CFrame
-			part._lastSize = part.Size
-		end
-
-		local batchKey = part.Shape.Value .. "|" .. part.Material.Value
-		local batch = getOrCreateBatch(batchKey, meshBuf, matData)
-
-		-- Copy 4x4 transform matrix to instance buffer (64 bytes per instance)
-		-- FFIPointer:write(destOffset, src, srcOffset, count)
-		local matrixOffset = batch.count * MATRIX_SIZE
-		batch.matrices:write(matrixOffset, part._raylibMatrix, 0, MATRIX_SIZE)
-
-		-- Write per-instance color (4 bytes: RGBA)
-		local tint = part.Color:ToRaylib(part.Transparency)
-		local colorOffset = batch.count * COLOR_SIZE
-		-- Read color values from buffer using struct offsets
-		local r = buffer.readu8(tint, structs.Color:offset("r"))
-		local g = buffer.readu8(tint, structs.Color:offset("g"))
-		local b = buffer.readu8(tint, structs.Color:offset("b"))
-		local a = buffer.readu8(tint, structs.Color:offset("a"))
-		batch.colors:writeu8(colorOffset + 0, r)
-		batch.colors:writeu8(colorOffset + 1, g)
-		batch.colors:writeu8(colorOffset + 2, b)
-		batch.colors:writeu8(colorOffset + 3, a)
-
-		batch.count = batch.count + 1
-	end
-
-	local function drawRaylib(part, model, mesh)
-		local data = loadedMaterials[part.Material.Value]
-		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
-			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-			part._lastCFrame = part.CFrame
-			part._lastSize = part.Size
-		end
-
-		local matrix = part._raylibMatrix
-
-		part._cfvec = part._cfvec or vector.create(0, 0, 0)
-		part._sizevec = part._sizevec or vector.create(0, 0, 0)
-
-		if part._lastCFrame ~= part.CFrame then
-			part._cfvec = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-			part._lastCFrame = part.CFrame
-		end
-
-		if part._lastSize ~= part.Size then
-			part._sizevec = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
-			part._lastSize = part.Size
-		end
-
-		local axis, angle = bufferUtils.EulerToAxisAngle(part.Rotation)
-		local position = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-		local scale
-		local tint = part.Color:ToRaylib(part.Transparency)
-		local matData = loadedMaterials[part.Material.Value]
-
-		if part._model then
-			bufferUtils.SetModelTex(model, matData.texture)
-
-			scale =
-				vector.create(part.Size.X * part.MeshScale, part.Size.Y * part.MeshScale, part.Size.Z * part.MeshScale)
-			lib.DrawModelEx(part._model, position, axis, angle, scale, tint)
-		else
-			if zune.platform.os == "linux" then
-				bufferUtils.SetModelTex(model, matData.texture)
-
-				scale = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
-				lib.DrawModelEx(model, position, axis, angle, scale, tint)
-			elseif zune.platform.os == "windows" then
-				bufferUtils.setMaterialColor(matData.material, tint)
-				lib.DrawMesh(mesh, matData.material, matrix)
-			end
-		end
-	end
 
 	for _, child in pairs(Workspace:GetDescendants()) do
 		pool[child.UniqueId] = child
@@ -444,12 +349,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						)
 					then
 						local meshData = preloadedMeshes[part.Shape.Value]
-						local meshBuf = meshData[2]
 						local matData = loadedMaterials[part.Material.Value]
-						local model = meshData[1]
-
+						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 						local mesh = meshData[2]
-						drawRaylib(part, model, mesh)
+
+						renderer.MeshPool.DrawMesh(
+							mesh,
+							matData.material,
+							matData.shader or lights.shader,
+							matrix,
+							{ part.Color.R, part.Color.G, part.Color.B, part.Transparency }
+						)
 						--drawRaylibInstanced(part, meshBuf, matData)
 					end
 				end

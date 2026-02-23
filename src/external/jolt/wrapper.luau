@@ -10,14 +10,7 @@ end
 local structs = require("./structs")
 local funcs = require("./funcs")
 
-local libname
-if platform.os == "windows" then
-	libname = "joltc.dll"
-elseif platform.os == "linux" then
-	libname = "joltc.so"
-elseif platform.os == "macos" then
-	libname = "joltc.dylib"
-end
+local libname = "joltc."..ffi.suffix
 
 local jolt: typeof(funcs) = ffi.dlopen(dll .. libname, funcs)
 

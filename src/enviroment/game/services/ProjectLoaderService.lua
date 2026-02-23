@@ -131,8 +131,6 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 			return result
 		end,
 	})
-
-	renderer_signal:Connect(function(route, dt) end)
 end
 
 return ProjectLoaderService

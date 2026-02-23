@@ -131,6 +131,7 @@ function shader.cacheCommonLocations(shaderName)
 		"dirLightColor",
 		"pointLightCount",
 		"lightCount",
+		"matProjection",
 	}
 	for _, n in ipairs(names) do
 		shaderUniforms[shaderName][n] = lib.GetShaderLocation(activeShaders[shaderName], n)

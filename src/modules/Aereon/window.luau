@@ -114,11 +114,13 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		table.insert(windowRegistry, window)
 
 		function window:MoveTo(x, y)
-			dragSpring:target(window, { x = x, y = y })
+			window.x = x
+			window.y = y
 		end
 
 		function window:Resize(x, y)
-			dragSpring:target(window, { width = x, height = y })
+			window.width = x
+			window.height = y
 		end
 
 		return window
@@ -170,10 +172,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			if draggedWindow then
 				raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_ALL.Value)
 
-				dragSpring:target(draggedWindow, {
-					x = mousePos.x - dragOffset.x,
-					y = mousePos.y - dragOffset.y,
-				})
+				draggedWindow.x = mousePos.x - dragOffset.x
+				draggedWindow.y = mousePos.y - dragOffset.y
 
 				draggedWindow.IsDragging = true
 				module.dragged(draggedWindow)

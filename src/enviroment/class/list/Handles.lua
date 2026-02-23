@@ -65,7 +65,6 @@ return {
 				local t = handles._gizmoTransform
 				local newCF = CFrame.new(t.translation.x, t.translation.y, t.translation.z)
 
-				handles.Transform = newCF
 				instance.MouseDrag:Fire(newCF)
 			end
 		end

@@ -137,7 +137,7 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 		local part = offset.obj
 		if part and part.Parent then
 			local finalCF = snappedPivot * offset.pos
-			part.CFrame = finalCF
+			--part.CFrame = finalCF
 		end
 	end
 end)
@@ -245,8 +245,8 @@ renderer.Pool.new("gizmo", function()
 					(newSize.Z - StartSize.Z) / 2
 				)
 
-				selected.Size = newSize
-				selected.CFrame = StartCFrame + offset
+				--selected.Size = newSize
+				--selected.CFrame = StartCFrame + offset
 			end)
 		end
 		if lib.IsKeyDown(const.KeyboardKey.KEY_F) == 1 then

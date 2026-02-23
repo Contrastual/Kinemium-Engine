@@ -50,6 +50,13 @@ function Disposable.CleanupTask(task, methodName)
 	end
 end
 
+function Disposable:CleanUpAll()
+	for i = #self._tasks, 1, -1 do
+		local t = table.remove(self._tasks, i)
+		Disposable.CleanupTask(t.task, t.method)
+	end
+end
+
 function Disposable:Destroy()
 	if self._destroyed then
 		return

@@ -1277,32 +1277,34 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				editor:updateLSP()
 			end
 
-			-- paste
+			-- Arrow key handling
+			local shift = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
+				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
+
+			local function updateSelection()
+				if shift then
+					if not editor.text.selection.active then
+						editor.text.selection.active = true
+						editor.text.selection.startLine = editor.text.cursor.line
+						editor.text.selection.startCol = editor.text.cursor.col
+					end
+					editor.text.selection.endLine = editor.text.cursor.line
+					editor.text.selection.endCol = editor.text.cursor.col
+				else
+					editor.text.selection.active = false
+				end
+			end
+
+			-- Handle arrow keys: autocomplete navigation (UP/DOWN) and cursor movement (LEFT/RIGHT/UP/DOWN)
 			if editor.autocomplete.visible then
+				-- UP/DOWN navigates autocomplete selection
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
 					editor.autocomplete.selectedIndex =
 						math.min(editor.autocomplete.selectedIndex + 1, #editor.autocomplete.items)
 				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
 					editor.autocomplete.selectedIndex = math.max(editor.autocomplete.selectedIndex - 1, 1)
 				end
-			else
-				local shift = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
-					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
-
-				local function updateSelection()
-					if shift then
-						if not editor.text.selection.active then
-							editor.text.selection.active = true
-							editor.text.selection.startLine = editor.text.cursor.line
-							editor.text.selection.startCol = editor.text.cursor.col
-						end
-						editor.text.selection.endLine = editor.text.cursor.line
-						editor.text.selection.endCol = editor.text.cursor.col
-					else
-						editor.text.selection.active = false
-					end
-				end
-
+				-- LEFT/RIGHT moves cursor while autocomplete is visible
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_LEFT) == 1 then
 					editor.text:moveLeft()
 					updateSelection()
@@ -1315,11 +1317,21 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 				end
+				-- UP/DOWN also moves cursor when autocomplete is visible (not just autocomplete navigation)
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
-					editor.text:moveUp()
-					updateSelection()
-					autocomplete.indexVariables(editor, game)
-					autocomplete.updateAutocomplete(editor, game)
+					if
+						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
+						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
+					then
+						editor.text:moveLineUp()
+						editor._highlightCache = {}
+						editor:updateLSP()
+					else
+						editor.text:moveUp()
+						updateSelection()
+						autocomplete.indexVariables(editor, game)
+						autocomplete.updateAutocomplete(editor, game)
+					end
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
 					if
@@ -1336,7 +1348,20 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						autocomplete.updateAutocomplete(editor, game)
 					end
 				end
-
+			else
+				-- No autocomplete: handle all cursor movement
+				if raylib.IsKeyPressed(const.KeyboardKey.KEY_LEFT) == 1 then
+					editor.text:moveLeft()
+					updateSelection()
+					autocomplete.indexVariables(editor, game)
+					autocomplete.updateAutocomplete(editor, game)
+				end
+				if raylib.IsKeyPressed(const.KeyboardKey.KEY_RIGHT) == 1 then
+					editor.text:moveRight()
+					updateSelection()
+					autocomplete.indexVariables(editor, game)
+					autocomplete.updateAutocomplete(editor, game)
+				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
 					if
 						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
@@ -1352,77 +1377,92 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						autocomplete.updateAutocomplete(editor, game)
 					end
 				end
-
-				if raylib.IsKeyPressed(const.KeyboardKey.KEY_HOME) == 1 then
-					local currentLine = editor.text.lines[editor.text.cursor.line]
-					local indent = currentLine:match("^(%s*)")
-					local targetCol = #indent + 1
-					if editor.text.cursor.col == targetCol then
-						editor.text.cursor.col = 1
+				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
+					if
+						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
+						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
+					then
+						editor.text:moveLineDown()
+						editor._highlightCache = {}
+						editor:updateLSP()
 					else
-						editor.text.cursor.col = targetCol
+						editor.text:moveDown()
+						updateSelection()
+						autocomplete.indexVariables(editor, game)
+						autocomplete.updateAutocomplete(editor, game)
 					end
-					updateSelection()
 				end
+			end
 
-				if raylib.IsKeyPressed(const.KeyboardKey.KEY_END) == 1 then
-					editor.text.cursor.col = #editor.text.lines[editor.text.cursor.line] + 1
-					updateSelection()
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_HOME) == 1 then
+				local currentLine = editor.text.lines[editor.text.cursor.line]
+				local indent = currentLine:match("^(%s*)")
+				local targetCol = #indent + 1
+				if editor.text.cursor.col == targetCol then
+					editor.text.cursor.col = 1
+				else
+					editor.text.cursor.col = targetCol
 				end
+				updateSelection()
+			end
 
-				if raylib.IsKeyPressed(const.KeyboardKey.KEY_PAGE_UP) == 1 then
-					local visibleLines = math.floor(viewportHeight / lineHeight)
-					editor.text.cursor.line = math.max(1, editor.text.cursor.line - visibleLines)
-					editor.scrollY = math.max(0, editor.scrollY - visibleLines * lineHeight)
-					updateSelection()
-				end
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_END) == 1 then
+				editor.text.cursor.col = #editor.text.lines[editor.text.cursor.line] + 1
+				updateSelection()
+			end
 
-				if raylib.IsKeyPressed(const.KeyboardKey.KEY_PAGE_DOWN) == 1 then
-					local visibleLines = math.floor(viewportHeight / lineHeight)
-					editor.text.cursor.line = math.min(#editor.text.lines, editor.text.cursor.line + visibleLines)
-					editor.scrollY = math.min(editor.maxScroll, editor.scrollY + visibleLines * lineHeight)
-					updateSelection()
-				end
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_PAGE_UP) == 1 then
+				local visibleLines = math.floor(viewportHeight / lineHeight)
+				editor.text.cursor.line = math.max(1, editor.text.cursor.line - visibleLines)
+				editor.scrollY = math.max(0, editor.scrollY - visibleLines * lineHeight)
+				updateSelection()
+			end
 
-				if
-					raylib.IsKeyPressed(const.KeyboardKey.KEY_SLASH) == 1
-					and (
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
-					)
-				then
-					editor.text:toggleLineComment("--")
-					editor._highlightCache = {}
-				end
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_PAGE_DOWN) == 1 then
+				local visibleLines = math.floor(viewportHeight / lineHeight)
+				editor.text.cursor.line = math.min(#editor.text.lines, editor.text.cursor.line + visibleLines)
+				editor.scrollY = math.min(editor.maxScroll, editor.scrollY + visibleLines * lineHeight)
+				updateSelection()
+			end
 
-				-- Ctrl+Shift+K (Delete Line)
-				if
-					raylib.IsKeyPressed(const.KeyboardKey.KEY_K) == 1
-					and (raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1 or raylib.IsKeyDown(
-						const.KeyboardKey.KEY_RIGHT_CONTROL
-					) == 1)
-					and (
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
-					)
-				then
-					editor.text:deleteCurrentLine()
-					editor._highlightCache = {}
-					editor:updateLSP()
-				end
+			if
+				raylib.IsKeyPressed(const.KeyboardKey.KEY_SLASH) == 1
+				and (
+					raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
+					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
+				)
+			then
+				editor.text:toggleLineComment("--")
+				editor._highlightCache = {}
+			end
 
-				-- Ctrl+D (Duplicate)
-				if
-					raylib.IsKeyPressed(const.KeyboardKey.KEY_D) == 1
-					and (
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
-					)
-				then
-					editor.text:duplicateLine()
-					editor._highlightCache = {}
-					editor:updateLSP()
-				end
+			-- Ctrl+Shift+K (Delete Line)
+			if
+				raylib.IsKeyPressed(const.KeyboardKey.KEY_K) == 1
+				and (raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1 or raylib.IsKeyDown(
+					const.KeyboardKey.KEY_RIGHT_CONTROL
+				) == 1)
+				and (
+					raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
+					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
+				)
+			then
+				editor.text:deleteCurrentLine()
+				editor._highlightCache = {}
+				editor:updateLSP()
+			end
+
+			-- Ctrl+D (Duplicate)
+			if
+				raylib.IsKeyPressed(const.KeyboardKey.KEY_D) == 1
+				and (
+					raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
+					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
+				)
+			then
+				editor.text:duplicateLine()
+				editor._highlightCache = {}
+				editor:updateLSP()
 			end
 
 			if raylib.IsKeyDown(341) == 1 then

@@ -15,6 +15,7 @@ local shader = require("./renderer/shader")
 local freecam = require("./renderer/freecam")
 local meshlib = require("./renderer/mesh")
 local ki3d = require("@ki3d")
+local ffi = zune.ffi
 local utils = require("@bufferutils")
 
 -- TYPES
@@ -29,6 +30,8 @@ function KiRend.new(config: KiRendConf)
 	-- RAYLIB INIT
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 	lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
+	lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
+
 	lib.InitWindow(config.width, config.height, config.title)
 	lib.SetTargetFPS(config.maxFps)
 	ki3d.init()
@@ -46,6 +49,10 @@ function KiRend.new(config: KiRendConf)
 
 	local blur = require("./renderer/guiblur")
 	local activeCamera
+
+	local normalShader = raylib.lib.LoadShader("./src/assets/shaders/normal.vs", "./src/assets/shaders/normal.fs")
+	local depthShader = raylib.lib.LoadShader("./src/assets/shaders/depth.vs", "./src/assets/shaders/depth.fs")
+	ki3d.SetPassShaders(normalShader, depthShader)
 
 	local renderer_eventbus = signal.new()
 	local renderer_hooks = {
@@ -65,12 +72,31 @@ function KiRend.new(config: KiRendConf)
 	local renderer_storage = {
 		fonts = {},
 	}
+	local renderer_draw_calls = {}
 	local renderer_meshes = {}
 	local ENGINE_PROFILER = {}
+	local globalShaderOverride = nil -- Shader to use instead of material's shader
 
 	local newBlurInstance = blur.Init(config.width, config.height)
+	local rendererObject
 
-	local rendererObject = {
+	local function allocateMeshColors(mesh: buffer, r: number, g: number, b: number, a: number)
+		local vertexCount = buffer.readi32(mesh, structs.Mesh:offset("vertexCount"))
+		local byteSize = vertexCount * 4 * ffi.types.u8:size() -- 4 bytes per vertex (RGBA)
+		local colorsPtr = ffi.alloc(byteSize) -- allocate unsigned char array
+
+		for i = 0, vertexCount - 1 do
+			local base = i * 4
+			colorsPtr:writeu8(base + 0, r) -- R
+			colorsPtr:writeu8(base + 1, g) -- G
+			colorsPtr:writeu8(base + 2, b) -- B
+			colorsPtr:writeu8(base + 3, a) -- A
+		end
+
+		return colorsPtr
+	end
+
+	rendererObject = {
 		Mesh = meshlib,
 		Skybox = skybox,
 		Freecam = freecam,
@@ -135,24 +161,28 @@ function KiRend.new(config: KiRendConf)
 			end,
 		},
 
-		Pool = {
-			new = function(type: "2d" | "3d" | "gizmo", renderFn: () -> (), priority: number?)
-				local id = math.random(1, 99999)
-				local poolEntry = {
-					render = renderFn,
-					object = nil,
-					priority = priority or 0,
-				}
-
-				if type == "2d" then
-					renderer_pool.gui[id] = poolEntry
-				elseif type == "3d" then
-					renderer_pool.object[id] = poolEntry
-				elseif type == "gizmo" then
-					renderer_pool.gizmos[id] = poolEntry
+		MeshPool = {
+			DrawMesh = function(mesh, material, object_shader, matrix, color)
+				if object_shader then
+					local wrapper = utils.wrap(material, structs.Material)
+					wrapper.shader = utils.typepointer(object_shader)
 				end
 
-				return id
+				table.insert(renderer_draw_calls, {
+					mesh = mesh,
+					material = material,
+					matrix = matrix,
+				})
+			end,
+
+			CreateMaterial = function(texture, shader)
+				local default = lib.LoadMaterialDefault()
+				lib.SetMaterialTexture(default, 0, texture)
+
+				local wrapper = utils.wrap(default, structs.Material)
+				wrapper.shader = utils.typepointer(shader)
+
+				return wrapper
 			end,
 
 			AddMesh = function(mesh: buffer, mat_texture, mat_shader: buffer?)
@@ -197,6 +227,27 @@ function KiRend.new(config: KiRendConf)
 						break
 					end
 				end
+			end,
+		},
+
+		Pool = {
+			new = function(type: "2d" | "3d" | "gizmo", renderFn: () -> (), priority: number?)
+				local id = math.random(1, 99999)
+				local poolEntry = {
+					render = renderFn,
+					object = nil,
+					priority = priority or 0,
+				}
+
+				if type == "2d" then
+					renderer_pool.gui[id] = poolEntry
+				elseif type == "3d" then
+					renderer_pool.object[id] = poolEntry
+				elseif type == "gizmo" then
+					renderer_pool.gizmos[id] = poolEntry
+				end
+
+				return id
 			end,
 
 			SetPriority = function(id, newPriority: number)
@@ -247,8 +298,119 @@ function KiRend.new(config: KiRendConf)
 		},
 	}
 
+	function rendererObject.GetViewMatrix()
+		if activeCamera then
+			return raylib.lib.GetCameraMatrix(activeCamera)
+		end
+		return
+	end
+
+	function rendererObject:GetProjectionMatrix()
+		if activeCamera then
+			return raylib.lib.rlGetMatrixProjection()
+		end
+		return
+	end
+
+	function rendererObject:GetInverseProjectionMatrix()
+		local proj = self:GetProjectionMatrix()
+		if not proj then
+			return nil
+		end
+		if raylib.lib.MatrixInvert then
+			return raylib.lib.MatrixInvert(proj)
+		end
+		return
+	end
+
+	function rendererObject:MakeKernelTex(kernelSize: number?)
+		local ksize = kernelSize or 32
+
+		local kernel = {}
+		for i = 1, ksize do
+			local sample = {
+				x = math.random() * 2 - 1,
+				y = math.random() * 2 - 1,
+				z = math.random(),
+			}
+
+			local scale = i / ksize
+			scale = 0.1 + 0.9 * scale * scale
+			kernel[i] = { sample.x * scale, sample.y * scale, sample.z * scale }
+		end
+
+		local data = buffer.create(ksize * 3 * 4) -- 3 floats * 4 bytes each
+		for i = 1, ksize do
+			local v = kernel[i]
+			buffer.writef32(data, (i - 1) * 12 + 0, v.x) -- offset in bytes
+			buffer.writef32(data, (i - 1) * 12 + 4, v.y)
+			buffer.writef32(data, (i - 1) * 12 + 8, v.z)
+		end
+
+		local img = lib.ImageFromBuffer(data, ksize, 1, 1, raylib.const.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R32G32B32)
+		local tex = lib.LoadTextureFromImage(img)
+		lib.UnloadImage(img) -- free CPU-side image
+		return tex
+	end
+
+	function rendererObject:MakeNoiseTex(size: number?)
+		local w = size or 4
+		local h = w
+		local pixelCount = w * h
+		local data = buffer.create(pixelCount * 3)
+		for i = 0, pixelCount - 1 do
+			local r = math.random(0, 255)
+			local g = math.random(0, 255)
+			local b = math.random(0, 255)
+			buffer.writeu8(data, i * 3, r)
+			buffer.writeu8(data, i * 3 + 1, g)
+			buffer.writeu8(data, i * 3 + 2, b)
+		end
+
+		local img = lib.ImageFromBuffer(data, w, h, 1, raylib.const.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8)
+		local tex = lib.LoadTextureFromImage(img)
+		lib.UnloadImage(img)
+		return tex
+	end
+
+	function rendererObject:MakeDepthBuffer()
+		local const = raylib.const
+		local width, height = raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()
+
+		local fbo = raylib.lib.rlLoadFramebuffer(width, height)
+		raylib.lib.rlEnableFramebuffer(fbo)
+
+		local depthTex = raylib.lib.rlLoadTextureDepth(width, height, true)
+		raylib.lib.rlFramebufferAttach(fbo, depthTex, const.RL_ATTACHMENT_DEPTH, const.RL_ATTACHMENT_TEXTURE2D, 0)
+
+		local normalTex =
+			raylib.lib.rlLoadTexture(nil, width, height, const.PixelFormat.PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1)
+
+		raylib.lib.rlFramebufferAttach(
+			fbo,
+			normalTex,
+			const.RL_ATTACHMENT_COLOR_CHANNEL0,
+			const.RL_ATTACHMENT_TEXTURE2D,
+			0
+		)
+
+		if not raylib.lib.rlFramebufferComplete(fbo) then
+			error("Framebuffer not complete")
+		end
+
+		raylib.lib.rlDisableFramebuffer()
+
+		self.FBO = fbo
+		self.Depth = depthTex
+		self.Normal = normalTex
+	end
+
 	function rendererObject:SetProfiler(profilerObject)
 		ENGINE_PROFILER = profilerObject
+	end
+
+	function rendererObject:SetGlobalShader(shader)
+		globalShaderOverride = shader
 	end
 
 	function rendererObject:MakeShader(name, ki3dConfig)
@@ -294,6 +456,19 @@ function KiRend.new(config: KiRendConf)
 				entry.render(rendererObject.RuntimeLibrary)
 			end
 		end
+
+		for i, drawCall in pairs(renderer_draw_calls) do
+			local material = drawCall.material
+			-- Check for global shader override
+			local shaderOverride = _G._globalShaderOverride or globalShaderOverride
+			if shaderOverride then
+				local wrapper = utils.wrap(material, structs.Material)
+				wrapper.shader = utils.typepointer(shaderOverride)
+			end
+			raylib.lib.DrawMesh(drawCall.mesh, drawCall.material, drawCall.matrix)
+			renderer_draw_calls[i] = nil
+		end
+		table.clear(renderer_draw_calls)
 
 		for _, item in ipairs(getSortedPool(renderer_pool.gizmos)) do
 			local entry = item.entry
@@ -389,13 +564,13 @@ function KiRend.new(config: KiRendConf)
 		lib.BeginDrawing()
 
 		if rendererObject.Enable3D then
-			ki3d:Begin3D()
-
-			rendererObject:Render3D()
-
-			ki3d:End3D()
+			ki3d.enabled = true
+			-- New pipeline: KI3D owns depth, normal, and scene passes.
+			-- drawFn is called up to 3 times (depth, normal, main) with shader overrides.
+			ki3d:Frame(activeCamera, function()
+				rendererObject:Render3D()
+			end)
 		end
-		--lib.EndTextureMode()
 
 		ki3d:Draw(activeCamera)
 

@@ -85,6 +85,10 @@ return {
 		return camCF.Position
 	end,
 
+	ToVectorShader = function()
+		return { camCF.Position.X, camCF.Position.Y, camCF.Position.Z }
+	end,
+
 	SetCFrame = function(cf)
 		camCF = cf
 	end,

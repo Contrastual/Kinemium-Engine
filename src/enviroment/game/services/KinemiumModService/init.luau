@@ -13,6 +13,8 @@ export type KinemiumMod = {
 	Destroy: ((self: any) -> ())?,
 }
 
+local namespaces = {}
+
 local KinemiumModService = Instance.new("KinemiumModService")
 KinemiumModService.ExplorerHidden = true
 
@@ -49,6 +51,10 @@ KinemiumModService.InitRenderer = function(renderer, renderer_signal)
 			end,
 		},
 	})
+
+	function KinemiumModService:ExposeNamespace(namespace, methods)
+		namespaces[namespace] = methods
+	end
 end
 
 return KinemiumModService

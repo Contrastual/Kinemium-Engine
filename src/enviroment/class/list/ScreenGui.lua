@@ -19,6 +19,7 @@ local proptble = {
 	BackgroundColor3 = Color3.new(1, 1, 1),
 	BackgroundTransparency = 1,
 	RenderOffset = Vector2.new(0, 0),
+	OverrideScreenSize = false,
 
 	BaseClass = "UIContainer",
 }
@@ -41,7 +42,9 @@ return {
 				renderHeight = lib.GetRenderHeight()
 			end
 
-			instance.Size = UDim2.new(0, renderWidth, 0, renderHeight)
+			if not instance.OverrideScreenSize then
+				instance.Size = UDim2.new(0, renderWidth, 0, renderHeight)
+			end
 
 			for _, child in pairs(instance:GetChildren()) do
 				if child["render"] then

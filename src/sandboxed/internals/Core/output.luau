@@ -28,6 +28,7 @@ local SecondaryTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor:T
 )
 local ImageColor =
 	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
+local lastLogCount = 0
 
 if game.Context ~= Enum.GameContext.Editor then
 	return
@@ -126,7 +127,7 @@ window.stepped = function(windowData)
 		local winX, winY = windowData.x, windowData.y + 30
 		local winWidth, winHeight = windowData.width, windowData.height
 		local cellHeight = 25
-		local padding = 5
+		local padding = 2
 
 		if rl.IsWindowResized() == 1 then
 			window.dragspring:target(windowData, {
@@ -138,23 +139,25 @@ window.stepped = function(windowData)
 		end
 
 		local logs = LogService.GetLogHistory()
-		local totalHeight = #logs * (cellHeight + padding)
-		local targetOffset = 0
+		local logCount = #logs
 
-		if totalHeight > winHeight then
-			targetOffset = totalHeight - winHeight
+		if logCount ~= lastLogCount then
+			lastLogCount = logCount
+
+			local totalHeight = logCount * (cellHeight + padding)
+
+			if totalHeight > winHeight then
+				scrollOffset = totalHeight - winHeight
+			else
+				scrollOffset = 0
+			end
 		end
-
-		local scrollSpeed = 0.2
-		scrollOffset = scrollOffset + (targetOffset - scrollOffset) * scrollSpeed
 
 		for i, log in ipairs(logs) do
 			local cellY = winY + (i - 1) * (cellHeight + padding) - scrollOffset
 			local rect = { x = winX + 5, y = cellY, width = winWidth - 10, height = cellHeight }
 
 			if cellY + cellHeight >= winY and cellY <= winY + winHeight then
-				rl.DrawRectangle(rect.x, rect.y, rect.width, rect.height, SecondaryBackgroundColor)
-
 				local logColor = TextColor
 				if log.type == "print" then
 					logColor = structs.Color:new({ r = 200, g = 200, b = 200, a = 255 })
@@ -169,7 +172,7 @@ window.stepped = function(windowData)
 				end
 				local ts = os.date("%H:%M:%S", log.time)
 				local text = string.format("[%s] %s", ts, log.message)
-				rl.DrawTextEx(vend, text, vector.create(rect.x + 8, rect.y + 4), 22, 1, logColor)
+				rl.DrawTextEx(vend, text, vector.create(rect.x + 8, rect.y + 4), 17, 1, logColor)
 			end
 		end
 	end

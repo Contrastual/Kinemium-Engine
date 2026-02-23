@@ -1,9 +1,11 @@
-// shaders/bloom_extract.fs
+// shaders/bloom_extract.fs - Extract bright areas above threshold
 #version 330
 
 in vec2 fragTexCoord;
+
 uniform sampler2D texture0;
 uniform float threshold;
+uniform float intensity;
 
 out vec4 fragColor;
 
@@ -16,7 +18,7 @@ void main()
     if (brightness > threshold) {
         // Scale brightness above threshold
         float excess = (brightness - threshold) / max(1.0 - threshold, 0.001);
-        fragColor = vec4(color * excess, 1.0);
+        fragColor = vec4(color * excess * intensity, 1.0);
     } else {
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
     }

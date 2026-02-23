@@ -12,6 +12,7 @@ local StudioThemeService = game:GetService("StudioThemeService")
 local ProjectLoaderService = game:GetService("ProjectLoaderService")
 local FileDialogService = game:GetService("FileDialogService")
 local DiscordService = game:GetService("DiscordService")
+local ProjectSyncService = game:GetService("ProjectSyncService")
 
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local arect = require("@Arect")(raylib.lib)
@@ -141,7 +142,7 @@ group = aereon.create({
 					ishared.FolderPath = projInput
 					ishared.GameIcon = gameiconPath
 					ProjectLoaderService.NewProject(ishared.GameName, ishared.FolderPath, gameiconPath)
-					ProjectLoaderService.StartObserve(ishared.FolderPath)
+					ProjectSyncService:StartSyncing(ishared.FolderPath)
 					ishared.EnableHomescreen = false
 					DiscordService.SetRPC({
 						details = "Working on " .. ishared.GameName,
@@ -237,7 +238,7 @@ for _, projectData in pairs(projects) do
 			ishared.FolderPath = projectData.path
 			ishared.GameIcon = projectData.icon
 			ishared.EnableHomescreen = false
-			ProjectLoaderService.StartObserve(ishared.FolderPath)
+			ProjectSyncService:StartSyncing(ishared.FolderPath)
 
 			DiscordService.SetRPC({
 				details = "Working on " .. ishared.GameName,
