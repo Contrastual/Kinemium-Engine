@@ -93,10 +93,6 @@ local rotateGrid = textbox.new({
 	end,
 })
 
-if os ~= "windows" then
-	return
-end
-
 local StartCFrame
 local StartSize
 

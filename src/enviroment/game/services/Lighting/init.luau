@@ -387,38 +387,6 @@ local function initShaders(ki3d, shader, game, renderer)
 		end,
 	})
 
-	-- SSAO Filter (priority 10 — runs before sunrays/bloom/fog)
-	ki3d.filters.new("ssao", {
-		priority = 10,
-		blendMode = "multiply", -- multiplies the greyscale AO mask onto the scene
-
-		shader = {
-			vertex = "./src/assets/shaders/ssao.vs",
-			fragment = "./src/assets/shaders/ssao.frag",
-		},
-
-		begin = function(self, runtime)
-			local shaderobj = self.shader
-
-			-- Bind G-Buffer textures (SetShaderTextureRaw takes the shader buffer directly)
-			shader.SetShaderTextureRaw(shaderobj, "depthTexture", runtime.depth)
-			shader.SetShaderTextureRaw(shaderobj, "normalTexture", runtime.normal)
-
-			-- Pass resolution so the noise hash is pixel-accurate
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"resolution",
-				{ runtime.width, runtime.height },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC2
-			)
-
-			raylib.lib.BeginShaderMode(shaderobj)
-		end,
-
-		finish = function(self, runtime)
-			runtime.lib.EndShaderMode()
-		end,
-	})
 
 	ki3d.filters.new("bloom", {
 		priority = 30,
@@ -456,77 +424,6 @@ local function initShaders(ki3d, shader, game, renderer)
 		end,
 	})
 
-	-- Fog Filter
-	ki3d.filters.new("fog", {
-		priority = 40,
-		shader = {
-			vertex = "./src/assets/shaders/ssao.vs",
-			fragment = "./src/assets/shaders/fog.frag",
-		},
-
-		fogEnabled = true,
-		fogMode = 2, -- FOG_EXP2
-		fogColor = { 0.7, 0.8, 0.9 },
-		fogDensity = 0.01,
-		fogStart = 10.0,
-		fogEnd = 100.0,
-		skyAffect = 1.0,
-
-		begin = function(self, runtime)
-			local shaderobj = self.shader
-
-			-- Set depth texture
-			shader.SetShaderTexture(shaderobj, "uTexDepth", runtime.depth)
-
-			-- Set near/far planes (approximate for now)
-			shader.SetShaderValueRaw(shaderobj, "uNear", 0.1, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
-			shader.SetShaderValueRaw(shaderobj, "uFar", 500.0, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
-
-			-- Set fog parameters
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uFogMode",
-				self.fogMode,
-				const.ShaderUniformDataType.SHADER_UNIFORM_INT
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uFogColor",
-				self.fogColor,
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uFogDensity",
-				self.fogDensity,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uFogStart",
-				self.fogStart,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uFogEnd",
-				self.fogEnd,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"uSkyAffect",
-				self.skyAffect,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-
-			raylib.lib.BeginShaderMode(shaderobj)
-		end,
-
-		finish = function(self, runtime)
-			runtime.lib.EndShaderMode()
-		end,
-	})
 
 	ki3d.EnableFilters()
 end

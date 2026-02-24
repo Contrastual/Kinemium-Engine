@@ -322,6 +322,50 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
+	local function drawRaylib(part, model, mesh, matData)
+		local data = loadedMaterials[part.Material.Value]
+		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
+			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+			part._lastCFrame = part.CFrame
+			part._lastSize = part.Size
+		end
+
+		local matrix = part._raylibMatrix
+
+		part._cfvec = part._cfvec or vector.create(0, 0, 0)
+		part._sizevec = part._sizevec or vector.create(0, 0, 0)
+
+		if part._lastCFrame ~= part.CFrame then
+			part._cfvec = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+			part._lastCFrame = part.CFrame
+		end
+
+		if part._lastSize ~= part.Size then
+			part._sizevec = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
+			part._lastSize = part.Size
+		end
+
+		local axis, angle = bufferUtils.EulerToAxisAngle(part.Rotation)
+		local position = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+		local scale
+		local tint = part.Color:ToRaylib(part.Transparency)
+		local matData = loadedMaterials[part.Material.Value]
+
+		if part._model then
+			bufferUtils.SetModelTex(model, matData.texture)
+
+			scale =
+				vector.create(part.Size.X * part.MeshScale, part.Size.Y * part.MeshScale, part.Size.Z * part.MeshScale)
+			lib.DrawModelEx(part._model, position, axis, angle, scale, tint)
+		else
+			bufferUtils.SetModelTex(model, matData.texture)
+			scale = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
+			lib.BeginShaderMode(matData.shader or lights.shader)
+			lib.DrawModelEx(model, position, axis, angle, scale, tint)
+			lib.EndShaderMode()
+		end
+	end
+
 	local function drawChunks()
 		local Kinemium_camera = Workspace.Camera
 		local camPos = Kinemium_camera.CFrame.Position
@@ -353,13 +397,18 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 						local mesh = meshData[2]
 
-						renderer.MeshPool.DrawMesh(
-							mesh,
-							matData.material,
-							matData.shader or lights.shader,
-							matrix,
-							{ part.Color.R, part.Color.G, part.Color.B, part.Transparency }
-						)
+						if zune.platform.os == "linux" then 
+							drawRaylib(part, meshData[1], mesh, matData)
+						else
+							renderer.MeshPool.DrawMesh(
+								mesh,
+								matData.material,
+								matData.shader or lights.shader,
+								matrix,
+								{ part.Color.R, part.Color.G, part.Color.B, part.Transparency }
+							)
+						end
+
 						--drawRaylibInstanced(part, meshBuf, matData)
 					end
 				end

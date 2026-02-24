@@ -459,7 +459,6 @@ function KiRend.new(config: KiRendConf)
 
 		for i, drawCall in pairs(renderer_draw_calls) do
 			local material = drawCall.material
-			-- Check for global shader override
 			local shaderOverride = _G._globalShaderOverride or globalShaderOverride
 			if shaderOverride then
 				local wrapper = utils.wrap(material, structs.Material)
