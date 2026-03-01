@@ -56,6 +56,14 @@ _G.include = function(path)
 	return required
 end
 
+_G.plug = function(lib)
+	local caller = getfenv(2)
+	for k, v in pairs(lib) do
+		caller[k] = v
+	end
+	return lib
+end
+
 _G.GetFlagValue = function(flag)
 	local args = zune.process.args
 	for i, v in ipairs(args) do
@@ -84,6 +92,17 @@ end
 _G.readFloat = function(buf)
 	return buffer.readf32(buf, 0)
 end
+
+_G.color = {
+	new = function(r, g, b, a)
+		local colorBuf = buffer.create(4)
+		buffer.writeu8(colorBuf, 0, r) -- r
+		buffer.writeu8(colorBuf, 1, g) -- g
+		buffer.writeu8(colorBuf, 2, b) -- b
+		buffer.writeu8(colorBuf, 3, a) -- a
+		return colorBuf
+	end,
+}
 
 _G.writeFloat = function(buf, v)
 	buffer.writef32(buf, 0, v)

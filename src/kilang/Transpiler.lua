@@ -1,20 +1,21 @@
-local preprocessor = {}
+local Transpiler = {}
 
 local default = require("./superset/kilang")
 local cpp = require("./superset/cpp")
 
 local langs = {
-	kilang = table.clone(default),
-	cpp = table.clone(cpp),
+	kilang = default,
+	cpp = cpp,
 }
 
-function preprocessor.run(code, lang)
+function Transpiler.run(code, lang, gsubFuncs, dataThread)
 	local env = lang.env or {}
 
-	for _, rule in ipairs(lang) do
+	for _, rule in ipairs(gsubFuncs) do
 		local success, result = pcall(function()
 			return rule.gsub(code, env)
 		end)
+
 		if success then
 			code = result
 			if rule.success then
@@ -24,19 +25,21 @@ function preprocessor.run(code, lang)
 			warn("Rule failed:", result)
 		end
 	end
-	return code
+
+	return code, dataThread
 end
 
-function preprocessor.registerLang(name, rules)
+function Transpiler.registerLang(name, rules)
 	langs[name] = rules
 end
 
-function preprocessor.runLang(code, name)
+function Transpiler.runLang(code, name)
 	local lang = langs[name]
+	local gsubFuncs, dataThread = lang.process(code)
 	if not lang then
 		error("Language not registered: " .. name)
 	end
-	return preprocessor.run(code, lang)
+	return Transpiler.run(code, lang, gsubFuncs, dataThread)
 end
 
-return preprocessor
+return Transpiler

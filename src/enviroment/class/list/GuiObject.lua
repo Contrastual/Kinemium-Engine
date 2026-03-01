@@ -68,7 +68,7 @@ local function calculateDrawParams(object, lib)
 		local parentDrawPos = getAbsoluteDrawPos(object.Parent, lib)
 		drawPos = Vector2.new(
 			parentDrawPos.X + object._LayoutRelativePosition.X - size.X * anchor.X,
-			parentDrawPos.Y + object._LayoutRelativePosition.Y - size.Y * anchor.Yzu
+			parentDrawPos.Y + object._LayoutRelativePosition.Y - size.Y * anchor.Y
 		)
 	else
 		size = object.Size:ToPixels(parentSize)

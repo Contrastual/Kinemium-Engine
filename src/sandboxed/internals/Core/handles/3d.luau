@@ -133,7 +133,7 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 		local part = offset.obj
 		if part and part.Parent then
 			local finalCF = snappedPivot * offset.pos
-			--part.CFrame = finalCF
+			part.CFrame = finalCF
 		end
 	end
 end)

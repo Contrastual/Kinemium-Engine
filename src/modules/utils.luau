@@ -286,6 +286,15 @@ function bufferUtils.wrap(object: buffer | FFIPointer, template: FFIStructureTyp
 	return setmetatable(wrapper, mt)
 end
 
+-- Shader
+function bufferUtils.SetShaderLoc(shader, locIndex, value)
+	-- Read the locs int* pointer stored at offset 8 in the Shader struct
+	-- shader is a buffer, so we need to get an FFIPointer to it first
+	local shaderPtr = zune.ffi.dupe(shader)
+	local locsPtr = shaderPtr:readptr(8) -- locs is at offset 8
+	locsPtr:writei32(29 * 4, value)
+end
+
 -- Unsigned integers
 function bufferUtils:u8(number)
 	local buf = buffer.create(1)

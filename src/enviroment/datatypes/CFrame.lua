@@ -801,31 +801,61 @@ function CFrame.fromQuaternion(x, y, z, w, pos)
 	return CFrame.fromMatrix(pos, right, up, look)
 end
 
-function CFrame:ToRaylibMatrix(structs)
+function CFrame:GetMatrixData(scale)
 	local r = self.Rotation
 	local p = self.Position
 
-	return structs.Matrix:new({
-		m0 = r[1][1],
-		m1 = r[2][1],
-		m2 = r[3][1],
-		m3 = 0,
+	scale = scale or Vector3.new(1, 1, 1)
 
-		m4 = r[1][2],
-		m5 = r[2][2],
-		m6 = r[3][2],
-		m7 = 0,
+	if scale then
+		return {
+			m0 = r[1][1] * scale.X,
+			m1 = r[2][1] * scale.X,
+			m2 = r[3][1] * scale.X,
+			m3 = 0,
 
-		m8 = r[1][3],
-		m9 = r[2][3],
-		m10 = r[3][3],
-		m11 = 0,
+			m4 = r[1][2] * scale.Y,
+			m5 = r[2][2] * scale.Y,
+			m6 = r[3][2] * scale.Y,
+			m7 = 0,
 
-		m12 = p.X,
-		m13 = p.Y,
-		m14 = p.Z,
-		m15 = 1,
-	})
+			m8 = r[1][3] * scale.Z,
+			m9 = r[2][3] * scale.Z,
+			m10 = r[3][3] * scale.Z,
+			m11 = 0,
+
+			m12 = p.X,
+			m13 = p.Y,
+			m14 = p.Z,
+			m15 = 1,
+		}
+	else
+		return {
+			m0 = r[1][1],
+			m1 = r[2][1],
+			m2 = r[3][1],
+			m3 = 0,
+
+			m4 = r[1][2],
+			m5 = r[2][2],
+			m6 = r[3][2],
+			m7 = 0,
+
+			m8 = r[1][3],
+			m9 = r[2][3],
+			m10 = r[3][3],
+			m11 = 0,
+
+			m12 = p.X,
+			m13 = p.Y,
+			m14 = p.Z,
+			m15 = 1,
+		}
+	end
+end
+
+function CFrame:ToRaylibMatrix(structs)
+	return structs.Matrix:new(CFrame:GetMatrixData())
 end
 
 return CFrame

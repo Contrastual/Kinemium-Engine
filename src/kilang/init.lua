@@ -2,7 +2,7 @@ local kilang = {}
 
 local Kinemium_env = require("./enviroment/get")
 local sandboxer = require("./modules/sandboxer")
-local preprocessor = require("./kilang/preprocessor")
+local preprocessor = require("./kilang/Transpiler")
 local threads = {}
 
 kilang.renderer = nil
@@ -16,7 +16,7 @@ function kilang:init(cam)
 end
 
 function kilang:execute(code, opts)
-	code = preprocessor.runLang(code, opts.superset or "kilang")
+	code, syntax = preprocessor.runLang(code, opts.superset or "kilang")
 
 	local SecurityCapabilities = opts.SecurityCapabilities
 	local id = opts.StackId

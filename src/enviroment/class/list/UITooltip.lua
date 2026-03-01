@@ -1,12 +1,12 @@
-local Vector3 = require("@Vector3")
+local Vector2 = require("@Vector2")
 local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
-local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
+local RichText = require("@Kinemium.richtext")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()
+local defaultFont = raylib.lib.GetFontDefault()
 
 local propTable = {
 	Name = "UITooltip",
@@ -14,21 +14,22 @@ local propTable = {
 	BackgroundTransparency = 0.3,
 	TextColor3 = Color3.new(0, 0, 0),
 	TextTransparency = 0,
+	TextStrokeColor = Color3.new(0, 0, 0),
+	TextStrokeTransparency = 1,
 	TextSize = 18,
 	Visible = true,
-	--Font = Enum.Font.Montserrat,
+	Font = Enum.Font.DefaultEngineFont,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	TextSpacing = 1,
+	TextWrapped = false,
+	TextTruncate = Enum.TextTruncate.None,
+	TextScaled = false,
+	RichText = false,
+	MaxVisibleGraphemes = -1,
+	LineHeight = 1,
 	Text = "Hello World!",
 }
-
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return raylib.structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
 
 return {
 	class = "UITooltip",
@@ -50,16 +51,12 @@ return {
 					local new = arect.new(absolutePosition.X, absolutePosition.Y, absoluteSize.X, absoluteSize.Y)
 					if arect.MouseIsInRect(new) then
 						local position = raylib.lib.GetMousePosition()
-
-						local final = vector.create(position.x + 5, position.y - object.TextSize - 3)
-
-						raylib.lib.DrawText(
-							object.Text,
-							final.x,
-							final.y,
-							object.TextSize,
-							Color3ToRaylib(object.TextColor3, object.TextTransparency)
-						)
+						local framePos = Vector2.new(position.x + 5, position.y - object.TextSize - 3)
+						local frameSize = Vector2.new(10000, math.max(object.TextSize * 4, 48))
+						local layout, spacing = RichText.GetLayout(object, frameSize, renderer, defaultFont)
+						if layout then
+							RichText.DrawLayout(raylib.lib, object, framePos, frameSize, layout, spacing)
+						end
 					end
 				end
 			end

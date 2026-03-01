@@ -124,6 +124,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		return bestCol
 	end
 
+	local function copyLines(lines)
+		local cloned = table.create(#lines)
+		for i, line in ipairs(lines) do
+			cloned[i] = line
+		end
+		return cloned
+	end
+
 	function editor:updateBreakpoints()
 		local active = {}
 		for line, enabled in pairs(self.breakpoints) do
@@ -140,6 +148,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	editor.tabSize = 4
 	editor.spaceWidth = nil -- computed from font
 	editor.text = ideBuffer.create()
+	editor.historyLimit = 200
+	editor._historyByBuffer = {}
+	editor._pendingEditSnapshot = nil
+	editor._lastEditChanged = false
 	editor.breakpoints = {}
 	editor:updateBreakpoints()
 	editor.text.lines = { "" }
@@ -203,6 +215,165 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 	editor.highlightedToken = nil
 
+	function editor:getHistoryState(bufferRef)
+		local key = bufferRef or self.text
+		local history = self._historyByBuffer[key]
+		if not history then
+			history = {
+				undoStack = {},
+				redoStack = {},
+			}
+			self._historyByBuffer[key] = history
+		end
+		return history
+	end
+
+	function editor:createSnapshot()
+		return {
+			lines = copyLines(self.text.lines),
+			cursor = {
+				line = self.text.cursor.line,
+				col = self.text.cursor.col,
+			},
+			selection = {
+				active = self.text.selection.active,
+				startLine = self.text.selection.startLine,
+				startCol = self.text.selection.startCol,
+				endLine = self.text.selection.endLine,
+				endCol = self.text.selection.endCol,
+			},
+			scrollY = self.scrollY,
+		}
+	end
+
+	function editor:restoreSnapshot(snapshot)
+		if not snapshot then
+			return
+		end
+
+		self.text.lines = copyLines(snapshot.lines)
+		self.text.cursor.line = math.clamp(snapshot.cursor.line, 1, #self.text.lines)
+		self.text.cursor.col = math.clamp(snapshot.cursor.col, 1, #self.text.lines[self.text.cursor.line] + 1)
+
+		self.text.selection.active = snapshot.selection.active
+		self.text.selection.startLine = snapshot.selection.startLine
+		self.text.selection.startCol = snapshot.selection.startCol
+		self.text.selection.endLine = snapshot.selection.endLine
+		self.text.selection.endCol = snapshot.selection.endCol
+
+		self.scrollY = math.max(snapshot.scrollY or 0, 0)
+	end
+
+	function editor:textChanged(oldLines, newLines)
+		if #oldLines ~= #newLines then
+			return true
+		end
+		for i = 1, #oldLines do
+			if oldLines[i] ~= newLines[i] then
+				return true
+			end
+		end
+		return false
+	end
+
+	function editor:beginTextEdit()
+		if self._pendingEditSnapshot then
+			return
+		end
+		self._pendingEditSnapshot = self:createSnapshot()
+	end
+
+	function editor:endTextEdit()
+		local snapshot = self._pendingEditSnapshot
+		self._pendingEditSnapshot = nil
+		self._lastEditChanged = false
+		if not snapshot then
+			return
+		end
+
+		if not self:textChanged(snapshot.lines, self.text.lines) then
+			return
+		end
+
+		local history = self:getHistoryState(self.text)
+		table.insert(history.undoStack, snapshot)
+		if #history.undoStack > self.historyLimit then
+			table.remove(history.undoStack, 1)
+		end
+		history.redoStack = {}
+		self._lastEditChanged = true
+	end
+
+	function editor:undo()
+		local history = self:getHistoryState(self.text)
+		local snapshot = table.remove(history.undoStack)
+		if not snapshot then
+			return
+		end
+
+		table.insert(history.redoStack, self:createSnapshot())
+		self:restoreSnapshot(snapshot)
+		self._highlightCache = {}
+		autocomplete.indexVariables(self, game)
+		autocomplete.updateAutocomplete(self, game)
+		self:updateLSP()
+	end
+
+	function editor:redo()
+		local history = self:getHistoryState(self.text)
+		local snapshot = table.remove(history.redoStack)
+		if not snapshot then
+			return
+		end
+
+		table.insert(history.undoStack, self:createSnapshot())
+		if #history.undoStack > self.historyLimit then
+			table.remove(history.undoStack, 1)
+		end
+		self:restoreSnapshot(snapshot)
+		self._highlightCache = {}
+		autocomplete.indexVariables(self, game)
+		autocomplete.updateAutocomplete(self, game)
+		self:updateLSP()
+	end
+
+	function editor:getNextUntitledName()
+		local used = {}
+		for _, tab in ipairs(self.buffers) do
+			used[tab.name] = true
+		end
+
+		local index = 1
+		while true do
+			local name = (index == 1) and "untitled.lua" or ("untitled" .. tostring(index) .. ".lua")
+			if not used[name] then
+				return name
+			end
+			index += 1
+		end
+	end
+
+	function editor:activateBuffer(index)
+		local tab = self.buffers[index]
+		if not tab then
+			return
+		end
+
+		self.currentBufferIndex = index
+		self.text = tab.buffer
+		self.breakpoints = tab.breakpoints
+		self:updateBreakpoints()
+		self:getHistoryState(self.text)
+		self._highlightCache = {}
+		self:updateLSP()
+	end
+
+	function editor:closeCurrentTab()
+		if #self.buffers > 0 then
+			self:closeTab(self.currentBufferIndex)
+		end
+	end
+
 	function editor:openTab(name, content)
 		local newBuf = ideBuffer.create()
 		if content then
@@ -210,12 +381,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			newBuf:insertString(content)
 			newBuf:setCursor(1, 1)
 		end
-		table.insert(self.buffers, { name = name or "untitled.lua", buffer = newBuf, breakpoints = {} })
-		self.currentBufferIndex = #self.buffers
-		self.text = newBuf
-		self.breakpoints = self.buffers[self.currentBufferIndex].breakpoints
-		self:updateBreakpoints()
-		self._highlightCache = {}
+		local tab = { name = name or "untitled.lua", buffer = newBuf, breakpoints = {} }
+		table.insert(self.buffers, tab)
+		self:activateBuffer(#self.buffers)
 	end
 
 	function editor:updateSearch()
@@ -284,7 +452,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			return
 		end
 
-		-- Perform replacement using buffer methods to ensure history/LSP if needed (though we don't have undo yet)
+		self:beginTextEdit()
+
 		self.text:setCursor(res.line, res.col)
 		self.text.selection.active = true
 		self.text.selection.startLine = res.line
@@ -294,6 +463,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 		self.text:insertString(self.replace.query)
 		self.text.selection.active = false
+		self:endTextEdit()
 
 		self:updateLSP()
 		self:updateSearch() -- Re-search to find next matches
@@ -308,6 +478,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			return
 		end
 
+		self:beginTextEdit()
 		for i = #self.search.results, 1, -1 do
 			local res = self.search.results[i]
 			local line = self.text.lines[res.line]
@@ -316,6 +487,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			local after = line:sub(res.col + res.length)
 			self.text.lines[res.line] = before .. self.replace.query .. after
 		end
+		self:endTextEdit()
 
 		self:updateLSP()
 		self:updateSearch()
@@ -371,6 +543,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	end
 
 	function editor:format()
+		self:beginTextEdit()
+
 		local openers = { ["then"] = true, ["do"] = true, ["function"] = true, ["repeat"] = true, ["{"] = true }
 		local closers = { ["end"] = true, ["until"] = true, ["}"] = true }
 		local middle = { ["else"] = true, ["elseif"] = true }
@@ -412,6 +586,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 
 		self.text.lines = newLines
+		self:endTextEdit()
 		self._highlightCache = {}
 		self:updateLSP()
 		self.formatNotificationTimer = 2.0
@@ -425,11 +600,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if self.currentBufferIndex > #self.buffers then
 			self.currentBufferIndex = #self.buffers
 		end
-		self.text = self.buffers[self.currentBufferIndex].buffer
-		self.breakpoints = self.buffers[self.currentBufferIndex].breakpoints
-		self:updateBreakpoints()
-		self._highlightCache = {}
-		self:updateLSP()
+		self:activateBuffer(self.currentBufferIndex)
 	end
 
 	function editor:getCode()
@@ -480,10 +651,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			raylib.DrawTextEx(vend, tab.name, vector.create(tx + 5, y + 5), 14, 1, const.WHITE)
 
 			if raylib.IsMouseButtonPressed(0) == 1 and isMouseInRect(tabRect, raylib.GetMousePosition()) then
-				editor.currentBufferIndex = i
-				editor.text = tab.buffer
-				editor._highlightCache = {}
-				editor:updateLSP()
+				editor:activateBuffer(i)
 			end
 
 			local closeX = tx + tabWidth - 20
@@ -499,6 +667,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		local plusRect = { x = plusX, y = y, width = 30, height = tabHeight }
 		raylib.DrawRectangle(plusX, y, 30, tabHeight, theme_background)
 		raylib.DrawTextEx(vend, "+", vector.create(plusX + 10, y + 5), 18, 1, const.WHITE)
+		if raylib.IsMouseButtonPressed(0) == 1 and isMouseInRect(plusRect, raylib.GetMousePosition()) then
+			editor:openTab(editor:getNextUntitledName(), "")
+			return
+		end
 
 		local minimapWidth = 100
 		y = y + tabHeight
@@ -837,6 +1009,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						editor.gotoLine.query = editor.gotoLine.query .. char
 					end
 				else
+					editor:beginTextEdit()
 					local pairs = { ["("] = ")", ["["] = "]", ["{"] = "}", ['"'] = '"', ["'"] = "'" }
 					local handled = false
 
@@ -853,7 +1026,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 					if not handled then
 						editor.text:insertChar(char)
-						editor:updateLSP()
 
 						-- Auto-dedent
 						local currentLine = editor.text.lines[editor.text.cursor.line]
@@ -871,10 +1043,12 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 							editor.text:moveLeft()
 						end
 					end
+					editor:endTextEdit()
 
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 					editor._highlightCache = {}
+					editor:updateLSP()
 				end
 				byte = raylib.GetCharPressed()
 			end
@@ -1180,26 +1354,122 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 
 		if editor.isActive then
+			local ctrlDown = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_CONTROL) == 1
+				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
+			local shiftDown = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
+				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
+			local altDown = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
+				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
+
+			local function isWordChar(ch)
+				return ch:match("[%w_]") ~= nil
+			end
+
+			local function moveWordLeft()
+				local c = editor.text.cursor
+				local line = editor.text.lines[c.line]
+				local idx = c.col - 1
+
+				if idx <= 0 then
+					if c.line > 1 then
+						c.line -= 1
+						c.col = #editor.text.lines[c.line] + 1
+					end
+					return
+				end
+
+				while idx > 0 and line:sub(idx, idx):match("%s") do
+					idx -= 1
+				end
+
+				if idx > 0 and isWordChar(line:sub(idx, idx)) then
+					while idx > 0 and isWordChar(line:sub(idx, idx)) do
+						idx -= 1
+					end
+				else
+					while idx > 0 and not line:sub(idx, idx):match("[%w_%s]") do
+						idx -= 1
+					end
+				end
+
+				c.col = idx + 1
+			end
+
+			local function moveWordRight()
+				local c = editor.text.cursor
+				local line = editor.text.lines[c.line]
+				local idx = c.col
+
+				if idx > #line then
+					if c.line < #editor.text.lines then
+						c.line += 1
+						c.col = 1
+					end
+					return
+				end
+
+				while idx <= #line and line:sub(idx, idx):match("%s") do
+					idx += 1
+				end
+
+				if idx <= #line and isWordChar(line:sub(idx, idx)) then
+					while idx <= #line and isWordChar(line:sub(idx, idx)) do
+						idx += 1
+					end
+				else
+					while idx <= #line and not line:sub(idx, idx):match("[%w_%s]") do
+						idx += 1
+					end
+				end
+
+				c.col = idx
+			end
+
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_TAB) == 1 then
 				if editor.autocomplete.visible then
+					editor:beginTextEdit()
 					autocomplete.completeWord(editor)
+					editor:endTextEdit()
 					editor._highlightCache = {}
 					editor:updateLSP()
 				elseif editor.snippet and editor.snippet.active then
+					editor:beginTextEdit()
 					autocomplete.cycleSnippet(editor)
+					editor:endTextEdit()
 					editor._highlightCache = {}
 					editor:updateLSP()
 				else
+					editor:beginTextEdit()
 					editor.text:insertChar("\t")
+					editor:endTextEdit()
 					editor._highlightCache = {}
 					editor:updateLSP()
 				end
+			end
+
+			if ctrlDown and raylib.IsKeyPressed(const.KeyboardKey.KEY_Z) == 1 then
+				if shiftDown then
+					editor:redo()
+				else
+					editor:undo()
+				end
+			elseif ctrlDown and raylib.IsKeyPressed(const.KeyboardKey.KEY_Y) == 1 then
+				editor:redo()
+			end
+
+			if ctrlDown and raylib.IsKeyPressed(const.KeyboardKey.KEY_N) == 1 then
+				editor:openTab(editor:getNextUntitledName(), "")
+			end
+
+			if ctrlDown and raylib.IsKeyPressed(const.KeyboardKey.KEY_W) == 1 then
+				editor:closeCurrentTab()
 			end
 
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_ENTER) == 1 then
 				if editor.search.active and not editor.replace.active then
 					editor:nextSearchResult(size, lineHeight)
 				elseif editor.replace.active then
+					editor:beginTextEdit()
 					if
 						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
 						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
@@ -1208,14 +1478,18 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					else
 						editor:replaceNext(size, lineHeight)
 					end
+					editor:endTextEdit()
 				elseif editor.gotoLine.active then
 					editor:doGotoLine(size, lineHeight)
 				elseif editor.autocomplete.visible then
+					editor:beginTextEdit()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.completeWord(editor)
+					editor:endTextEdit()
 					editor._highlightCache = {}
 					editor:updateLSP()
 				else
+					editor:beginTextEdit()
 					if editor.text.selection.active then
 						editor.text:deleteSelection()
 					end
@@ -1243,6 +1517,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					if isBlockStart then
 						editor.text:insertString("\t")
 					end
+					editor:endTextEdit()
 
 					autocomplete.indexVariables(editor, game)
 					editor._highlightCache = {}
@@ -1261,25 +1536,74 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_BACKSPACE) == 1 then
-				if editor.search.active then
+				if editor.replace.active then
+					editor.replace.query = editor.replace.query:sub(1, -2)
+				elseif editor.search.active then
 					editor.search.query = editor.search.query:sub(1, -2)
 					editor:updateSearch()
 				elseif editor.gotoLine.active then
 					editor.gotoLine.query = editor.gotoLine.query:sub(1, -2)
-				elseif editor.text.selection.active then
-					editor.text:deleteSelection()
 				else
-					editor.text:backspace()
+					editor:beginTextEdit()
+					if ctrlDown and not editor.text.selection.active then
+						local oldLine = editor.text.cursor.line
+						local oldCol = editor.text.cursor.col
+						moveWordLeft()
+						local newLine = editor.text.cursor.line
+						local newCol = editor.text.cursor.col
+
+						if oldLine ~= newLine or oldCol ~= newCol then
+							editor.text.selection.active = true
+							editor.text.selection.startLine = newLine
+							editor.text.selection.startCol = newCol
+							editor.text.selection.endLine = oldLine
+							editor.text.selection.endCol = oldCol
+							editor.text:deleteSelection()
+						end
+					elseif editor.text.selection.active then
+						editor.text:deleteSelection()
+					else
+						editor.text:backspace()
+					end
+					editor:endTextEdit()
+					autocomplete.indexVariables(editor, game)
+					autocomplete.updateAutocomplete(editor, game)
+					editor._highlightCache = {}
+					editor:updateLSP()
 				end
-				autocomplete.indexVariables(editor, game)
-				autocomplete.updateAutocomplete(editor, game)
-				editor._highlightCache = {}
-				editor:updateLSP()
+			end
+
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_DELETE) == 1 then
+				if not editor.search.active and not editor.gotoLine.active then
+					editor:beginTextEdit()
+					if ctrlDown and not editor.text.selection.active then
+						local oldLine = editor.text.cursor.line
+						local oldCol = editor.text.cursor.col
+						moveWordRight()
+						local newLine = editor.text.cursor.line
+						local newCol = editor.text.cursor.col
+
+						editor.text.selection.active = true
+						editor.text.selection.startLine = oldLine
+						editor.text.selection.startCol = oldCol
+						editor.text.selection.endLine = newLine
+						editor.text.selection.endCol = newCol
+						editor.text:deleteSelection()
+					elseif editor.text.selection.active then
+						editor.text:deleteSelection()
+					else
+						editor.text:delete()
+					end
+					editor:endTextEdit()
+					autocomplete.indexVariables(editor, game)
+					autocomplete.updateAutocomplete(editor, game)
+					editor._highlightCache = {}
+					editor:updateLSP()
+				end
 			end
 
 			-- Arrow key handling
-			local shift = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT) == 1
-				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
+			local shift = shiftDown
 
 			local function updateSelection()
 				if shift then
@@ -1306,24 +1630,31 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				end
 				-- LEFT/RIGHT moves cursor while autocomplete is visible
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_LEFT) == 1 then
-					editor.text:moveLeft()
+					if ctrlDown then
+						moveWordLeft()
+					else
+						editor.text:moveLeft()
+					end
 					updateSelection()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_RIGHT) == 1 then
-					editor.text:moveRight()
+					if ctrlDown then
+						moveWordRight()
+					else
+						editor.text:moveRight()
+					end
 					updateSelection()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 				end
 				-- UP/DOWN also moves cursor when autocomplete is visible (not just autocomplete navigation)
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
-					if
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
-					then
+					if altDown then
+						editor:beginTextEdit()
 						editor.text:moveLineUp()
+						editor:endTextEdit()
 						editor._highlightCache = {}
 						editor:updateLSP()
 					else
@@ -1334,11 +1665,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					end
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
-					if
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
-					then
+					if altDown then
+						editor:beginTextEdit()
 						editor.text:moveLineDown()
+						editor:endTextEdit()
 						editor._highlightCache = {}
 						editor:updateLSP()
 					else
@@ -1351,23 +1681,30 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			else
 				-- No autocomplete: handle all cursor movement
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_LEFT) == 1 then
-					editor.text:moveLeft()
+					if ctrlDown then
+						moveWordLeft()
+					else
+						editor.text:moveLeft()
+					end
 					updateSelection()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_RIGHT) == 1 then
-					editor.text:moveRight()
+					if ctrlDown then
+						moveWordRight()
+					else
+						editor.text:moveRight()
+					end
 					updateSelection()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
-					if
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
-					then
+					if altDown then
+						editor:beginTextEdit()
 						editor.text:moveLineUp()
+						editor:endTextEdit()
 						editor._highlightCache = {}
 						editor:updateLSP()
 					else
@@ -1378,11 +1715,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					end
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
-					if
-						raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
-						or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
-					then
+					if altDown then
+						editor:beginTextEdit()
 						editor.text:moveLineDown()
+						editor:endTextEdit()
 						editor._highlightCache = {}
 						editor:updateLSP()
 					else
@@ -1432,8 +1768,11 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
 				)
 			then
+				editor:beginTextEdit()
 				editor.text:toggleLineComment("--")
+				editor:endTextEdit()
 				editor._highlightCache = {}
+				editor:updateLSP()
 			end
 
 			-- Ctrl+Shift+K (Delete Line)
@@ -1447,7 +1786,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_SHIFT) == 1
 				)
 			then
+				editor:beginTextEdit()
 				editor.text:deleteCurrentLine()
+				editor:endTextEdit()
 				editor._highlightCache = {}
 				editor:updateLSP()
 			end
@@ -1460,18 +1801,21 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_CONTROL) == 1
 				)
 			then
+				editor:beginTextEdit()
 				editor.text:duplicateLine()
+				editor:endTextEdit()
 				editor._highlightCache = {}
 				editor:updateLSP()
 			end
 
-			if raylib.IsKeyDown(341) == 1 then
+			if ctrlDown then
 				if raylib.IsKeyReleased(const.KeyboardKey.KEY_C) == 1 then
 					local text = editor.text:getSelectedText()
 					if #text > 0 then
 						raylib.SetClipboardText(text)
 					end
 				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_V) == 1 then
+					editor:beginTextEdit()
 					if editor.text.selection.active then
 						editor.text:deleteSelection()
 					end
@@ -1484,6 +1828,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					data = string.gsub(data, "\r", "\n")
 
 					editor.text:insertString(data)
+					editor:endTextEdit()
 					autocomplete.indexVariables(editor, game)
 					autocomplete.updateAutocomplete(editor, game)
 					editor._highlightCache = {}
@@ -1492,7 +1837,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					local text = editor.text:getSelectedText()
 					if #text > 0 then
 						raylib.SetClipboardText(text)
+						editor:beginTextEdit()
 						editor.text:deleteSelection()
+						editor:endTextEdit()
 						editor._highlightCache = {}
 						editor:updateLSP()
 					end

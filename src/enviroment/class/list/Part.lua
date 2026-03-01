@@ -11,6 +11,7 @@ local propTable = {
 	Material = Enum.Material.debug,
 	Transparency = 0,
 	Anchored = true,
+	NeonEnergy = 5.0,
 	CanCollide = true,
 	Velocity = Vector3.new(0, 0, 0),
 	MeshScale = 1,

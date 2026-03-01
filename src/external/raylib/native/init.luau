@@ -52,12 +52,9 @@ else
 	local mapped = BIN_MAP[store] or store
 	local file = `raylib-{RAYLIB_VERSION}_{mapped}`
 
-	print(file)
+	local findFIle = `{BIN_LOCATION}/raylib.{ffi.suffix}`
 
-	local findFIle = `{BIN_LOCATION}/{file}.{ffi.suffix}`
-	print(findFIle)
-
-	if (fs.stat(findFIle).kind == "none") then
+	if fs.stat(findFIle).kind == "none" then
 		print(`Downloading '{file}'...`)
 
 		local archive: buffer?
@@ -107,7 +104,7 @@ else
 		end
 	end
 
-	LIBRARY_PATH = `{BIN_LOCATION}/{file}.{ffi.suffix}`
+	LIBRARY_PATH = `{BIN_LOCATION}/raylib.{ffi.suffix}`
 end
 
 assert(fs.stat(LIBRARY_PATH).kind == "file", `Raylib library not found at path: {LIBRARY_PATH}`)

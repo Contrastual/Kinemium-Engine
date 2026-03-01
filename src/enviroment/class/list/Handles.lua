@@ -1,10 +1,17 @@
+local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
 local signal = require("@kinemium.signal")
 local Enum = require("@EnumMap")
-local ffi = zune.ffi
-
-local CFrame = require("@CFrame")
+local raylib = require("@raylib")
+local lib, const, structs = raylib.lib, raylib.const, raylib.structs
+local raycastlib = require("@raycastlib")
 local gizmo = require("@gizmo")
+local ffi = zune.ffi
+local arrows = {}
+
+local hoveredArrow = nil
+local dragData = {} -- [normalId] = { startMouseWorld = Vector3, startPosition = Vector3, direction = Vector3 }
+local CFrame = require("@CFrame")
 
 local propTable = {
 	Color = Color3.new(0.5, 0.5, 0.5),
@@ -22,7 +29,7 @@ local propTable = {
 	-- enum
 	Style = Enum.HandlesStyle.Movement,
 
-	_gizmoTransform = gizmo.newTransform(),
+	_gizmoTransform = ffi.alloc(12 + 16 + 12),
 }
 
 local fired = {}
@@ -40,7 +47,9 @@ return {
 				end
 				if part and (part:IsA("Part") or part:IsA("MeshPart")) then
 					local pos = part.CFrame.Position
-					--	instance._gizmoTransform.translation = vector.create(pos.X, pos.Y, pos.Z)
+					instance._gizmoTransform:writef32(0, pos.X)
+					instance._gizmoTransform:writef32(4, pos.Y)
+					instance._gizmoTransform:writef32(8, pos.Z)
 				end
 			end
 		end)
@@ -51,21 +60,21 @@ return {
 
 				local success = false
 
-				local Position = renderer.Freecam.GetPos()
-				local camPos = vector.create(Position.X, Position.Y, Position.Z)
-
 				if handles.Style == Enum.HandlesStyle.Movement then
-					success = gizmo.DrawGizmo3D(gizmo.GIZMO_TRANSLATE, handles._gizmoTransform, camPos)
+					success = gizmo.DrawGizmo3D(gizmo.Flags.TRANSLATE, handles._gizmoTransform)
 				elseif handles.Style == Enum.HandlesStyle.Rotation then
-					success = gizmo.DrawGizmo3D(gizmo.GIZMO_ROTATE, handles._gizmoTransform, camPos)
+					success = gizmo.DrawGizmo3D(gizmo.Flags.ROTATE, handles._gizmoTransform)
 				elseif handles.Style == Enum.HandlesStyle.Resize then
-					success = gizmo.DrawGizmo3D(gizmo.GIZMO_TRANSLATE, handles._gizmoTransform, camPos)
+					success = gizmo.DrawGizmo3D(gizmo.Flags.TRANSLATE, handles._gizmoTransform)
 				end
 
-				local t = handles._gizmoTransform
-				local newCF = CFrame.new(t.translation.x, t.translation.y, t.translation.z)
-
-				instance.MouseDrag:Fire(newCF)
+				if success then
+					local gizmoTransform = handles._gizmoTransform
+					local newCF =
+						CFrame.new(gizmoTransform:readf32(0), gizmoTransform:readf32(4), gizmoTransform:readf32(8))
+					handles.Transform = newCF
+					instance.MouseDrag:Fire(newCF)
+				end
 			end
 		end
 

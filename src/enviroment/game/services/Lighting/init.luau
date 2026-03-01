@@ -1,12 +1,18 @@
 local Instance = require("@Instance")
-local Color3 = require("@Color3")
 local Vector3 = require("@Vector3")
 local raylib = require("@raylib")
 local const = raylib.const
 local lib = raylib.lib
+local rlstructs = raylib.structs
 local Lighting = Instance.new("Lighting")
+local Color3 = require("@Color3")
 local PointLights = {}
 local clouds = require("./Lighting/clouds")
+local r3d = require("@r3d")
+local rlib = r3d.lib
+
+local DAY_TOP = Color3.new(0.090196, 0.6, 0.839216)
+local NIGHT_TOP = Color3.fromRGB(10, 15, 35)
 
 function Lighting:AddPointLight(id, position, color, intensity, range)
 	for _, obj in pairs(PointLights) do
@@ -66,95 +72,6 @@ for i = 1, STAR_COUNT do
 		pos = Vector3.new(r * math.cos(theta) * STAR_RADIUS, z * STAR_RADIUS, r * math.sin(theta) * STAR_RADIUS),
 		size = math.random(),
 	})
-end
-
-local function DrawStars(camera, intensity)
-	local cameraPos = zune.mem.toVector3(camera, 0)
-
-	lib.rlDisableDepthMask()
-	lib.rlDisableBackfaceCulling()
-	lib.rlSetBlendMode(1) -- alpha blend
-	lib.rlDisableDepthTest()
-
-	lib.rlPushMatrix()
-	lib.rlTranslatef(cameraPos.X, cameraPos.Y, cameraPos.Z)
-
-	lib.rlBegin(7) -- RL_QUADS
-	lib.rlColor4ub(255, 255, 255, intensity)
-
-	for _, star in ipairs(Stars) do
-		local size = star.size
-		lib.rlVertex3f(star.pos.X - size, star.pos.Y - size, star.pos.Z)
-		lib.rlVertex3f(star.pos.X + size, star.pos.Y - size, star.pos.Z)
-		lib.rlVertex3f(star.pos.X + size, star.pos.Y + size, star.pos.Z)
-		lib.rlVertex3f(star.pos.X - size, star.pos.Y + size, star.pos.Z)
-	end
-
-	lib.rlEnd()
-	lib.rlPopMatrix()
-
-	lib.rlSetBlendMode(0)
-	lib.rlEnableBackfaceCulling()
-	lib.rlEnableDepthTest()
-	lib.rlEnableDepthMask()
-end
-
-local function DrawCelestialBody(texture, direction, camera, distance, size)
-	if not texture then
-		return
-	end
-
-	local cameraPos = zune.mem.toVector3(camera, 0)
-	local id = buffer.readi32(texture, 0)
-
-	local sunPos = Vector3.new(
-		cameraPos.X + direction.X * distance,
-		cameraPos.Y + direction.Y * distance,
-		cameraPos.Z + direction.Z * distance
-	)
-
-	lib.rlDisableDepthMask()
-	lib.rlDisableBackfaceCulling()
-
-	lib.rlSetBlendMode(1)
-
-	lib.rlPushMatrix()
-	lib.rlTranslatef(sunPos.X, sunPos.Y, sunPos.Z)
-
-	local camToSun = Vector3.new(sunPos.X - cameraPos.X, sunPos.Y - cameraPos.Y, sunPos.Z - cameraPos.Z)
-
-	local angle = math.atan2(camToSun.X, camToSun.Z) * 180 / math.pi
-	lib.rlRotatef(angle, 0, 1, 0)
-
-	local horizontalDist = math.sqrt(camToSun.X * camToSun.X + camToSun.Z * camToSun.Z)
-	local pitchAngle = -math.atan2(camToSun.Y, horizontalDist) * 180 / math.pi
-	lib.rlRotatef(pitchAngle, 1, 0, 0)
-
-	lib.rlSetTexture(id)
-	lib.rlBegin(7)
-	lib.rlColor4ub(150, 150, 150, 255)
-
-	lib.rlTexCoord2f(0, 0)
-	lib.rlVertex3f(-size, -size, 0)
-
-	lib.rlTexCoord2f(1, 0)
-	lib.rlVertex3f(size, -size, 0)
-
-	lib.rlTexCoord2f(1, 1)
-	lib.rlVertex3f(size, size, 0)
-
-	lib.rlTexCoord2f(0, 1)
-	lib.rlVertex3f(-size, size, 0)
-
-	lib.rlEnd()
-	lib.rlSetTexture(0)
-
-	lib.rlPopMatrix()
-
-	lib.rlSetBlendMode(0)
-	lib.rlEnableBackfaceCulling()
-	lib.rlEnableDepthMask()
-	--lib.rlEnableDepthTest()
 end
 
 local function lerp(a, b, t)
@@ -265,182 +182,88 @@ function Lighting:GetSunDirection()
 	)
 end
 
-local function handleSky(skyObject, renderer)
-	if skyObject.ClassName == "Sky" then
-		local skybox = renderer.skybox
-		local cubemapPaths
+local function setSkyObject(r3d_sky)
+	local environment: FFIPointer = rlib.R3D_GetEnvironment()
 
-		if skyObject.Cubemap ~= "" then
-			skybox.Load(skyObject.Cubemap)
-		else
-			cubemapPaths = {
-				skyObject.SkyboxRt, -- +X
-				skyObject.SkyboxLf, -- -X
-				skyObject.SkyboxUp, -- +Y
-				skyObject.SkyboxDn, -- -Y
-				skyObject.SkyboxFt, -- +Z
-				skyObject.SkyboxBk, -- -Z
-			}
+	local iden = lib.QuaternionIdentity()
 
-			local cubemap = skybox.FromCubemap(cubemapPaths)
-			if not cubemap then
-				return
-			end
-			skybox.Unload()
-			skybox.Load(cubemap)
-		end
+	local envbackground = r3d.structs.R3D_EnvBackground:new({
+		sky = r3d_sky,
+		energy = 1.0,
+		rotation = iden,
+		skyBlur = 0,
+	})
 
-		print("Reinitialized sky with new Skybox skyObject")
-	end
+	local offset = r3d.structs.R3D_Environment:offset("background")
+	environment:write(offset, envbackground, 0, r3d.structs.R3D_EnvBackground:size())
+
+	rlib.R3D_SetEnvironment(environment)
 end
 
-local function initShaders(ki3d, shader, game, renderer)
-	--[[
-	ki3d.filters.new("blur", {
-		shader = {
-			vertex = "./src/assets/shaders/blur.vs",
-			fragment = "./src/assets/shaders/blur.fs",
-		},
+local function loadSky(cubemapPath)
+	local r3d_sky = rlib.R3D_LoadCubemap(cubemapPath, 5)
+	setSkyObject(r3d_sky)
+end
 
-		begin = function(self, runtime)
-			shader.SetShaderValueRaw(self.shader, "resolution", {
-				lib.GetRenderWidth(),
-				lib.GetRenderHeight(),
-			}, const.ShaderUniformDataType.SHADER_UNIFORM_VEC2)
-			shader.SetShaderValueRaw(self.shader, "blurRadius", 18, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+local function setAllEnvironmentEffects()
+	local environment: FFIPointer = rlib.R3D_GetEnvironment()
 
-			raylib.lib.BeginShaderMode(self.shader)
-		end,
-
-		finish = function(self, runtime)
-			runtime.lib.EndShaderMode()
-		end,
-	})
-		--]]
-
-	ki3d.filters.new("sunrays", {
-		priority = 20,
-		shader = {
-			vertex = nil, -- Use default vertex shader
-			fragment = "./src/assets/shaders/sunrays.fs",
-		},
-
-		sunScreenPos = vector.create(0.5, 0.5),
-		density = 1,
-		weight = 1,
-		decay = 0.95,
-		exposure = 0.03,
-		threshold = 0.8,
-
-		begin = function(self, runtime)
-			local sunDir = Lighting:GetSunDirection()
-
-			local workspace = game and game:GetService("Workspace")
-			local Kinemium_camera = workspace.Camera
-			local camPos = Kinemium_camera.CFrame.Position
-			local sunWorldPos =
-				vector.create(camPos.X - sunDir.X * 1000, camPos.Y - sunDir.Y * 1000, camPos.Z - sunDir.Z * 1000)
-
-			local sunScreenPos = lib.GetWorldToScreen(sunWorldPos, Kinemium_camera._raylibcam)
-			local screenWidth = lib.GetRenderWidth()
-			local screenHeight = lib.GetRenderHeight()
-
-			self.sunScreenPos = vector.create(sunScreenPos.x / screenWidth, sunScreenPos.y / screenHeight)
-
-			raylib.lib.BeginShaderMode(self.shader)
-
-			shader.SetShaderValueRaw(
-				self.shader,
-				"sunScreenPos",
-				{ self.sunScreenPos.X, self.sunScreenPos.Y },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC2
-			)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"density",
-				self.density,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"weight",
-				self.weight,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(self.shader, "decay", self.decay, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"exposure",
-				self.exposure,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				self.shader,
-				"threshold",
-				self.threshold,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-		end,
-
-		finish = function(self, runtime)
-			runtime.lib.EndShaderMode()
-		end,
+	local envssao = r3d.structs.R3D_EnvSSAO:new({
+		sampleCount = 16,
+		intensity = 5,
+		power = 5,
+		radius = 1,
+		bias = 0.02,
+		enabled = true,
 	})
 
-
-	ki3d.filters.new("bloom", {
-		priority = 30,
-		shader = {
-			vertex = "./src/assets/shaders/fullscreen_quad.vs",
-			fragment = "./src/assets/shaders/bloom.fs",
-		},
-
-		threshold = 0.1,
-		intensity = 0.5,
-		radius = 1.0,
-
-		begin = function(self, runtime)
-			local shaderobj = self.shader
-
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"threshold",
-				self.threshold,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"intensity",
-				self.intensity,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(shaderobj, "radius", self.radius, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
-
-			raylib.lib.BeginShaderMode(shaderobj)
-		end,
-
-		finish = function(self, runtime)
-			runtime.lib.EndShaderMode()
-		end,
+	local envbloom = r3d.structs.R3D_EnvBloom:new({
+		mode = 1, -- R3D_BLOOM_MIX
+		levels = 0.5,
+		intensity = 0.05,
+		threshold = 0.6,
+		softThreshold = 0.5,
+		filterRadius = 1.0,
 	})
 
+	local envssgi = r3d.structs.R3D_EnvSSGI:new({
+		sampleCount = 2,
+		maxRaySteps = 32,
+		stepSize = 0.125,
+		thickness = 1.0,
+		maxDistance = 4.0,
+		fadeStart = 8.0,
+		fadeEnd = 16.0,
+		denoiseSteps = 5,
+		enabled = 1,
+	})
 
-	ki3d.EnableFilters()
+	local envdof = r3d.structs.R3D_EnvDoF:new({
+		mode = 1, -- R3D_DOF_ENABLED
+		focusPoint = 10.0,
+		focusScale = 1.0,
+		maxBlurSize = 20.0,
+	})
+
+	local envType = r3d.structs.R3D_Environment
+	environment:write(envType:offset("ssao"), envssao, 0, r3d.structs.R3D_EnvSSAO:size())
+	environment:write(envType:offset("bloom"), envbloom, 0, r3d.structs.R3D_EnvBloom:size())
+	environment:write(envType:offset("ssgi"), envssgi, 0, r3d.structs.R3D_EnvSSGI:size())
+	environment:write(envType:offset("dof"), envdof, 0, r3d.structs.R3D_EnvDoF:size())
+
+	rlib.R3D_SetEnvironment(environment)
+end
+
+local function handleSky(skyObject, renderer)
+	if skyObject.ClassName == "Sky" then
+		loadSky(skyObject.Cubemap)
+	end
 end
 
 Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	if _G.IsHeadless then
 		return
 	end
-
-	initShaders(renderer.Ki3d, renderer.Shader, datamodel, renderer)
-
-	local sunTexture = lib.LoadTexture("./src/assets/sky/default/sun.png")
-	local moonTexture = lib.LoadTexture("./src/assets/sky/default/moon.png")
-
-	renderer.Skybox.Load()
-
-	local cloudsNew = clouds.init()
 
 	Lighting:SetProperties({
 		Ambient = Color3.new(1, 1, 1),
@@ -453,56 +276,76 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		GeographicLatitude = 0.0,
 		EnableDayCycle = false,
 
-		-- Bloom settings
-		BloomEnabled = true,
-		BloomThreshold = 0.6,
-		BloomIntensity = 1.5,
-		BloomRadius = 2.0,
-
-		-- Fog settings
-		FogEnabled = true,
-		FogMode = 2, -- 1=Linear, 2=Exp2, 3=Exp
-		FogColor = Color3.fromRGB(180, 200, 230),
-		FogDensity = 0.01,
-		FogStart = 10.0,
-		FogEnd = 100.0,
-
 		GetDaylight = function()
 			local t = getDayAlpha(Lighting.ClockTime)
 			return t
 		end,
 	})
 
-	local function updateBloomSettings()
-		local bloomFilter = renderer.Ki3d.filters.get("bloom")
+	local sunDirection = Lighting:GetSunDirection()
 
-		if Lighting.BloomEnabled then
-			bloomFilter.threshold = Lighting.BloomThreshold
-			bloomFilter.intensity = Lighting.BloomIntensity
-			bloomFilter.radius = Lighting.BloomRadius
-		end
-	end
+	local skyObject = r3d.structs.R3D_ProceduralSky:new({
+		sunEnergy = 2,
+		sunSize = 0.1,
+		sunColor = Color3.new(1, 1, 1):ToRaylib(0),
+		sunDirection = sunDirection:ToZuneVector(),
+		skyEnergy = 1,
 
-	local function updateFogSettings()
-		local fogFilter = renderer.Ki3d.filters.get("fog")
-		if not fogFilter then
-			return
-		end
+		groundHorizonCurve = 0.5,
+		groundHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
+		groundEnergy = 1,
+		groundBottomColor = Color3.new(0.7, 0.7, 0.7):ToRaylib(0),
 
-		if Lighting.FogEnabled then
-			fogFilter.fogMode = Lighting.FogMode
-			fogFilter.fogColor = { Lighting.FogColor.R / 255, Lighting.FogColor.G / 255, Lighting.FogColor.B / 255 }
-			fogFilter.fogDensity = Lighting.FogDensity
-			fogFilter.fogStart = Lighting.FogStart
-			fogFilter.fogEnd = Lighting.FogEnd
-		end
-	end
+		skyHorizonCurve = 0.2,
+		skyTopColor = Color3.new(0.090196, 0.6, 0.839216):ToRaylib(0),
+		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
+	})
 
-	updateBloomSettings()
-	updateFogSettings()
+	local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
+	setSkyObject(cubemapSky)
+	--loadSky("./src/assets/sky/test/images/sky.png")
+	setAllEnvironmentEffects()
+
+	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR
+	rlib.R3D_SetLightDirection(light, vector.create(-1, -1, -1))
+	rlib.R3D_SetLightColor(light, raylib.const.WHITE)
+	rlib.R3D_SetLightEnergy(light, 1.0)
+	rlib.R3D_SetLightActive(light, true)
+	rlib.R3D_EnableShadow(light)
 
 	renderer_signal:Connect(function(route, dt)
-		if route == "PreGuiRender" then
+		if route == "RenderStepped" then
+			if Lighting.EnableDayCycle == true then
+				Lighting.ClockTime += 0.005
+
+				local sunY = -Lighting:GetSunDirection().Y
+				local daylight = math.clamp((sunY + 0.1) / 0.6, 0, 1)
+
+				local skyTop = NIGHT_TOP:Lerp(DAY_TOP, daylight)
+				local horizonDay = Color3.new(1, 1, 1)
+				local groundDay = Color3.new(1, 1, 1)
+
+				local skyHorizon = Color3.new(0, 0, 0):Lerp(horizonDay, daylight)
+				local groundHorizon = Color3.new(0, 0, 0):Lerp(groundDay, daylight)
+
+				buffer.copy(skyObject, r3d.structs.R3D_ProceduralSky:offset("skyTopColor"), skyTop:ToRaylib(0))
+
+				buffer.copy(skyObject, r3d.structs.R3D_ProceduralSky:offset("skyHorizonColor"), skyHorizon:ToRaylib(0))
+
+				buffer.copy(
+					skyObject,
+					r3d.structs.R3D_ProceduralSky:offset("groundHorizonColor"),
+					groundHorizon:ToRaylib(0)
+				)
+
+				buffer.copy(
+					skyObject,
+					r3d.structs.R3D_ProceduralSky:offset("sunDirection"),
+					Lighting:GetSunDirection():ToBuffer()
+				)
+
+				rlib.R3D_UpdateProceduralSky(cubemapSky, skyObject)
+			end
 			local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
 
 			if blurEffect then
@@ -516,53 +359,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		handleSky(child, renderer)
 	end)
 
-	--[[]]
-	renderer.Skybox.Load()
-
-	renderer.Hook.new("Before3D", function()
-		updateBloomSettings()
-		updateFogSettings()
-
-		local workspace = datamodel.Workspace
-		local camera = workspace.Camera._raylibcam
-
-		local sunDir = Lighting:GetSunDirection()
-		local moonDir = Vector3.new(-sunDir.X, -sunDir.Y, -sunDir.Z) -- Moon opposite to sun
-
-		local daylight = Lighting.GetDaylight()
-		local night = 1 - daylight
-
-		renderer.Skybox.Draw(camera, 50)
-
-		Lighting.Ambient = lerpColor(
-			Color3.fromRGB(20, 20, 40), -- night
-			Color3.fromRGB(130, 130, 130), -- day
-			daylight
-		)
-
-		Lighting.OutdoorAmbient = Lighting.Ambient
-		Lighting.Brightness = lerp(0.2, 2.0, daylight)
-
-		if sunDir.Y > 0 then
-			DrawCelestialBody(sunTexture, sunDir, camera, 450, 50)
-		end
-
-		if moonDir.Y > 0 then
-			DrawNightSky(camera, night)
-			DrawCelestialBody(moonTexture, moonDir, camera, 450, 50)
-			DrawStars(camera, math.floor(255 * night))
-		end
-
-		if workspace.Terrain and workspace.Terrain:FindFirstChild("Clouds") then
-			local cameraPos = zune.mem.toVector3(camera, 0)
-
-			cloudsNew.render(Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z))
-		end
-
-		if Lighting.EnableDayCycle then
-			Lighting.ClockTime += 0.001
-		end
-	end)
+	renderer.Hook.new("Before3D", function() end)
 end
 
 return Lighting

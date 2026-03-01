@@ -1,5 +1,3 @@
---!optimize 2
---!native
 local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
 local Workspace = Instance.new("Workspace")
@@ -11,6 +9,8 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local structs = raylib.structs
 local bufferUtils = require("@bufferUtils")
+local r3d = require("@r3d")
+local rlib = r3d.lib
 
 local material_shader_manager = require("./Workspace/materialShaders")
 
@@ -69,101 +69,7 @@ end
 Workspace.InitRenderer = function(renderer, signal, game)
 	local IdPool = {}
 
-	local mtsh_sh = material_shader_manager:AddFilters(renderer, game, raylib)
-
-	local ki3d = renderer.Ki3d
-	local shader = renderer.Shader
-	local const = raylib.const
-
-	local lights = ki3d.filters.new("lighting", {
-		disableauto = true,
-		shader = {
-			vertex = "./src/assets/shaders/default_lit.vs",
-			fragment = "./src/assets/shaders/default_lit.fs",
-		},
-
-		setuniforms = function(self, runtime)
-			local lighting = game and game:GetService("Lighting")
-			local workspace = game and game:GetService("Workspace")
-			local shaderobj = runtime.shaderobj
-			local Kinemium_camera = workspace.Camera
-
-			local ambient = lighting.Ambient
-			local sunDir = lighting:GetSunDirection()
-			local daylight = lighting.GetDaylight()
-
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"globalAmbient",
-				{ ambient.R, ambient.G, ambient.B },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"dirLightDir",
-				{ -sunDir.X, -sunDir.Y, -sunDir.Z },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-			)
-
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"dirLightColor",
-				{ 1.0, 0.95, 0.8 },
-				const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-			)
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"brightness",
-				lighting.Brightness * daylight,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			local shadowsEnabled = lighting.GlobalShadows ~= false
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"shadowStrength",
-				shadowsEnabled and 0.85 or 0.0,
-				const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-			)
-			shader.SetShaderValueRaw(shaderobj, "shadowBias", 0.0025, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
-
-			local pointLights = lighting:GetPointLights()
-			local lightCount = math.min(#pointLights, 64)
-
-			shader.SetShaderValueRaw(
-				shaderobj,
-				"lightCount",
-				lightCount,
-				const.ShaderUniformDataType.SHADER_UNIFORM_INT
-			)
-
-			for i = 1, lightCount do
-				local light = pointLights[i]
-				if light.Enabled then
-					local idx = i - 1 -- 0-indexed for shader arrays
-
-					shader.SetShaderValueRaw(
-						shaderobj,
-						string.format("lightPosRange[%d]", idx),
-						{ light.Position.X, light.Position.Y, light.Position.Z, light.Range },
-						const.ShaderUniformDataType.SHADER_UNIFORM_VEC4
-					)
-
-					shader.SetShaderValueRaw(
-						shaderobj,
-						string.format("lightColorIntensity[%d]", idx),
-						{ light.Color.R, light.Color.G, light.Color.B, light.Intensity },
-						const.ShaderUniformDataType.SHADER_UNIFORM_VEC4
-					)
-				end
-			end
-
-			shader.SetShaderValueRaw(shaderobj, "viewPos", {
-				Kinemium_camera.CFrame.Position.X,
-				Kinemium_camera.CFrame.Position.Y,
-				Kinemium_camera.CFrame.Position.Z,
-			}, const.ShaderUniformDataType.SHADER_UNIFORM_VEC3)
-		end,
-	})
+	local mtsh_sh = material_shader_manager:AddFilters()
 
 	local proptable = {
 		Gravity = -9.81,
@@ -258,10 +164,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local MATRIX_SIZE = 64 -- 16 floats x 4 bytes = 64 bytes per matrix
 	local COLOR_SIZE = 4 -- 4 bytes: R, G, B, A
 
-	-- Pre-allocate instance buffers (SSBO-like behavior)
-	local instanceMatricesBuf = zune.ffi.alloc(MAX_INSTANCES * MATRIX_SIZE)
-	local instanceColorsBuf = zune.ffi.alloc(MAX_INSTANCES * COLOR_SIZE)
-
 	-- Batch storage: key = "shape|material", value = batch object
 	local shapeMaterialBatches = {}
 
@@ -271,18 +173,24 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 		local material_index = 0
 		for material_name, material_path in pairs(materialList) do
-			local texture = lib.LoadTexture(material_path)
-			local default = lib.LoadMaterialDefault()
-			lib.SetMaterialTexture(default, 0, texture)
+			local default = rlib.R3D_GetDefaultMaterial()
+
+			local normal = rlib.R3D_LoadNormalMap(material_path, 1)
+			local albedo = rlib.R3D_LoadAlbedoMap(material_path, raylib.const.WHITE)
 
 			loadedMaterials[material_name] = {
 				index = material_index,
 				material = default,
-				texture = texture,
-				shader = mtsh_sh[material_name] and mtsh_sh[material_name].shader or nil,
+				--shader = mtsh_sh[material_name] and mtsh_sh[material_name].shader or nil,
 			}
 
-			lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
+			if mtsh_sh[material_name] then
+				mtsh_sh[material_name].Apply(default)
+			end
+
+			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
+			buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
+			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
 
 			material_index += 1
 			iodebug(`Loaded custom material: {material_name}`)
@@ -322,50 +230,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
-	local function drawRaylib(part, model, mesh, matData)
-		local data = loadedMaterials[part.Material.Value]
-		if not part._raylibMatrix or part._lastCFrame ~= part.CFrame or part._lastSize ~= part.Size then
-			part._raylibMatrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-			part._lastCFrame = part.CFrame
-			part._lastSize = part.Size
-		end
-
-		local matrix = part._raylibMatrix
-
-		part._cfvec = part._cfvec or vector.create(0, 0, 0)
-		part._sizevec = part._sizevec or vector.create(0, 0, 0)
-
-		if part._lastCFrame ~= part.CFrame then
-			part._cfvec = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-			part._lastCFrame = part.CFrame
-		end
-
-		if part._lastSize ~= part.Size then
-			part._sizevec = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
-			part._lastSize = part.Size
-		end
-
-		local axis, angle = bufferUtils.EulerToAxisAngle(part.Rotation)
-		local position = vector.create(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-		local scale
-		local tint = part.Color:ToRaylib(part.Transparency)
-		local matData = loadedMaterials[part.Material.Value]
-
-		if part._model then
-			bufferUtils.SetModelTex(model, matData.texture)
-
-			scale =
-				vector.create(part.Size.X * part.MeshScale, part.Size.Y * part.MeshScale, part.Size.Z * part.MeshScale)
-			lib.DrawModelEx(part._model, position, axis, angle, scale, tint)
-		else
-			bufferUtils.SetModelTex(model, matData.texture)
-			scale = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
-			lib.BeginShaderMode(matData.shader or lights.shader)
-			lib.DrawModelEx(model, position, axis, angle, scale, tint)
-			lib.EndShaderMode()
-		end
-	end
-
 	local function drawChunks()
 		local Kinemium_camera = Workspace.Camera
 		local camPos = Kinemium_camera.CFrame.Position
@@ -397,17 +261,33 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 						local mesh = meshData[2]
 
-						if zune.platform.os == "linux" then 
-							drawRaylib(part, meshData[1], mesh, matData)
-						else
-							renderer.MeshPool.DrawMesh(
-								mesh,
-								matData.material,
-								matData.shader or lights.shader,
-								matrix,
-								{ part.Color.R, part.Color.G, part.Color.B, part.Transparency }
-							)
+						local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
+
+						buffer.copy(
+							tmpAlbedo,
+							0,
+							matData.material,
+							r3d.structs.R3D_Material:offset("albedo"),
+							r3d.structs.R3D_AlbedoMap:size()
+						)
+
+						buffer.copy(
+							tmpAlbedo,
+							r3d.structs.R3D_AlbedoMap:offset("color"),
+							part.Color:ToRaylib(part.Transparency)
+						)
+
+						local tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
+						buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+						buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
+						buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+						buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
+
+						if mtsh_sh[part.Material.Value] then
+							mtsh_sh[part.Material.Value].Apply3DObj(part, tmpAlbedo, tmpMaterial)
 						end
+
+						renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix)
 
 						--drawRaylibInstanced(part, meshBuf, matData)
 					end

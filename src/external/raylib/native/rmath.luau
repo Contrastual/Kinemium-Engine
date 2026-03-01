@@ -227,7 +227,7 @@ return {
 		QuaternionAddValue = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 		QuaternionSubtract = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 		QuaternionSubtractValue = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
-		QuaternionIdentity = { returns = ffi.types.pointer, args = {} },
+		QuaternionIdentity = { returns = structs.Quaternion, args = {} },
 		QuaternionLength = { returns = ffi.types.float, args = { ffi.types.pointer } },
 		QuaternionNormalize = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 		QuaternionInvert = { returns = ffi.types.pointer, args = { ffi.types.pointer } },

@@ -17,6 +17,8 @@ local meshlib = require("./renderer/mesh")
 local ki3d = require("@ki3d")
 local ffi = zune.ffi
 local utils = require("@bufferutils")
+local r3d = require("@r3d")
+local rlib = r3d.lib
 
 -- TYPES
 export type KiRendConf = { width: number, height: number, maxFps: number, title: string }
@@ -36,6 +38,9 @@ function KiRend.new(config: KiRendConf)
 	lib.SetTargetFPS(config.maxFps)
 	ki3d.init()
 
+	rlib.R3D_Init(config.width, config.height)
+	rlib.R3D_SetUpscaleMode(2)
+
 	local function getSortedPool(pool)
 		local sorted = {}
 		for id, entry in pairs(pool) do
@@ -49,10 +54,6 @@ function KiRend.new(config: KiRendConf)
 
 	local blur = require("./renderer/guiblur")
 	local activeCamera
-
-	local normalShader = raylib.lib.LoadShader("./src/assets/shaders/normal.vs", "./src/assets/shaders/normal.fs")
-	local depthShader = raylib.lib.LoadShader("./src/assets/shaders/depth.vs", "./src/assets/shaders/depth.fs")
-	ki3d.SetPassShaders(normalShader, depthShader)
 
 	local renderer_eventbus = signal.new()
 	local renderer_hooks = {
@@ -75,26 +76,9 @@ function KiRend.new(config: KiRendConf)
 	local renderer_draw_calls = {}
 	local renderer_meshes = {}
 	local ENGINE_PROFILER = {}
-	local globalShaderOverride = nil -- Shader to use instead of material's shader
 
 	local newBlurInstance = blur.Init(config.width, config.height)
 	local rendererObject
-
-	local function allocateMeshColors(mesh: buffer, r: number, g: number, b: number, a: number)
-		local vertexCount = buffer.readi32(mesh, structs.Mesh:offset("vertexCount"))
-		local byteSize = vertexCount * 4 * ffi.types.u8:size() -- 4 bytes per vertex (RGBA)
-		local colorsPtr = ffi.alloc(byteSize) -- allocate unsigned char array
-
-		for i = 0, vertexCount - 1 do
-			local base = i * 4
-			colorsPtr:writeu8(base + 0, r) -- R
-			colorsPtr:writeu8(base + 1, g) -- G
-			colorsPtr:writeu8(base + 2, b) -- B
-			colorsPtr:writeu8(base + 3, a) -- A
-		end
-
-		return colorsPtr
-	end
 
 	rendererObject = {
 		Mesh = meshlib,
@@ -162,12 +146,7 @@ function KiRend.new(config: KiRendConf)
 		},
 
 		MeshPool = {
-			DrawMesh = function(mesh, material, object_shader, matrix, color)
-				if object_shader then
-					local wrapper = utils.wrap(material, structs.Material)
-					wrapper.shader = utils.typepointer(object_shader)
-				end
-
+			DrawMesh = function(mesh, material, matrix)
 				table.insert(renderer_draw_calls, {
 					mesh = mesh,
 					material = material,
@@ -442,6 +421,10 @@ function KiRend.new(config: KiRendConf)
 	end
 
 	function rendererObject:Render3D()
+		if not activeCamera then
+			return
+		end
+
 		lib.BeginMode3D(activeCamera)
 		lib.rlEnableBackfaceCulling()
 		renderer_eventbus:Fire("Begin3D")
@@ -457,15 +440,13 @@ function KiRend.new(config: KiRendConf)
 			end
 		end
 
-		for i, drawCall in pairs(renderer_draw_calls) do
-			local material = drawCall.material
-			local shaderOverride = _G._globalShaderOverride or globalShaderOverride
-			if shaderOverride then
-				local wrapper = utils.wrap(material, structs.Material)
-				wrapper.shader = utils.typepointer(shaderOverride)
+		if #renderer_draw_calls > 0 then
+			rlib.R3D_Begin(activeCamera)
+			for i, drawCall in pairs(renderer_draw_calls) do
+				rlib.R3D_DrawMeshPro(drawCall.mesh, drawCall.material, drawCall.matrix)
+				renderer_draw_calls[i] = nil
 			end
-			raylib.lib.DrawMesh(drawCall.mesh, drawCall.material, drawCall.matrix)
-			renderer_draw_calls[i] = nil
+			rlib.R3D_End()
 		end
 		table.clear(renderer_draw_calls)
 
@@ -526,6 +507,7 @@ function KiRend.new(config: KiRendConf)
 		time += delta
 
 		if raylib.lib.IsWindowResized() == 1 then
+			--rlib.R3D_UpdateResolution(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight())
 			ki3d.UpdateRenderTextures(lib.GetRenderWidth(), lib.GetRenderHeight())
 		end
 
@@ -561,27 +543,10 @@ function KiRend.new(config: KiRendConf)
 
 		--lib.BeginTextureMode(viewport)
 		lib.BeginDrawing()
-
-		if rendererObject.Enable3D then
-			ki3d.enabled = true
-			-- New pipeline: KI3D owns depth, normal, and scene passes.
-			-- drawFn is called up to 3 times (depth, normal, main) with shader overrides.
-			ki3d:Frame(activeCamera, function()
-				rendererObject:Render3D()
-			end)
-		end
-
-		ki3d:Draw(activeCamera)
-
-		--guiBlur:ApplyBlur()
-		--guiBlur:DrawUnblurred(const.WHITE)
-		renderer_eventbus:Fire("PreGuiRender")
-
-		renderer_eventbus:Fire("GuiRender")
-
+		rendererObject:Render3D()
 		rendererObject:Render2D()
-
 		lib.EndDrawing()
+
 		renderer_eventbus:Fire("Heartbeat", delta)
 
 		if ENGINE_PROFILER then

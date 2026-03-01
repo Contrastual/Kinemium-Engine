@@ -203,6 +203,136 @@ type Signal = {
 type include = (path: string) -> (any)
 type FlagExists = (flag: string) -> (boolean)
 
+-- C primitives
+type int = any
+type float = any
+type double = any
+type bool = any
+type char = any
+
+-- C sized integers
+type int8_t = any
+type int16_t = any
+type int32_t = any
+type int64_t = any
+type uint8_t = any
+type uint16_t = any
+type uint32_t = any
+type uint64_t = any
+
+-- Rust-style integers
+type i8 = any
+type i16 = any
+type i32 = any
+type i64 = any
+type i128 = any
+type u8 = any
+type u16 = any
+type u32 = any
+type u64 = any
+type u128 = any
+type f32 = any
+type f64 = any
+
+-- C++ / common
+type wchar_t = any
+type size_t = any
+type ptrdiff_t = any
+type long = any
+type short = any
+type byte = any
+type word = any
+type dword = any
+type qword = any
+type uchar = any
+type uint = any
+type ulong = any
+type ushort = any
+
+-- Qualifiers (treated as wrappers)
+type const = any
+type static = any
+type volatile = any
+type auto = any
+type signed = any
+type unsigned = any
+
+-- Rust keywords
+type let = any
+type mut = any
+
+-- JS / C# style
+type var = any
+
+-- Compound types
+type long_long = any
+type unsigned_int = any
+type unsigned_long = any
+type unsigned_char = any
+type signed_int = any
+type signed_char = any
+
+-- Pointer / reference annotations
+type ptr = any
+type ref = any
+type nullptr_t = any
+
+declare int: int
+declare float: float
+declare double: double
+declare bool: bool
+declare char: char
+declare int8_t: int8_t
+declare int16_t: int16_t
+declare int32_t: int32_t
+declare int64_t: int64_t
+declare uint8_t: uint8_t
+declare uint16_t: uint16_t
+declare uint32_t: uint32_t
+declare uint64_t: uint64_t
+declare i8: i8
+declare i16: i16
+declare i32: i32
+declare i64: i64
+declare i128: i128
+declare u8: u8
+declare u16: u16
+declare u32: u32
+declare u64: u64
+declare u128: u128
+declare f32: f32
+declare f64: f64
+declare wchar_t: wchar_t
+declare size_t: size_t
+declare ptrdiff_t: ptrdiff_t
+declare long: long
+declare short: short
+declare byte: byte
+declare word: word
+declare dword: dword
+declare qword: qword
+declare uchar: uchar
+declare uint: uint
+declare ulong: ulong
+declare ushort: ushort
+declare const: const
+declare static: static
+declare volatile: volatile
+declare auto: auto
+declare signed: signed
+declare unsigned: unsigned
+declare var: var
+declare let: let
+declare mut: mut
+declare long_long: long_long
+declare unsigned_int: unsigned_int
+declare unsigned_long: unsigned_long
+declare unsigned_char: unsigned_char
+declare signed_int: signed_int
+declare signed_char: signed_char
+declare ptr: ptr
+declare ref: ref
+declare nullptr_t: nullptr_t
 declare Signal: Signal
 declare Disposable: DisposableClass
 declare kiclass: ClassGlobal

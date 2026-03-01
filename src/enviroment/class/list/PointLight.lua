@@ -3,12 +3,19 @@ local Color3 = require("@Color3")
 local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
 
+local r3d = require("@r3d")
+local rlib = r3d.lib
+local raylib = require("@raylib")
+
 local propTable = {
 	Color = Color3.new(1, 1, 1),
-	Brightness = 200, -- intensity of the light
-	Range = 400, -- how far the light reaches
-	Shadows = true, -- casts shadows or not
+	Brightness = 1, -- intensity of the light
+	Range = 12, -- how far the light reaches
+	CastShadow = true, -- casts shadows or not
 	Enabled = true, -- whether the light is active
+	Transparency = 0,
+	Position = Vector3.new(0, 0, 0),
+	DebugShape = true,
 	Name = "PointLight",
 	BaseClass = "Kinemium.light",
 }
@@ -16,31 +23,51 @@ local propTable = {
 return {
 	class = "PointLight",
 	callback = function(instance, renderer, datamodel)
-		local Lighting = datamodel:GetService("Lighting")
+		instance:SetProperties(propTable)
 
-		local function Update()
-			if instance.Parent then
-				local parent = instance.Parent
-				if parent.BaseClass == "BasePart" then
-					local pos = parent.CFrame.Position
-					if instance.Enabled then
-						Lighting:AddPointLight(
-							parent.UniqueId,
-							pos,
-							instance.Color,
-							instance.Brightness,
-							instance.Range
-						)
-					end
-				end
-			end
+		local light = rlib.R3D_CreateLight(2) -- R3D_LIGHT_OMNI
+		rlib.R3D_SetLightPosition(light, vector.create(instance.Position.X, instance.Position.Y, instance.Position.Z))
+		rlib.R3D_SetLightColor(light, instance.Color:ToRaylib(instance.Transparency))
+		rlib.R3D_SetLightEnergy(light, instance.Brightness)
+		rlib.R3D_SetLightRange(light, instance.Range)
+		rlib.R3D_SetLightActive(light, false)
+		instance._rlight = light
+
+		if instance.CastShadow == true then
+			rlib.R3D_EnableShadow(light)
 		end
 
-		renderer.Pool.new("3d", function()
-			Update()
+		instance.Changed:Connect(function()
+			if instance.Enabled == true then
+				rlib.R3D_SetLightActive(light, true)
+			end
+
+			if instance.CastShadow == true then
+				rlib.R3D_EnableShadow(light)
+			else
+				rlib.R3D_DisableShadow(light)
+			end
+
+			rlib.R3D_SetLightPosition(
+				light,
+				vector.create(instance.Position.X, instance.Position.Y, instance.Position.Z)
+			)
+			rlib.R3D_SetLightColor(light, instance.Color:ToRaylib(instance.Transparency))
+			rlib.R3D_SetLightEnergy(light, instance.Brightness)
+			rlib.R3D_SetLightRange(light, instance.Range)
 		end)
 
-		instance:SetProperties(propTable)
+		renderer.Pool.new("gizmo", function()
+			if instance.DebugShape == true then
+				rlib.R3D_DrawLightShape(light)
+			end
+		end)
+
+		renderer.Hook.new("Renderstep", function()
+			if instance.Parent and instance.Parent.CFrame then
+				instance.Position = instance.Parent.CFrame.Position
+			end
+		end)
 
 		return instance
 	end,

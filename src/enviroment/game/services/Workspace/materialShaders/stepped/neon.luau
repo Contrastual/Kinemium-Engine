@@ -1,17 +1,31 @@
-return function(renderer, game, rl)
-	local ki3d = require("@ki3d")
-	local mesh = renderer.Mesh
-	local shader = renderer.Shader
-	local const = rl.const
+local r3d = require("@r3d")
+local rlib = r3d.lib
+local raylib = require("@raylib")
+local lib = raylib.lib
+local const = raylib.const
 
-	local neon = ki3d.filters.new("neon", {
-		disableauto = true,
-		shader = {
-			vertex = nil,
-			fragment = "./src/assets/shaders/materials/neon.fs",
-		},
-
-		setuniforms = function(self, runtime) end,
+return {
+	Apply = function(material)
+		--[[
+	local R3D_EmissionMap = ffi.struct({
+		{ texture = Texture },
+		{ color = Color },
+		{ energy = ffi.types.float },
 	})
-	return neon
-end
+	export type R3D_EmissionMap = typeof(R3D_EmissionMap:new({}))
+	--]]
+		local map = r3d.structs.R3D_EmissionMap:new({
+			color = const.WHITE,
+			energy = 5.0,
+		})
+		buffer.copy(material, r3d.structs.R3D_Material:offset("emission"), map, 0, r3d.structs.R3D_EmissionMap:size())
+	end,
+
+	Apply3DObj = function(part, albedo, material)
+		local map = r3d.structs.R3D_EmissionMap:new({
+			color = part.Color:ToRaylib(part.Transparency),
+			energy = part.NeonEnergy or 5.0,
+		})
+		buffer.copy(material, r3d.structs.R3D_Material:offset("emission"), map, 0, r3d.structs.R3D_EmissionMap:size())
+	end,
+}

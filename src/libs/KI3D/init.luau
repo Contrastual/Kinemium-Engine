@@ -34,8 +34,6 @@ export type KI3DFilter = {
 
 local sceneRT, normalRT, depthRT, outputRT, swapRT
 
--- ─── Internal State ───────────────────────────────────────────────────────────
-
 local shaders = {}
 local filters = {}
 
@@ -45,8 +43,6 @@ local _depthShader = nil -- shader used for the automatic depth prepass
 ki3d.enabled = true
 ki3d.filtersEnabled = false
 ki3d.finalRT = nil
-
--- ─── Helpers ──────────────────────────────────────────────────────────────────
 
 local function getSortedFilters()
 	local sorted = {}

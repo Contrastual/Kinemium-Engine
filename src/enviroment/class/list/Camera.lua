@@ -12,7 +12,7 @@ local const = raylib.const
 
 local propTable = {
 	FieldOfView = 70,
-	CFrame = CFrame.new(0, 0, 0),
+	CFrame = CFrame.new(Vector3.new(3, 3, 3), Vector3.new(0, 0, 0)),
 	Roll = 0, -- degrees
 	Name = "Camera",
 	CameraType = Enum.CameraType.Scriptable,
@@ -35,7 +35,7 @@ return {
 
 		instance._raylibcam = camera
 
-		renderer.Pool.new("3d", function()
+		local function syncRaylibCamera()
 			local camCF = instance.CFrame
 			local rollRad = math.rad(instance.Roll)
 
@@ -70,7 +70,10 @@ return {
 				-- fov
 				buffer.writef32(camera, 36, instance.FieldOfView)
 			end
-		end)
+		end
+
+		syncRaylibCamera()
+		renderer.Hook.new("Renderstep", syncRaylibCamera)
 
 		return instance
 	end,

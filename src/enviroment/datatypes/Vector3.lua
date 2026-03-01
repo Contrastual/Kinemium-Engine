@@ -15,6 +15,18 @@ function Vector3:Magnitude()
 	return math.sqrt(x * x + y * y + z * z)
 end
 
+function Vector3:ToZuneVector()
+	return vector.create(self.X, self.Y, self.Z)
+end
+
+function Vector3:ToBuffer()
+	local buf = buffer.create(12)
+	buffer.writef32(buf, 0, self.X)
+	buffer.writef32(buf, 4, self.Y)
+	buffer.writef32(buf, 8, self.Z)
+	return buf
+end
+
 function Vector3.Slerp(a, b, t)
 	local v0 = a:Unit()
 	local v1 = b:Unit()
