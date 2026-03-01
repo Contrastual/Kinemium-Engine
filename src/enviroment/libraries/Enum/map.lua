@@ -5,6 +5,41 @@ local dump = require("./dump")
 
 _G.log = _G.log
 
+enumTable.KinemiumDownscaleMode = {
+	Nearest = 1,
+	Linear = 2,
+	Box = 3,
+}
+
+enumTable.KinemiumUpscaleMode = {
+	Nearest = 1,
+	Linear = 2,
+	Bicubic = 3,
+	Lanczos = 4,
+}
+
+enumTable.KinemiumOutputMode = {
+	Scene = 1,
+	Albedo = 2,
+	Normal = 3,
+	ORM = 4,
+	Diffuse = 5,
+	Specular = 6,
+	SSAO = 7,
+	SSIL = 8,
+	SSGI = 9,
+	SSR = 10,
+	Bloom = 11,
+	DOF = 12,
+}
+
+enumTable.KinemiumShaderPreset = {
+	Low = 1,
+	Medium = 2,
+	High = 3,
+	Ultra = 4,
+}
+
 enumTable.KeyCode = {
 	Space = 32,
 	Quote = 39, -- Apostrophe
