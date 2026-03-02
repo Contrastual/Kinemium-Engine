@@ -313,6 +313,37 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	rlib.R3D_SetLightActive(light, true)
 	rlib.R3D_EnableShadow(light)
 
+	local effectToEnvMap = {
+		SSAOEffect = { offset = "ssao", struct = r3d.structs.R3D_EnvSSAO },
+		BloomEffect = { offset = "bloom", struct = r3d.structs.R3D_EnvBloom },
+		SSGIEffect = { offset = "ssgi", struct = r3d.structs.R3D_EnvSSGI },
+		SSILEffect = { offset = "ssil", struct = r3d.structs.R3D_EnvSSIL },
+		SSREffect = { offset = "ssr", struct = r3d.structs.R3D_EnvSSR },
+		DOFEffect = { offset = "dof", struct = r3d.structs.R3D_EnvDoF },
+		FogEffect = { offset = "fog", struct = r3d.structs.R3D_EnvFog },
+		TonemapEffect = { offset = "tonemap", struct = r3d.structs.R3D_EnvTonemap },
+		ColorEffect = { offset = "color", struct = r3d.structs.R3D_EnvColor },
+	}
+
+	local function applyEffectToEnv(effect)
+		local map = effectToEnvMap[effect.ClassName]
+		if map and effect._r3deffect then
+			local envType = r3d.structs.R3D_Environment
+			local environment: FFIPointer = rlib.R3D_GetEnvironment()
+			environment:write(envType:offset(map.offset), effect._r3deffect, 0, map.struct:size())
+		end
+	end
+
+	local function handleLightingChild(child)
+		if effectToEnvMap[child.ClassName] then
+			applyEffectToEnv(child)
+			child.Changed:Connect(function()
+				applyEffectToEnv(child)
+			end)
+		end
+		handleSky(child, renderer)
+	end
+
 	renderer_signal:Connect(function(route, dt)
 		if route == "RenderStepped" then
 			if Lighting.EnableDayCycle == true then
@@ -355,11 +386,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end
 	end)
 
-	Lighting.ChildAdded:Connect(function(child)
-		handleSky(child, renderer)
-	end)
-
-	renderer.Hook.new("Before3D", function() end)
+	Lighting.ChildAdded:Connect(handleLightingChild)
 end
 
 return Lighting

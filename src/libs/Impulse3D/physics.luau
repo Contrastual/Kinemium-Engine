@@ -1,24 +1,157 @@
+-- Impulse3D Physics Solver
+-- devcell
+
 local physics = {}
 
 local Vector3, CFrame, Utility = require("@Vector3"), require("@CFrame"), require("./utility")
 local Vector3Double = Utility.Vector3Double
 local joints = require("./joints")
+local Broadphase = require("./broadphase")
 
 export type BodyManager = typeof(require("./body"))
 export type JointManager = typeof(joints)
 export type Vector3Double = typeof(Vector3Double.new(0, 0, 0))
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Configuration
+-- ─────────────────────────────────────────────────────────────────────────────
+
 physics.gravity = Vector3Double.new(0, -9.81, 0)
 physics.wind_direction = Vector3Double.new(0, 0, 0)
-physics.render = nil
+physics.render = nil -- optional: (id, body, dt) -> ()
 physics.hertz = 60
 physics.substeps = 4
 physics.accumulator = 0
-physics.constraintIterations = 4 -- Number of constraint solver iterations
-physics.jointWarmStarting = true -- Use warm starting for joints
+physics.constraintIterations = 4
+physics.jointWarmStarting = true
+physics.broadphaseCellSize = 4 -- tune for your scene scale
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Internal state
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local _broadphase = Broadphase.new(physics.broadphaseCellSize)
+-- activeContacts[pairKey] = { normal, penetration }
+-- Tracks which body pairs are in contact for enter/stay/exit callbacks
+local _activeContacts = {}
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Helpers
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local function canCollide(bodyA, bodyB): boolean
+	if bodyA.bodyType == "static" and bodyB.bodyType == "static" then
+		return false
+	end
+	-- Bitmask: A collides with B's group, and B collides with A's group
+	local maskOk = (bit32.band(bodyA.collisionMask, bodyB.collisionGroup) ~= 0)
+		and (bit32.band(bodyB.collisionMask, bodyA.collisionGroup) ~= 0)
+	return maskOk
+end
+
+local function pairKey(a, b): number
+	-- a < b guaranteed by broadphase
+	return a * 1000000007 + b
+end
+
+local function resolveImpulse(bodyA, bodyB, normal, penetration)
+	local relVel = bodyA.velocity - bodyB.velocity
+	local velAlongNorm = Vector3Double.dot(relVel, normal)
+
+	-- Only resolve if bodies are approaching
+	if velAlongNorm > 0 then
+		return
+	end
+
+	local restitution = math.min(bodyA.restitution, bodyB.restitution)
+	local invMassA = bodyA.invMass or 0
+	local invMassB = bodyB.invMass or 0
+	local totalInvMass = invMassA + invMassB
+
+	if totalInvMass < 1e-9 then
+		return
+	end
+
+	-- Impulse scalar (correct mass weighting)
+	local j = -(1 + restitution) * velAlongNorm / totalInvMass
+
+	local impulse = normal * j
+
+	if bodyA.bodyType ~= "static" then
+		bodyA.velocity = bodyA.velocity + impulse * invMassA
+	end
+	if bodyB.bodyType ~= "static" then
+		bodyB.velocity = bodyB.velocity - impulse * invMassB
+	end
+
+	-- Friction
+	Utility.ResolveFriction(bodyA, bodyB, normal, j)
+
+	-- Positional correction (Baumgarte-like, slop = 0.005)
+	local SLOP = 0.005
+	local CORRECTION = 0.4
+	if penetration > SLOP then
+		local corr = (penetration - SLOP) * CORRECTION / totalInvMass
+		if bodyA.bodyType ~= "static" then
+			bodyA.position = bodyA.position + normal * (corr * invMassA)
+		end
+		if bodyB.bodyType ~= "static" then
+			bodyB.position = bodyB.position - normal * (corr * invMassB)
+		end
+	end
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Collision Narrowphase
+-- ─────────────────────────────────────────────────────────────────────────────
+
+local function narrowphase(bodyA, bodyB)
+	local shapeA = bodyA.shape or "box"
+	local shapeB = bodyB.shape or "box"
+
+	local normal, penetration
+
+	if shapeA == "sphere" and shapeB == "sphere" then
+		normal, penetration = Utility.resolveSphereSphere(bodyA, bodyB)
+	elseif shapeA == "sphere" and shapeB == "box" then
+		normal, penetration = Utility.resolveSpherAABB(bodyA, bodyB)
+	elseif shapeA == "box" and shapeB == "sphere" then
+		-- Flip normal direction for consistent convention
+		local n, p = Utility.resolveSpherAABB(bodyB, bodyA)
+		if n then
+			normal, penetration = Vector3Double.neg(n), p
+		end
+	else
+		-- Both boxes
+		if
+			not Utility.AABBOverlap(
+				{ pos = bodyA.position, size = bodyA.size },
+				{ pos = bodyB.position, size = bodyB.size }
+			)
+		then
+			return nil
+		end
+		normal, penetration = Utility.resolveCollision(bodyA, bodyB)
+	end
+
+	if not normal or not penetration or penetration <= 0 then
+		return nil
+	end
+
+	return normal, penetration
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step
+-- ─────────────────────────────────────────────────────────────────────────────
 
 function physics.step(body_manager: BodyManager, joint_manager: JointManager?, dt: number)
 	dt = math.min(dt, 0.1)
+
+	-- Re-create broadphase if cell size changed
+	if _broadphase.cellSize ~= physics.broadphaseCellSize then
+		_broadphase = Broadphase.new(physics.broadphaseCellSize)
+	end
 
 	physics.accumulator += dt
 
@@ -31,216 +164,259 @@ function physics.step(body_manager: BodyManager, joint_manager: JointManager?, d
 end
 
 function physics.substep(body_manager: BodyManager, joint_manager: JointManager?, dt: number)
-	body_manager.each(function(id, body)
-		body.velocity = body.velocity or Vector3Double.new(0, 0, 0)
-		body.position = body.position or Vector3Double.new(0, 0, 0)
-		body.orientation = body.orientation or CFrame.new()
-		body.angularVelocity = body.angularVelocity or Vector3Double.new(0, 0, 0)
-
-		-- Skip sleeping bodies
-		if body.isSleeping then
-			return
-		end
-	end)
-
+	-- ── 1. Integrate forces & apply gravity/wind ──────────────────────────────
 	for id, body in pairs(body_manager.pool) do
-		if body.bodyType == "dynamic" then
-			body.velocity = body.velocity + physics.gravity * dt
-			body.velocity = body.velocity + physics.wind_direction * dt
-
-			local airDamping = 0.99
-			body.velocity = body.velocity * math.pow(airDamping, dt * physics.hertz)
-
-			body.position = body.position + body.velocity * dt
-		elseif body.bodyType == "kinematic" then
-			local airDamping = 0.99
-			body.velocity = body.velocity * math.pow(airDamping, dt * physics.hertz)
-			body.position = body.position + body.velocity * dt
-		end
-	end
-
-	for id, body in pairs(body_manager.pool) do
-		body.orientation = body.orientation
-			* CFrame.fromEulerAnglesXYZ(
-				body.angularVelocity.X * dt,
-				body.angularVelocity.Y * dt,
-				body.angularVelocity.Z * dt
-			)
-	end
-
-	-- Simple collision detection (O(n²) - acceptable for small numbers of bodies)
-	for id, body in pairs(body_manager.pool) do
-		-- Skip sleeping bodies in collision detection
-		if body.isSleeping then
+		if body.isSleeping or body.bodyType ~= "dynamic" then
 			continue
 		end
 
-		for otherId, other in pairs(body_manager.pool) do
-			if otherId ~= id and not other.isSleeping then
-				-- Check if both bodies can collide
-				local canCollide = true
+		body.velocity = body.velocity + physics.gravity * dt
+		body.velocity = body.velocity + physics.wind_direction * dt
 
-				-- Static bodies only collide with dynamic/kinematic bodies
-				if body.bodyType == "static" and other.bodyType == "static" then
-					canCollide = false
-				end
+		-- Air damping (frame-rate independent)
+		local drag = math.pow(0.99, dt * physics.hertz)
+		body.velocity = body.velocity * drag
 
-				if
-					canCollide
-					and Utility.AABBOverlap(
-						{ pos = body.position, size = body.size },
-						{ pos = other.position, size = other.size }
-					)
-				then
-					local normal, penetration = Utility.resolveCollision(body, other)
+		-- Accumulated forces
+		if #body.forces > 0 then
+			for _, force in ipairs(body.forces) do
+				body.velocity = body.velocity + force * dt * (body.invMass or 1)
+			end
+			table.clear(body.forces)
+		end
+	end
 
-					-- Calculate position correction based on body types
-					local bodyCorrection = 0
-					local otherCorrection = 0
+	-- ── 2. Kinematic bodies ───────────────────────────────────────────────────
+	for id, body in pairs(body_manager.pool) do
+		if body.isSleeping or body.bodyType ~= "kinematic" then
+			continue
+		end
+		body.velocity = body.velocity * math.pow(0.99, dt * physics.hertz)
+	end
 
-					if body.bodyType == "static" then
-						-- Static bodies don't move
-						bodyCorrection = 0
-						otherCorrection = penetration
-					elseif other.bodyType == "static" then
-						-- Other body is static
-						bodyCorrection = penetration
-						otherCorrection = 0
-					else
-						-- Both bodies can move
-						bodyCorrection = penetration / 2
-						otherCorrection = penetration / 2
-					end
+	-- ── 3. Integrate positions ────────────────────────────────────────────────
+	for id, body in pairs(body_manager.pool) do
+		if body.isSleeping or body.bodyType == "static" then
+			continue
+		end
+		body.position = body.position + body.velocity * dt
 
-					-- Calculate proposed new positions
-					local proposedBodyPos = body.position + normal * (bodyCorrection + 0.01)
-					local proposedOtherPos = other.position - normal * (otherCorrection + 0.01)
+		-- Angular integration (skip if effectively zero)
+		local avSq = Vector3Double.magnitudeSquared(body.angularVelocity)
+		if avSq > 1e-10 then
+			body.orientation = body.orientation
+				* CFrame.fromEulerAnglesXYZ(
+					body.angularVelocity.X * dt,
+					body.angularVelocity.Y * dt,
+					body.angularVelocity.Z * dt
+				)
+		end
+	end
 
-					-- Check if any other bodies would be penetrated by these new positions
-					local bodyPosValid = true
-					local otherPosValid = true
+	-- ── 4. Broadphase ─────────────────────────────────────────────────────────
+	_broadphase:clear()
+	for id, body in pairs(body_manager.pool) do
+		if not body.isSleeping then
+			local sz = (body.shape == "sphere") and Vector3Double.new(body.radius * 2, body.radius * 2, body.radius * 2)
+				or body.size
+			_broadphase:insert(id, body.position, sz)
+		end
+	end
 
-					for checkId, checkBody in pairs(body_manager.pool) do
-						if checkId ~= id and checkId ~= otherId and not checkBody.isSleeping then
-							-- Check if proposed body position overlaps with other bodies
-							if
-								bodyCorrection > 0
-								and Utility.AABBOverlap(
-									{ pos = proposedBodyPos, size = body.size },
-									{ pos = checkBody.position, size = checkBody.size }
-								)
-							then
-								bodyPosValid = false
-								break
-							end
+	-- ── 5. Narrowphase collision resolution ──────────────────────────────────
+	local newContacts = {}
 
-							-- Check if proposed other position overlaps with other bodies
-							if
-								otherCorrection > 0
-								and Utility.AABBOverlap(
-									{ pos = proposedOtherPos, size = other.size },
-									{ pos = checkBody.position, size = checkBody.size }
-								)
-							then
-								otherPosValid = false
-								break
-							end
-						end
-					end
+	for _, pair in ipairs(_broadphase:queryPairs()) do
+		local idA, idB = pair[1], pair[2]
+		local bodyA = body_manager.get(idA)
+		local bodyB = body_manager.get(idB)
 
-					-- Apply position corrections
-					if bodyPosValid and bodyCorrection > 0 then
-						body.position = proposedBodyPos
-					elseif bodyCorrection > 0 then
-						-- Use conservative separation
-						body.position = body.position + normal * (penetration + 0.05)
-					end
+		if not bodyA or not bodyB then
+			continue
+		end
+		if not canCollide(bodyA, bodyB) then
+			continue
+		end
 
-					if otherPosValid and otherCorrection > 0 then
-						other.position = proposedOtherPos
-					elseif otherCorrection > 0 then
-						-- Use conservative separation
-						other.position = other.position - normal * (penetration + 0.05)
-					end
+		local normal, penetration = narrowphase(bodyA, bodyB)
+		if not normal then
+			continue
+		end
 
-					-- Apply velocity impulses based on body types
-					local relativeVel = body.velocity - other.velocity
-					local velAlongNormal = Vector3Double.dot(relativeVel, normal)
+		-- CCD guard: skip pairs where swept test would reject (already separated)
+		-- (broadphase overlap already implies proximity; full CCD would be a separate pass)
 
-					if velAlongNormal < 0 then
-						local restitution = 0.2 -- Reduced bounciness for stable stacking
-						local j = -(1 + restitution) * velAlongNormal
+		resolveImpulse(bodyA, bodyB, normal, penetration)
 
-						-- Distribute impulse based on body types
-						local bodyImpulse = 0
-						local otherImpulse = 0
+		-- Collision callbacks tracking
+		local key = pairKey(idA, idB)
+		newContacts[key] = { normal = normal, penetration = penetration, a = idA, b = idB }
 
-						if body.bodyType == "static" then
-							-- Static bodies don't respond to impulses
-							bodyImpulse = 0
-							otherImpulse = j
-						elseif other.bodyType == "static" then
-							-- Other body is static
-							bodyImpulse = j
-							otherImpulse = 0
-						else
-							-- Both bodies respond (equal mass assumption)
-							bodyImpulse = j / 2
-							otherImpulse = -j / 2
-						end
-
-						if body.bodyType ~= "static" then
-							local impulse = normal * bodyImpulse
-							body.velocity = body.velocity + impulse
-						end
-
-						if other.bodyType ~= "static" then
-							local impulse = normal * otherImpulse
-							other.velocity = other.velocity + impulse
-						end
-					end
-				end
+		if _activeContacts[key] then
+			-- stay
+			if bodyA.onCollisionStay then
+				bodyA.onCollisionStay(idA, idB, normal, penetration)
+			end
+			if bodyB.onCollisionStay then
+				bodyB.onCollisionStay(idB, idA, -normal, penetration)
+			end
+		else
+			-- enter
+			if bodyA.onCollisionEnter then
+				bodyA.onCollisionEnter(idA, idB, normal, penetration)
+			end
+			if bodyB.onCollisionEnter then
+				bodyB.onCollisionEnter(idB, idA, -normal, penetration)
 			end
 		end
 	end
 
-	for id, body in pairs(body_manager.pool) do
-		if body.position.Y - body.size.Y / 2 <= 0 then
-			body.position = Vector3Double.new(body.position.X, body.size.Y / 2, body.position.Z)
-
-			local restitution = 0.3
-			body.velocity = Vector3Double.new(body.velocity.X, -body.velocity.Y * restitution, body.velocity.Z)
-
-			local friction = 0.85
-			body.velocity = Vector3Double.new(
-				body.velocity.X * math.pow(friction, dt * physics.hertz),
-				body.velocity.Y,
-				body.velocity.Z * math.pow(friction, dt * physics.hertz)
-			)
-		end
-
-		if physics.render then
-			physics.render(id, body, dt)
+	-- Fire exit callbacks for pairs that ended this frame
+	for key, contact in pairs(_activeContacts) do
+		if not newContacts[key] then
+			local bodyA = body_manager.get(contact.a)
+			local bodyB = body_manager.get(contact.b)
+			if bodyA and bodyA.onCollisionExit then
+				bodyA.onCollisionExit(contact.a, contact.b, contact.normal, contact.penetration)
+			end
+			if bodyB and bodyB.onCollisionExit then
+				bodyB.onCollisionExit(contact.b, contact.a, -contact.normal, contact.penetration)
+			end
 		end
 	end
 
-	-- Solve joint constraints
+	_activeContacts = newContacts
+
+	-- ── 6. Floor constraint ───────────────────────────────────────────────────
+	for id, body in pairs(body_manager.pool) do
+		if body.bodyType == "static" or body.isSleeping then
+			continue
+		end
+
+		local floor
+		if body.shape == "sphere" then
+			floor = body.radius
+		else
+			floor = body.size.Y * 0.5
+		end
+
+		if body.position.Y - floor <= 0 then
+			body.position = Vector3Double.new(body.position.X, floor, body.position.Z)
+			local restitution = body.restitution or 0.3
+			local friction = body.friction or 0.5
+
+			if body.velocity.Y < 0 then
+				body.velocity = Vector3Double.new(body.velocity.X, -body.velocity.Y * restitution, body.velocity.Z)
+			end
+
+			-- Horizontal friction against floor
+			local drag = math.pow(1 - friction, dt * physics.hertz)
+			body.velocity = Vector3Double.new(body.velocity.X * drag, body.velocity.Y, body.velocity.Z * drag)
+		end
+	end
+
+	-- ── 7. Solve joints ───────────────────────────────────────────────────────
 	if joint_manager then
 		joints.solveAll(body_manager, dt, physics.constraintIterations)
 	end
 
-	-- Update sleep states for all bodies
-	body_manager.each(function(id, body)
+	-- ── 8. Sleep state update ─────────────────────────────────────────────────
+	for id, _ in pairs(body_manager.pool) do
 		body_manager.updateSleepState(id, dt)
-	end)
+	end
+
+	-- ── 9. Render callback ────────────────────────────────────────────────────
+	if physics.render then
+		for id, body in pairs(body_manager.pool) do
+			physics.render(id, body, dt)
+		end
+	end
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Force / Impulse API
+-- ─────────────────────────────────────────────────────────────────────────────
+
 function physics.applyImpulse(body, impulse: Vector3Double)
-	body.velocity = body.velocity + impulse
+	if body.bodyType == "static" then
+		return
+	end
+	body.velocity = body.velocity + impulse * (body.invMass or 1)
 end
 
 function physics.applyForce(body, force: Vector3Double, dt: number)
-	body.velocity = body.velocity + force * dt
+	if body.bodyType == "static" then
+		return
+	end
+	body.velocity = body.velocity + force * dt * (body.invMass or 1)
+end
+
+function physics.applyTorque(body, torque: Vector3Double, dt: number)
+	if body.bodyType == "static" then
+		return
+	end
+	body.angularVelocity = body.angularVelocity + torque * dt
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Raycasting
+-- ─────────────────────────────────────────────────────────────────────────────
+
+export type RaycastResult = {
+	bodyId: number,
+	point: Vector3Double,
+	normal: Vector3Double,
+	t: number,
+}
+
+-- Casts a ray and returns the closest hit, or nil
+function physics.raycast(
+	body_manager: BodyManager,
+	origin: Vector3Double,
+	direction: Vector3Double,
+	maxDist: number?
+): RaycastResult?
+	local maxT = maxDist or math.huge
+	local dirUnit = direction.Unit
+
+	local bestT = maxT
+	local bestResult: RaycastResult? = nil
+
+	for id, body in pairs(body_manager.pool) do
+		local hit, t, _, normal
+
+		if body.shape == "sphere" then
+			hit, t, normal = Utility.RaySphereIntersection(origin, dirUnit, body.position, body.radius)
+		else
+			hit, t, _, normal = Utility.RayAABBIntersection(origin, dirUnit, { pos = body.position, size = body.size })
+		end
+
+		if hit and t >= 0 and t < bestT then
+			bestT = t
+			bestResult = {
+				bodyId = id,
+				point = origin + dirUnit * t,
+				normal = normal,
+				t = t,
+			}
+		end
+	end
+
+	return bestResult
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Reset
+-- ─────────────────────────────────────────────────────────────────────────────
+
+function physics.reset(body_manager: BodyManager, joint_manager: JointManager?)
+	body_manager.clear()
+	if joint_manager then
+		joint_manager.clear()
+	end
+	physics.accumulator = 0
+	table.clear(_activeContacts)
+	_broadphase:clear()
 end
 
 return physics

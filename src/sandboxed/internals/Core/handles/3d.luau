@@ -3,6 +3,10 @@ local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 
+if FlagExists("cli") or FlagExists("headless") then
+	return
+end
+
 local lib = raylib.lib
 local const = raylib.const
 local renderer = rlservice.renderer

@@ -196,7 +196,6 @@ local datatypes = {
 					numeric = true,
 					TextColor = Color3.new(0.4, 1, 1):ToRaylib(0),
 					onSubmit = function(new)
-						print("udim2 changed!")
 						local v = selected[propName]
 						selected[propName] = UDim2.new(tonumber(new) or 0, v.X.Offset, v.Y.Scale, v.Y.Offset)
 					end,
@@ -337,7 +336,6 @@ local datatypes = {
 				showStepButtons = true,
 
 				onSubmit = function(new)
-					print("number changed!")
 					selected[propName] = tonumber(new or 0)
 				end,
 			})
@@ -410,7 +408,6 @@ local datatypes = {
 				x = textbox.new({
 					padding = 5,
 					onSubmit = function(new)
-						print("changed")
 						selected[propName] = Vector3.new(tonumber(new), selected[propName].Y, selected[propName].Z)
 					end,
 					TextColor = Color3.new(1, 0, 0):ToRaylib(0),
@@ -418,8 +415,6 @@ local datatypes = {
 				y = textbox.new({
 					padding = 5,
 					onSubmit = function(new)
-						print("changed")
-
 						selected[propName] = Vector3.new(selected[propName].X, tonumber(new), selected[propName].Z)
 					end,
 					TextColor = Color3.new(0, 1, 0.266667):ToRaylib(0),
@@ -427,8 +422,6 @@ local datatypes = {
 				z = textbox.new({
 					padding = 5,
 					onSubmit = function(new)
-						print("changed")
-
 						selected[propName] = Vector3.new(selected[propName].X, selected[propName].Y, tonumber(new))
 					end,
 					TextColor = Color3.new(0, 0, 1):ToRaylib(0),

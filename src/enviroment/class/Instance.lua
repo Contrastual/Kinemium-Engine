@@ -842,7 +842,7 @@ function Instance:EnableHistory(limit)
 end
 
 function Instance:Destroy()
-	if rawget(self, "Destroyed") then -- fix #1
+	if rawget(self, "Destroyed") then
 		return
 	end
 

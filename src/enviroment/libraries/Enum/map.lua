@@ -18,6 +18,26 @@ enumTable.KinemiumUpscaleMode = {
 	Lanczos = 4,
 }
 
+enumTable.KinemiumBloomMode = {
+	Mix = 1,
+	Additive = 2,
+	Screen = 3,
+}
+
+enumTable.KinemiumFogMode = {
+	Linear = 1,
+	Exponential = 2,
+	Exponential2 = 3,
+}
+
+enumTable.KinemiumTonemapMode = {
+	ACES = 1,
+	Reinhard = 2,
+	Filmic = 3,
+	Hejl = 4,
+	ACESFilmic = 5,
+}
+
 enumTable.KinemiumOutputMode = {
 	Scene = 1,
 	Albedo = 2,
