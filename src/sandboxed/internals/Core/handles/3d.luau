@@ -3,6 +3,10 @@ local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 
+if zune.platform.os == "linux" then
+	return
+end
+
 if FlagExists("cli") or FlagExists("headless") then
 	return
 end
