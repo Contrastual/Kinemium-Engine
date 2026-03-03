@@ -26,7 +26,7 @@ local logo = [[
     @@@@.@                      @.@@@@    
       @@@@    @            @    @@@@      
          @@@@@@   @    @   @@@@@@         
-            @@@@@@@@@@@@@@@@@@                           
+            @@@@@@@@@@@@@@@@@@            
 ]]
 
 local function io_start(msg, callback)
@@ -60,7 +60,7 @@ end
 local function clone()
 	print("UPDATER: Cloning repository...")
 	local success, result = pcall(function()
-		local proc = process.spawn("git", {
+		local proc = process.create("git", {
 			"clone",
 			"--progress",
 			"--depth",
@@ -75,14 +75,14 @@ local function clone()
 
 	print("UPDATER: Finished cloning.")
 	if not success then
-		print(result)
+		error(result)
 	end
 end
 
 local function update()
-	local repoDir = "Kinemium-Engine"
+	local repoDir = "./"
 
-	assert(fs.stat(repoDir .. "/.git").kind == "directory", "UPDATER: Not a git repository")
+	assert(fs.stat(repoDir .. ".git").kind == "directory", "UPDATER: Not a git repository")
 
 	print("UPDATER: Fetching latest changes from origin...")
 	local fetch = process.run("git", { "fetch", "origin" }, { cwd = repoDir })
@@ -100,7 +100,7 @@ local function update()
 end
 
 print(logo)
-if not fileExists("./Kinemium-Engine") then
+if not fileExists("../Kinemium-Engine") then
 	io_start(
 		"UPDATER: You don't seem to have the repository installed, Do you want to install it? (y/n) ",
 		function(line)

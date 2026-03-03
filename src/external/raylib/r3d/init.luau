@@ -14,6 +14,8 @@ local assimpname = "assimp-vc145-mt." .. ffi.suffix
 local raylibname = "raylib." .. ffi.suffix
 
 local stat = zune.fs.stat(dll .. assimpname)
+warn("I expect " .. dll .. assimpname)
+warn(stat)
 if stat.kind == "none" then
 	print("Did not find assimp LIB, Listing all files in searching directory")
 	local entries = zune.fs.entries(dll)
