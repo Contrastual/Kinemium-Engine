@@ -207,8 +207,6 @@ end
 
 local function setAllEnvironmentEffects()
 	local environment: FFIPointer = rlib.R3D_GetEnvironment()
-
-
 	rlib.R3D_SetEnvironment(environment)
 end
 
@@ -259,9 +257,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
 	})
 
-	local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
-	setSkyObject(cubemapSky)
-	--loadSky("./src/assets/sky/test/images/sky.png")
+	if zune.platform.os == "linux" then 
+		loadSky("./src/assets/sky/test/images/sky.png")
+	else
+		local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
+		setSkyObject(cubemapSky)
+	end
 	setAllEnvironmentEffects()
 
 	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR
