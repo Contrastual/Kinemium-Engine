@@ -13,7 +13,7 @@ local libname = "r3d." .. ffi.suffix
 local assimpname = "assimp-vc145-mt." .. ffi.suffix
 local raylibname = "raylib." .. ffi.suffix
 
-local stat = zune.fs.stat(assimpname)
+local stat = zune.fs.stat(dll .. assimpname)
 if stat.kind == "none" then
 	print("Did not find assimp LIB, Listing all files in searching directory")
 	local entries = zune.fs.entries(dll)
@@ -23,6 +23,7 @@ end
 
 ffi.dlopen(dll .. assimpname, {})
 ffi.dlopen(dll .. raylibname, {})
+
 local r3d: typeof(funcs) = ffi.dlopen(dll .. libname, funcs)
 
 return {

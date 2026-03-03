@@ -75,7 +75,7 @@ local function clone()
 
 	print("UPDATER: Finished cloning.")
 	if not success then
-		warn(result)
+		print(result)
 	end
 end
 
