@@ -24,48 +24,6 @@ local function worldToChunk(pos)
 	return math.floor(pos.X / CHUNK_SIZE), math.floor(pos.Y / CHUNK_SIZE), math.floor(pos.Z / CHUNK_SIZE)
 end
 
-local function ShouldDrawPart(part, camPos, camForward, camFovy, screenWidth, screenHeight)
-	local pos = part._posVec
-	if not pos then
-		-- cache position vector to avoid allocations
-		pos = Vector3.new(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-		part._posVec = pos
-	else
-		pos.X = part.CFrame.Position.X
-		pos.Y = part.CFrame.Position.Y
-		pos.Z = part.CFrame.Position.Z
-	end
-
-	-- radius of part for rough bounding sphere
-	local s = part.Size
-	local radius = math.sqrt(s.X * s.X + s.Y * s.Y + s.Z * s.Z) * 0.5
-
-	--  distance culling
-	local dx = pos.X - camPos.X
-	local dy = pos.Y - camPos.Y
-	local dz = pos.Z - camPos.Z
-	local distSq = dx * dx + dy * dy + dz * dz
-	local maxDist = 2000 * radius
-	if distSq > maxDist * maxDist then
-		return false
-	end
-
-	-- behind-camera culling (dot product)
-	local toPartX, toPartY, toPartZ = dx, dy, dz
-	local dot = camForward.X * toPartX + camForward.Y * toPartY + camForward.Z * toPartZ
-	if dot <= -radius then
-		return false
-	end
-
-	-- projected size = radius / sqrt(distSq) * screenHeight / tan(fovy/2)
-	local projSize = radius / math.sqrt(distSq) * (screenHeight / math.tan(math.rad(camFovy * 0.5)))
-	if projSize < 1 then
-		return false
-	end
-
-	return true
-end
-
 Workspace.InitRenderer = function(renderer, signal, game)
 	local IdPool = {}
 
@@ -245,17 +203,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				for i = 1, #chunk.parts do
 					local part = chunk.parts[i]
 
-					if
-						isRenderable(part)
-						and ShouldDrawPart(
-							part,
-							vector.create(camPos.X, camPos.Y, camPos.Z),
-							vector.create(camTarget.X, camTarget.Y, camTarget.Z),
-							camFovy,
-							lib.GetRenderWidth(),
-							lib.GetRenderHeight()
-						)
-					then
+					if isRenderable(part) then
 						local meshData = preloadedMeshes[part.Shape.Value]
 						local matData = loadedMaterials[part.Material.Value]
 						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
