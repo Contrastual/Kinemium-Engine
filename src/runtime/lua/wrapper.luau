@@ -1,18 +1,14 @@
 -- lua bindings
 -- this was made to load lua libraries that are not luau
 -- (yes i was that lazy to make bindings for the libraries i want)
-
-local dll = "./src/runtime/lua/bin/"
 local ffi = zune.ffi
+local dll = "./src/runtime/lua/bin/"
 local platform = zune.platform
 
-local libname
-if platform.os == "windows" then
-	libname = "lua54.dll"
-elseif platform.os == "linux" then
-	libname = "lua54.so"
-elseif platform.os == "macos" then
-	libname = "lua54.dylib"
+local libname = "lua54." .. ffi.suffix
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	dll = "./"
 end
 
 local funcs = {

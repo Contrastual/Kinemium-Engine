@@ -15,15 +15,22 @@ export type KinemiumPlaceFile = {
 local sArgs = {
 	"-s",
 	"src/main.lua",
-	"src/enviroment/**",
+	"src/enviroment/*",
+	"src/enviroment/class/**",
+	"src/enviroment/classlibs/**",
 	"src/enviroment/datatypes/**",
+	"src/enviroment/libraries/**",
+
+	"src/enviroment/game/services/Workspace/**",
+	"src/enviroment/game/services/*/*",
+	"src/enviroment/game/*",
+	"src/enviroment/game/runtime/*",
+
 	"src/modules/**/*.lua*",
 	"src/renderer/**/*.lua*",
 	"src/sandboxed/**/*.lua*",
-	"src/shaders/**/*.lua*",
 	"src/runtime/**/*.lua*",
 	"src/external/**/*.lua*",
-	"src/runtime/**",
 	"src/objects/**",
 	"src/libs/**",
 	"src/**",
@@ -41,13 +48,15 @@ local function build(placeFile)
 		"src/assets/icon/**",
 		"src/assets/materials/**",
 		"src/assets/meshes/**",
+		"src/assets/fonts/**",
 		"src/assets/sky/**",
-		"src/assets/shaders/**",
 		"src/assets/sounds/**",
 		"src/assets/videos/**",
 	}
 
-	table.insert(args, placeFile)
+	if placeFile then
+		table.insert(args, placeFile)
+	end
 	for _, line in pairs(sArgs) do
 		table.insert(args, line)
 	end
@@ -92,6 +101,27 @@ end
 
 KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	KineFileService:SetProperties({
+		BuildRuntime = function()
+			local SerializationService = datamodel:GetService("SerializationService")
+			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
+			if serialized then
+				local wrapper = {}
+
+				fs.makeDir("./build")
+
+				local dlls = loop("./")
+				for _, dll in dlls do
+					pcall(function()
+						fs.copy(dll, "./build/" .. fs.path.basename(dll))
+						print(`Cloned {dll}`)
+					end)
+				end
+
+				build()
+
+				return wrapper
+			end
+		end,
 		Save = function(pathName)
 			local SerializationService = datamodel:GetService("SerializationService")
 			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })

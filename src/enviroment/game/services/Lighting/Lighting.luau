@@ -7,7 +7,7 @@ local rlstructs = raylib.structs
 local Lighting = Instance.new("Lighting")
 local Color3 = require("@Color3")
 local PointLights = {}
-local clouds = require("./Lighting/clouds")
+local clouds = require("./clouds")
 local r3d = require("@r3d")
 local rlib = r3d.lib
 

@@ -35,10 +35,10 @@ function DataModel.new(RENDERER, ...)
 		if zembed.IsEmbedded() then
 			name = fs.path.basename(service):gsub(".luau", "")
 			name = string.gsub(name, ".lua", "")
-			path = "./services/" .. name
+			path = `./services/{name}/{name}`
 		else
 			name = service.name:gsub(".lua", "")
-			path = "./services/" .. name
+			path = `./services/{name}/{name}`
 		end
 		local success, returnedData = pcall(require, path)
 
@@ -66,7 +66,6 @@ function DataModel.new(RENDERER, ...)
 						.. "\n"
 						.. debug.traceback("", 2)
 				)
-				zune.process.exit(1)
 			end
 		else
 			warn(
@@ -79,7 +78,6 @@ function DataModel.new(RENDERER, ...)
 					.. "\n"
 					.. debug.traceback("", 2)
 			)
-			zune.process.exit(1)
 		end
 	end
 

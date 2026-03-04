@@ -2,7 +2,10 @@
 --!optimize 2
 
 local dll = "./src/external/raylib/native/bin/"
-
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	dll = "./"
+end
 local ffi = zune.ffi
 
 local structs = require("./r3d/structs")

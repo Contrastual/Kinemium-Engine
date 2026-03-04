@@ -5,13 +5,10 @@ local dll = "./src/runtime/python/bin/"
 local ffi = zune.ffi
 local platform = zune.platform
 
-local libname
-if platform.os == "windows" then
-	libname = "python3.dll"
-elseif platform.os == "linux" then
-	libname = "python3.so"
-elseif platform.os == "macos" then
-	libname = "python3.dylib"
+local libname = "python3." .. ffi.suffix
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	dll = "./"
 end
 
 local py_lib = ffi.dlopen(dll .. libname, {

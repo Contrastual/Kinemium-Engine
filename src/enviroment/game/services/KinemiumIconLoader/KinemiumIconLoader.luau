@@ -8,9 +8,13 @@ KinemiumIconLoader.ExplorerHidden = true
 local raylib = require("@raylib")
 local lib = raylib.lib
 
-local general = "./src/assets/images/icons/vanilla3/general/32x/200"
-local objects = "./src/assets/images/icons/vanilla3/instance/16x/200"
-local kinemiumIcons = "./src/assets/images/icons/vanilla3/kinemium"
+local zembed = require("@zembed")
+local general = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\general]])
+	or "./src/assets/images/icons/vanilla3/general/32x/200"
+local objects = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\instance]])
+	or "./src/assets/images/icons/vanilla3/instance/16x/200"
+local kinemiumIcons = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\kinemium]])
+	or "./src/assets/images/icons/vanilla3/kinemium"
 
 KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	local registry = {}
@@ -20,16 +24,19 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		table.clear(registry)
 		table.clear(textures)
 
-		for _, file in pairs(fs.entries(general)) do
-			registry[file.name] = general .. "/" .. file.name
+		for _, file in pairs(type(general) == "string" and fs.entries(general) or general) do
+			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+				or general .. "/" .. file.name
 		end
 
-		for _, file in pairs(fs.entries(objects)) do
-			registry[file.name] = objects .. "/" .. file.name
+		for _, file in pairs(type(objects) == "string" and fs.entries(objects) or objects) do
+			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+				or objects .. "/" .. file.name
 		end
 
-		for _, file in pairs(fs.entries(kinemiumIcons)) do
-			registry[file.name] = kinemiumIcons .. "/" .. file.name
+		for _, file in pairs(type(kinemiumIcons) == "string" and fs.entries(kinemiumIcons) or kinemiumIcons) do
+			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+				or kinemiumIcons .. "/" .. file.name
 		end
 	end
 

@@ -6,7 +6,13 @@ local constants = require("./constants")
 local funcs = require("./funcs")
 
 local libname = "libqjs." .. ffi.suffix
-local lib = ffi.dlopen("./src/runtime/quickjs/bin/" .. libname, funcs)
+
+local dll = "./src/runtime/quickjs/bin/"
+local zembed = require("@zembed")
+if zembed.IsEmbedded() then
+	dll = "./"
+end
+local lib = ffi.dlopen(dll .. libname, funcs)
 
 local JSVM = {}
 

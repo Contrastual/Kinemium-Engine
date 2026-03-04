@@ -3,10 +3,11 @@ local Instance = require("@Instance")
 local ReplicatorService = Instance.new("ReplicatorService")
 ReplicatorService.ExplorerHidden = true
 
-local Server = require("./ReplicatorService/Server")
-local Client = require("./ReplicatorService/Client")
+local Server = require("./Server")
+local Client = require("./Client")
 
 ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
+	--[[
 	task.spawn(function()
 		repeat
 			log("[Replicator] Waiting for SerializationService and NetworkService")
@@ -30,6 +31,7 @@ ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 			Client.init(ctx)
 		end
 	end)
+	--]]
 end
 
 return ReplicatorService

@@ -3,7 +3,7 @@ local signal = require("@Kinemium.signal")
 
 local discordlib = require("@discord")
 local structs = discordlib.rpc.structs
-local kinemium_discord_rpc = require("./DiscordService/rpc")
+local kinemium_discord_rpc = require("./rpc")
 local bufferUtils = require("@bufferUtils")
 
 local DiscordService = Instance.new("DiscordService")

@@ -14,8 +14,15 @@ local function transformFontName(v: string)
 	return v
 end
 
-local engine_fonts = "./src/assets/fonts"
+local zembed = require("@zembed")
+local engine_fonts
 local fontCount = 0
+
+if zembed.IsEmbedded() then
+	engine_fonts = zembed.GetFilesThatHas([[.ttf]])
+else
+	engine_fonts = "./src/assets/fonts"
+end
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
@@ -53,9 +60,9 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		LoadAllEngineFonts = function()
 			local cache = {}
 
-			for _, font in pairs(fs.entries(engine_fonts)) do
-				local path = engine_fonts .. "/" .. font.name
-				local transformed = transformFontName(font.name)
+			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
+				local path = zembed.IsEmbedded() and font or engine_fonts .. "/" .. font.name
+				local transformed = transformFontName(zembed.IsEmbedded() and font or font.name)
 				if cache[transformed] then
 					continue
 				end

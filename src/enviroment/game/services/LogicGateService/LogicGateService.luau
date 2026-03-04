@@ -1,7 +1,7 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
-local gates = require("./LogicGateService/gates")
+local gates = require("./gates")
 
 local LogicGateService = Instance.new("LogicGateService")
 LogicGateService.ExplorerHidden = true
