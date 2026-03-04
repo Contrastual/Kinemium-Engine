@@ -84,6 +84,7 @@ function DataModel.new(RENDERER, ...)
 	for name, service in pairs(self.Services) do
 		service.Name = name
 		service.Parent = self
+		service.BaseClass = "Singleton"
 	end
 
 	function self:GetService(v)

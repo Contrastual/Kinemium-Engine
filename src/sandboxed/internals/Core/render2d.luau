@@ -118,8 +118,6 @@ ideWindow.stepped = function(data)
 	end
 end
 
-local viewport_x, viewport_y, viewport_width, viewport_height = 0, 0, 0, 0
-
 renderer.Pool.new("2d", function(data)
 	if game.Context ~= Enum.GameContext.Editor then
 		return

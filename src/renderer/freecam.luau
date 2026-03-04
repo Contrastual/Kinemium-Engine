@@ -15,6 +15,7 @@ local function UpdateFreecam(delta: number, Kinemium_camera)
 	-- handle cursor locking
 	if lib.IsMouseButtonPressed(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
 		lib.DisableCursor()
+		lib.SetMousePosition(lib.GetRenderWidth() // 2, lib.GetRenderHeight() // 2)
 	end
 	if lib.IsMouseButtonReleased(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
 		lib.EnableCursor()
@@ -23,6 +24,9 @@ local function UpdateFreecam(delta: number, Kinemium_camera)
 	-- rotate camera with mouse
 	if lib.IsMouseButtonDown(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
 		local md = lib.GetMouseDelta()
+
+		lib.SetMousePosition(lib.GetRenderWidth() // 2, lib.GetRenderHeight() // 2)
+
 		local yaw = -md.x * MOUSE_SENSITIVITY
 		local pitch = -md.y * MOUSE_SENSITIVITY
 

@@ -5,7 +5,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local dragOffset = { x = 0, y = 0 }
 	local Color3 = require("@Color3")
 	local Enum = require("@EnumMap")
-	local const = require("@raylib").const
 	local spring = require("@kispring")
 	local KinemiumFontService = game:GetService("KinemiumFontService")
 
@@ -24,16 +23,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	else
 		shadowTexture = raylib.LoadTexture("./src/assets/images/shadow.png")
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
-	end
-
-	local function Color3ToRaylib(c, transparency)
-		local r, g, b = c:ToRGB()
-		return structs.Color:new({
-			r = r,
-			g = g,
-			b = b,
-			a = math.floor(255 * (1 - transparency)),
-		})
 	end
 
 	local function getResizeSide(window, mousePos)
@@ -79,12 +68,38 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		end
 	end
 
+	local function isMouseOverWindow(window, mousePos)
+		return mousePos.x >= window.x
+			and mousePos.x <= window.x + window.width
+			and mousePos.y >= window.y
+			and mousePos.y <= window.y + window.height
+	end
+
 	module.OutlineColor = Color3.new(0, 0.517647, 1)
 	module.OutlineTransparency = 1
 	module.dragged = function() end
 	module.stepped = function() end
 	module.dragEnd = function() end
 	module.backgroundDrawed = function() end
+	module.focused = function() end
+	module.unfocused = function() end
+
+	local anyWindowFocused = false
+
+	local function isMouseInViewport(mousePos)
+		local screenWidth = raylib.GetMonitorWidth(0)
+		local screenHeight = raylib.GetMonitorHeight(0)
+		local toolbarHeight = 160
+		local viewportX = 0
+		local viewportY = toolbarHeight
+		local viewportWidth = screenWidth - 400
+		local viewportHeight = screenHeight - toolbarHeight - screenHeight * 0.2
+
+		return mousePos.x >= viewportX
+			and mousePos.x <= viewportX + viewportWidth
+			and mousePos.y >= viewportY
+			and mousePos.y <= viewportY + viewportHeight
+	end
 
 	function module.create(data: {
 		headerRender: boolean?,
@@ -110,6 +125,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			stepped = data.step,
 			enabled = data.enabled or true,
 			scrollOffset = vector.create(0, 0),
+			Focused = false,
+			focused = function() end,
+			unfocused = function() end,
 		}
 		table.insert(windowRegistry, window)
 
@@ -129,8 +147,71 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	function module.update(dt, theme)
 		local mousePos = raylib.GetMousePosition()
 		local mousePressed = raylib.IsMouseButtonPressed(0)
+		local mouseRightPressed = raylib.IsMouseButtonPressed(1)
 		local mouseDown = raylib.IsMouseButtonDown(0)
 		local mouseReleased = raylib.IsMouseButtonReleased(0)
+
+		-- Handle right-click on viewport to enable 3D input (for freecam)
+		if mouseRightPressed == 1 then
+			if isMouseInViewport(mousePos) then
+				game.Stop3DInput = false
+				anyWindowFocused = false
+				-- Unfocus all windows when right-clicking on viewport
+				for _, window in pairs(windowRegistry) do
+					if window.Focused then
+						window.Focused = false
+						window.unfocused(window)
+						module.unfocused(window)
+					end
+				end
+			end
+		end
+
+		if mousePressed == 1 then
+			-- Focus/unfocus logic: find the topmost window the mouse is over
+			local clickedWindow = nil
+			for i = #windowRegistry, 1, -1 do
+				local window = windowRegistry[i]
+				if not window.Closed and window.enabled and isMouseOverWindow(window, mousePos) then
+					clickedWindow = window
+					break
+				end
+			end
+
+			-- Track if any window gets focused this click
+			local windowFocusedThisClick = false
+
+			for _, window in pairs(windowRegistry) do
+				if window.Closed or not window.enabled then
+					continue
+				end
+
+				if window == clickedWindow then
+					if not window.Focused then
+						window.Focused = true
+						window.focused(window)
+						module.focused(window)
+					end
+					windowFocusedThisClick = true
+				else
+					if window.Focused then
+						window.Focused = false
+						window.unfocused(window)
+						module.unfocused(window)
+					end
+				end
+			end
+
+			if windowFocusedThisClick then
+				game.Stop3DInput = true
+				anyWindowFocused = true
+			else
+				if isMouseInViewport(mousePos) then
+					game.Stop3DInput = false
+					anyWindowFocused = false
+				end
+			end
+		end
 
 		if mousePressed == 1 and not draggedWindow and not resizingWindow then
 			for i = #windowRegistry, 1, -1 do
@@ -222,8 +303,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 		local window_theme_config = selectedTheme.window
 		local shadowsEnabled = window_theme_config.ShadowsEnabled
-		local shadowColor = shadowsEnabled and Color3ToRaylib(window_theme_config.ShadowColor, 0.9)
-		local whiteOutline = Color3ToRaylib(Color3.new(1, 1, 1), 0.9)
+		local shadowColor = shadowsEnabled and window_theme_config.ShadowColor:ToRaylib(0.9)
+		local whiteOutline = Color3.new(1, 1, 1):ToRaylib(0.9)
 
 		for _, windowData in pairs(windowRegistry) do
 			if windowData.Closed or not windowData.enabled then
@@ -255,8 +336,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				mainRect,
 				windowData.rounded,
 				30,
-				Color3ToRaylib(
-					window_theme_config.BackgroundColor,
+				window_theme_config.BackgroundColor:ToRaylib(
 					windowData.transparency or window_theme_config.BackgroundTransparency
 				)
 			)
@@ -271,7 +351,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 				raylib.DrawRectangleRec(
 					structs.Rectangle:new({ x = wx, y = wy, width = ww, height = 28 }),
-					Color3ToRaylib(titleColor, window_theme_config.TitleBackgroundTransparency)
+					titleColor:ToRaylib(window_theme_config.TitleBackgroundTransparency)
 				)
 
 				raylib.DrawTextEx(
@@ -280,7 +360,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					vector.create(wx + 8, wy + 6),
 					window_theme_config.TitleTextSize,
 					1,
-					Color3ToRaylib(window_theme_config.TitleColor, 0)
+					window_theme_config.TitleColor:ToRaylib(0)
 				)
 
 				windowData.titleRect = { height = 28, width = ww, x = wx, y = wy }
@@ -292,7 +372,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					wy,
 					ww,
 					wh,
-					Color3ToRaylib(window_theme_config.DragColor, window_theme_config.DragOutlineTransparency)
+					window_theme_config.DragColor:ToRaylib(window_theme_config.DragOutlineTransparency)
 				)
 			end
 

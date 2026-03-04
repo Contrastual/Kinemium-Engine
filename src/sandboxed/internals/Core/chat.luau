@@ -5,7 +5,7 @@ local Chat = Instance.new("ScreenGui")
 Chat.Name = "Chat"
 Chat.Parent = game.Players.LocalPlayer.PlayerGui
 
-local chatFrame = Instance.new("Frame")
+local chatFrame = Instance.new("CanvasGroup")
 chatFrame.AnchorPoint = Vector2.new(0, 1)
 chatFrame.BackgroundColor3 = Color3.new(0, 0, 0)
 chatFrame.BackgroundTransparency = 0.5

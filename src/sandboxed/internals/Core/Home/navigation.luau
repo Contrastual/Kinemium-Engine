@@ -74,6 +74,8 @@ renderer.Pool.new("2d", function()
 	end
 	local dt = raylib.lib.GetFrameTime()
 
+	renderer:SetDimension("2D")
+
 	game.Context = Enum.GameContext.Home
 	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 

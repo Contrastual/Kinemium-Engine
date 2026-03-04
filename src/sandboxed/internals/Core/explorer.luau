@@ -50,6 +50,7 @@ local gui = aereon.gui
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.lib
 local structs = KinemiumRaylib.structs
+local const = KinemiumRaylib.const
 local renderer = KinemiumRaylib.renderer
 local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
@@ -103,6 +104,9 @@ local SelectionMenu = gui.menu({
 				if Selection:Get()[1] then
 					for _, v in pairs(Selection:Get()) do
 						pcall(function()
+							if v.BaseClass == "Singleton" then
+								return
+							end
 							local new = v:Clone()
 							new.Parent = v.Parent
 						end)
@@ -509,8 +513,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	rl.DrawTextEx(vend, instance.Name, vector.create(btnX + 28, btnY + 5), 18, 1, themeColors.text)
 
 	if isHovered then
-		game.Stop3DInput = true
-
 		local iconSize = NODE_HEIGHT - 4
 		local addData = { x = toggleX - 50, y = btnY + 2, width = iconSize, height = iconSize }
 
@@ -729,16 +731,8 @@ explorerWindow.stepped = function(windowData)
 
 	local ctrl = rl.IsKeyDown(341) == 1 or rl.IsKeyDown(345) == 1
 
-	-- Handle delete key
-	if rl.IsKeyDown(261) == 1 then
-		local selected = Selection.Get()
-		if selected[1] then
-			for _, v in pairs(selected) do
-				pcall(function()
-					v:Destroy()
-				end)
-			end
-		end
+	if rl.IsKeyReleased(261) == 1 then
+		Selection.Clear()
 	end
 
 	-- Handle cloning
@@ -746,6 +740,9 @@ explorerWindow.stepped = function(windowData)
 		if rl.IsKeyReleased(68) == 1 then
 			local selected = Selection.Get()
 			for _, v in pairs(selected) do
+				if v.BaseClass == "Singleton" then
+					continue
+				end
 				local clone = v:Clone()
 				clone.Parent = v.Parent
 			end

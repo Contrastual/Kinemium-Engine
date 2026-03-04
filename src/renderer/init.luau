@@ -30,12 +30,16 @@ local structs = raylib.structs
 
 function KiRend.new(config: KiRendConf)
 	-- RAYLIB INIT
+
+	local Dimension = "3D"
+
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 	lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 	lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
 	lib.InitWindow(config.width, config.height, config.title)
 	lib.SetTargetFPS(config.maxFps)
+	lib.SetExitKey(0)
 	ki3d.init()
 
 	rlib.R3D_Init(config.width, config.height)
@@ -92,6 +96,10 @@ function KiRend.new(config: KiRendConf)
 		Blur = newBlurInstance,
 
 		DrawFps = true,
+
+		SetDimension = function(self, dimension: "2D" | "3D")
+			Dimension = dimension
+		end,
 
 		RuntimeLibrary = {
 			lib = lib,
@@ -441,12 +449,14 @@ function KiRend.new(config: KiRendConf)
 		end
 
 		if #renderer_draw_calls > 0 then
-			rlib.R3D_Begin(activeCamera)
-			for i, drawCall in pairs(renderer_draw_calls) do
-				rlib.R3D_DrawMeshPro(drawCall.mesh, drawCall.material, drawCall.matrix)
-				renderer_draw_calls[i] = nil
+			if Dimension == "3D" then
+				rlib.R3D_Begin(activeCamera)
+				for i, drawCall in pairs(renderer_draw_calls) do
+					rlib.R3D_DrawMeshPro(drawCall.mesh, drawCall.material, drawCall.matrix)
+					renderer_draw_calls[i] = nil
+				end
+				rlib.R3D_End()
 			end
-			rlib.R3D_End()
 		end
 		table.clear(renderer_draw_calls)
 
@@ -507,8 +517,7 @@ function KiRend.new(config: KiRendConf)
 		time += delta
 
 		if raylib.lib.IsWindowResized() == 1 then
-			--rlib.R3D_UpdateResolution(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight())
-			ki3d.UpdateRenderTextures(lib.GetRenderWidth(), lib.GetRenderHeight())
+			rlib.R3D_UpdateResolution(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight())
 		end
 
 		for name, keycode in pairs(const.KeyboardKey) do
@@ -547,6 +556,7 @@ function KiRend.new(config: KiRendConf)
 
 		rendererObject:Render3D()
 		rendererObject:Render2D()
+
 		lib.EndDrawing()
 
 		renderer_eventbus:Fire("Heartbeat", delta)

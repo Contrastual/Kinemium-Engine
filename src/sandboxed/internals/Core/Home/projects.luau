@@ -144,6 +144,8 @@ group = aereon.create({
 					ProjectLoaderService.NewProject(ishared.GameName, ishared.FolderPath, gameiconPath)
 					ProjectSyncService:StartSyncing(ishared.FolderPath)
 					ishared.EnableHomescreen = false
+					renderer:SetDimension("3D")
+
 					DiscordService.SetRPC({
 						details = "Working on " .. ishared.GameName,
 					})
@@ -239,6 +241,7 @@ for _, projectData in pairs(projects) do
 			ishared.GameIcon = projectData.icon
 			ishared.EnableHomescreen = false
 			ProjectSyncService:StartSyncing(ishared.FolderPath)
+			renderer:SetDimension("3D")
 
 			DiscordService.SetRPC({
 				details = "Working on " .. ishared.GameName,
