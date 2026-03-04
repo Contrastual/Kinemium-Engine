@@ -204,6 +204,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 					local part = chunk.parts[i]
 
 					if isRenderable(part) then
+						if part.Destroyed then
+							continue
+						end
 						local meshData = preloadedMeshes[part.Shape.Value]
 						local matData = loadedMaterials[part.Material.Value]
 						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)

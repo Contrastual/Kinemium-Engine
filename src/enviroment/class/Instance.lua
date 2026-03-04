@@ -851,13 +851,20 @@ function Instance:Destroy()
 		destroying:Fire()
 	end
 
-	local children = rawget(self, "Children") or {}
+	local children = {}
+	for _, child in ipairs(rawget(self, "Children") or {}) do
+		children[#children + 1] = child
+	end
+
+	rawset(self, "Children", {})
+
 	for _, child in ipairs(children) do
+		rawset(child, "_skipParentRemoval", true)
 		child:Destroy()
 	end
 
 	local props = rawget(self, "_props")
-	if props and props.Parent then
+	if props and props.Parent and not rawget(self, "_skipParentRemoval") then
 		local parentChildren = rawget(props.Parent, "Children")
 		if parentChildren then
 			for i = #parentChildren, 1, -1 do
@@ -870,7 +877,7 @@ function Instance:Destroy()
 	end
 
 	rawset(self, "_props", nil)
-	rawset(self, "Children", nil)
+	rawset(self, "_skipParentRemoval", nil)
 	rawset(self, "Destroyed", true)
 end
 

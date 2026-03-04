@@ -509,6 +509,10 @@ window.stepped = function(windowData)
 			return
 		end
 
+		if selected.Destroyed then
+			return
+		end
+
 		gui.clear()
 
 		local propertyCount = 0

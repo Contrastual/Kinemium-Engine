@@ -543,6 +543,8 @@ function KiRend.new(config: KiRendConf)
 
 		--lib.BeginTextureMode(viewport)
 		lib.BeginDrawing()
+		lib.ClearBackground(const.BLACK)
+
 		rendererObject:Render3D()
 		rendererObject:Render2D()
 		lib.EndDrawing()
