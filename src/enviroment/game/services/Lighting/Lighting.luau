@@ -207,50 +207,6 @@ end
 
 local function setAllEnvironmentEffects()
 	local environment: FFIPointer = rlib.R3D_GetEnvironment()
-
-	local envssao = r3d.structs.R3D_EnvSSAO:new({
-		sampleCount = 16,
-		intensity = 5,
-		power = 5,
-		radius = 1,
-		bias = 0.02,
-		enabled = true,
-	})
-
-	local envbloom = r3d.structs.R3D_EnvBloom:new({
-		mode = 1, -- R3D_BLOOM_MIX
-		levels = 0.5,
-		intensity = 0.05,
-		threshold = 0.6,
-		softThreshold = 0.5,
-		filterRadius = 1.0,
-	})
-
-	local envssgi = r3d.structs.R3D_EnvSSGI:new({
-		sampleCount = 2,
-		maxRaySteps = 32,
-		stepSize = 0.125,
-		thickness = 1.0,
-		maxDistance = 4.0,
-		fadeStart = 8.0,
-		fadeEnd = 16.0,
-		denoiseSteps = 5,
-		enabled = 1,
-	})
-
-	local envdof = r3d.structs.R3D_EnvDoF:new({
-		mode = 1, -- R3D_DOF_ENABLED
-		focusPoint = 10.0,
-		focusScale = 1.0,
-		maxBlurSize = 20.0,
-	})
-
-	local envType = r3d.structs.R3D_Environment
-	environment:write(envType:offset("ssao"), envssao, 0, r3d.structs.R3D_EnvSSAO:size())
-	environment:write(envType:offset("bloom"), envbloom, 0, r3d.structs.R3D_EnvBloom:size())
-	environment:write(envType:offset("ssgi"), envssgi, 0, r3d.structs.R3D_EnvSSGI:size())
-	environment:write(envType:offset("dof"), envdof, 0, r3d.structs.R3D_EnvDoF:size())
-
 	rlib.R3D_SetEnvironment(environment)
 end
 
@@ -301,9 +257,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
 	})
 
-	local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
-	setSkyObject(cubemapSky)
-	--loadSky("./src/assets/sky/test/images/sky.png")
+	if zune.platform.os == "linux" then 
+		loadSky("./src/assets/sky/test/images/sky.png")
+	else
+		local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
+		setSkyObject(cubemapSky)
+	end
 	setAllEnvironmentEffects()
 
 	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR
