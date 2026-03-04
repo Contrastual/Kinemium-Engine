@@ -1,4 +1,3 @@
-local r3d = require("@r3d")
 local Enum = require("@EnumMap")
 
 local propTable = {
@@ -14,6 +13,8 @@ return {
 	class = "TonemapEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envtonemap = r3d.structs.R3D_EnvTonemap:new({

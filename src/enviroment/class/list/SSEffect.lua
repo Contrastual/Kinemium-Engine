@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-local rlib: any = r3d.lib
 local Enum = require("@EnumMap")
 local ffi = zune.ffi
 
@@ -14,6 +12,9 @@ return {
 	class = "SSEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+		local rlib: any = r3d.lib
+
 		instance:SetProperties(propTable)
 
 		function instance:SetUniform(name, value, isFloat)

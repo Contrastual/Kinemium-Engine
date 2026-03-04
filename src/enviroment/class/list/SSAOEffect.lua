@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	SampleCount = 16,
 	Intensity = 5,
@@ -15,6 +13,8 @@ return {
 	class = "SSAOEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envssao = r3d.structs.R3D_EnvSSAO:new({

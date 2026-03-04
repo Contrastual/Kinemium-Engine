@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	SampleCount = 2,
 	MaxRaySteps = 32,
@@ -18,6 +16,8 @@ return {
 	class = "SSGIEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envssgi = r3d.structs.R3D_EnvSSGI:new({

@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	Mode = 1, -- R3D_DOF_ENABLED
 	FocusPoint = 10.0,
@@ -14,6 +12,8 @@ return {
 	class = "DOFEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envdof = r3d.structs.R3D_EnvDoF:new({

@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	Brightness = 0.0,
 	Contrast = 1.0,
@@ -13,6 +11,8 @@ return {
 	class = "ColorEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envcolor = r3d.structs.R3D_EnvColor:new({

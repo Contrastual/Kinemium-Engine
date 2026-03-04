@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	SampleCount = 16,
 	SliceCount = 6,
@@ -17,6 +15,8 @@ return {
 	class = "SSILEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envssil = r3d.structs.R3D_EnvSSIL:new({

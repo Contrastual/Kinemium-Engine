@@ -1,4 +1,3 @@
-local r3d = require("@r3d")
 local Color3 = require("@Color3")
 local Enum = require("@EnumMap")
 
@@ -18,6 +17,8 @@ return {
 	class = "FogEffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local color = instance.Color:ToRaylib(0)

@@ -1,5 +1,3 @@
-local r3d = require("@r3d")
-
 local propTable = {
 	MaxRaySteps = 64,
 	BinarySteps = 5,
@@ -16,6 +14,8 @@ return {
 	class = "SSREffect",
 
 	callback = function(instance)
+		local r3d = require("@r3d")
+
 		instance:SetProperties(propTable)
 
 		local envssr = r3d.structs.R3D_EnvSSR:new({
