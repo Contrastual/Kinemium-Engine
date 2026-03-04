@@ -143,8 +143,6 @@ Ki-nem-yum!!
 - Webview
 - Native File Dialog (NFD)
 - raylib-gizmo
-- Lua
-- LuaJIT
 - Python
 - QuickJS (maintained)
 - Webview

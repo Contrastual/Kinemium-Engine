@@ -13,8 +13,6 @@ local python = require("@python")
 local ScriptRunnerService = Instance.new("ScriptRunnerService")
 ScriptRunnerService.ExplorerHidden = true
 
---local lua = require("@lua")
-
 local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
 
 ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
