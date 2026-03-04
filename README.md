@@ -36,7 +36,7 @@ or connected to Roblox Corporation. Roblox is a trademark of Roblox Corporation
 - Faces / NormalId
 - Rect / Region3
 
-## Core Services
+## Default Services
 - Debris
 - GuiSelectionService
 - HttpService
@@ -73,15 +73,15 @@ Fortunately theres a tutorial:
 https://zune.sh/guides/install
 
 - Run the engine<br>
-```zune run game```<br>
+```zune run engine```<br>
 *This tutorial works with both Linux and Windows, MacOS support is coming soon.*
 
 # Commands
 Kinemium provides with several flags you can run with ```zune run game```<br>
-- headless (lets you run the engine without the graphics or renderer)<br>
+- headless (lets you run the engine without graphics)<br>
 - server (lets you run a server version of the engine, this is used for games and such)<br>
-- client (lets you run a client, it removes all the core UI only (for now))<br>
-- kilang (lets you run kilang code in the terminal, you can add this flag with any other flag and it will still work (headless not working yet))<br>
+- client (lets you run a client, it removes all the core UI only)<br>
+- kilang (lets you run kilang code in the terminal, you can add this flag with any other flag and it will still work)<br>
 - editor (enables studio UI)
 
 # Multiplayer
@@ -116,8 +116,8 @@ example command with a flag:<br>
 ```zune run game --headless```<br>
 
 # Preview
-<img width="1919" height="1019" alt="image" src="https://github.com/user-attachments/assets/5b4e7608-7f20-4e10-b7bb-1c9e67b2d74b" /><br>
-<img width="1293" height="865" alt="Screenshot 2025-12-20 004117" src="https://github.com/user-attachments/assets/20d0ca16-ebfa-4f0a-bf2f-084fde6f67db" />
+<img width="991" height="800" alt="image" src="https://github.com/user-attachments/assets/7e29dc74-0518-465a-a502-ea6ae0972bc3" />
+<img width="1391" height="944" alt="image" src="https://github.com/user-attachments/assets/419b7324-5586-467b-a8f5-774217e87ed7" />
 
 # How do I add scripts?
 Once you clone the github repo, you will find a folder called ```sandboxed``` inside the engine *(src)*<br>
@@ -150,12 +150,10 @@ Ki-nem-yum!!
 - Webview
 - jolt
 - Luau
-- moonode
-- [Minimal Cursor Icon Pack](http://www.rw-designer.com/cursor-set/material-design-best-edition-by)
-- and most importantly.. Zune
+- moonode- and most importantly.. Zune
 (Some of these libraries are made with the development of Kinemium, such as KI3D, KiNet, Aereon, and more)
 
-v1.9.0
+v1.9.9
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
