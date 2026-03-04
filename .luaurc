@@ -87,6 +87,7 @@
         "Kinemium.gameservices": "./src/enviroment/game/services",
         "kinec": "./src/modules/kinec",
         "jolt": "./src/external/jolt/wrapper",
+        "vcredistInstaller": "./src/vcredistInstaller",
         "gtk": "./src/external/gtk",
         "gtkutil": "./src/external/gtk/wrapper",
         "Kinemium.joltdll": "./src/external/jolt/joltc.dll",

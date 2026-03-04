@@ -11,6 +11,10 @@ else
 	_G.IsExecutable = false
 end
 
+if zune.platform.os == "windows" then
+	require("@vcredistInstaller")
+end
+
 local httpServerViewer = require("@httpServerViewer")
 
 _G.ENGINE_PROFILER = require("@profiler")
