@@ -167,8 +167,6 @@ function lang.process(code)
 					expr = expr:match("^%s*(.-)%s*$")
 					return "print(" .. expr .. ")\n"
 				end)
-				code = code:gsub("std::cout%s*<<%s*(.-);", "io.write(%1)")
-				code = code:gsub('scanf%s*%(%s*".-"%s*,%s*&([%w_]+)%s*%);', "%1 = io.read()")
 				code = code:gsub("%f[%w]NULL%f[%W]", "nil")
 				code = code:gsub("std::string", "string")
 				code = code:gsub("std::vector%s*<.->%s+([%w_]+)", "local %1 = {}")

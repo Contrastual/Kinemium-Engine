@@ -294,7 +294,7 @@ end)
 if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
-			local id, success, result = kilang:execute(line, {
+			local _, success, result = kilang:execute(line, {
 				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
 			})
 			if not success then

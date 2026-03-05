@@ -4,16 +4,6 @@ local Enum = require("@EnumMap")
 local signal = require("@Kinemium.signal")
 local raylib = require("@raylib")
 
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return raylib.structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
 local function renderCaret(showCaret, object, renderer, lib)
 	if showCaret then
 		if not object.AbsolutePosition then

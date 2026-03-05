@@ -213,10 +213,7 @@ return function(objects, data)
 				)
 				currentY = separatorY + config.spacing * 2
 			else
-				-- Draw button
-				local btnRect =
-					rect.new(r.x + (r.width - config.buttonSize) / 2, currentY, config.buttonSize, config.buttonSize)
-
+				local btnRect = rect.new(r.x, currentY, r.width, config.buttonSize)
 				local isActive = config.activeButton == button.id
 				local isHovered = rect.MouseIsInRect(btnRect)
 
@@ -224,11 +221,23 @@ return function(objects, data)
 					config.hoveredButton = button
 				end
 
-				-- Button background
+				-- Button background (draw centered in the sidebar)
+				local centeredBtnRect =
+					rect.new(r.x + (r.width - config.buttonSize) / 2, currentY, config.buttonSize, config.buttonSize)
 				if isActive then
-					raylib.lib.DrawRectangleRounded(rect:translate(btnRect), 0.15, 4, config.activeColor:ToRaylib(0))
+					raylib.lib.DrawRectangleRounded(
+						rect:translate(centeredBtnRect),
+						0.15,
+						4,
+						config.activeColor:ToRaylib(0)
+					)
 				elseif isHovered then
-					raylib.lib.DrawRectangleRounded(rect:translate(btnRect), 0.15, 4, config.hoverColor:ToRaylib(0))
+					raylib.lib.DrawRectangleRounded(
+						rect:translate(centeredBtnRect),
+						0.15,
+						4,
+						config.hoverColor:ToRaylib(0)
+					)
 				end
 
 				-- Icon
@@ -239,8 +248,8 @@ return function(objects, data)
 					-- Draw texture icon if provided
 					local iconPadding = 8
 					local iconRect = rect.new(
-						btnRect.x + iconPadding,
-						btnRect.y + iconPadding,
+						centeredBtnRect.x + iconPadding,
+						centeredBtnRect.y + iconPadding,
 						config.buttonSize - iconPadding * 2,
 						config.buttonSize - iconPadding * 2
 					)
@@ -260,7 +269,13 @@ return function(objects, data)
 					)
 				else
 					-- Draw placeholder icon
-					drawIconPlaceholder(btnRect.x, btnRect.y, config.buttonSize, button.id, iconColorStruct)
+					drawIconPlaceholder(
+						centeredBtnRect.x,
+						centeredBtnRect.y,
+						config.buttonSize,
+						button.id,
+						iconColorStruct
+					)
 				end
 
 				-- Handle click

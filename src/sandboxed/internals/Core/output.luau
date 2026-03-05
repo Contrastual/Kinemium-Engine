@@ -7,6 +7,7 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local renderer = KinemiumRaylib.renderer
+local const = KinemiumRaylib.const
 local rl = KinemiumRaylib.lib
 local Selection = game:GetService("Selection")
 local LogService = game:GetService("LogService")
@@ -14,6 +15,7 @@ local RunService = game:GetService("RunService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 local StudioThemeService = game:GetService("StudioThemeService")
+local arectlib = require("@Arect")(rl)
 
 local backgroundColor =
 	StudioThemeService.SelectedTheme.BackgroundColor:ToRaylib(StudioThemeService.SelectedTheme.BackgroundTransparency)
@@ -94,16 +96,6 @@ screenGui.Parent = LocalPlayer.PlayerGui
 
 local propback, frame = create_window_back(screenGui, "Console", Vector2.new(0.5, 1), UDim2.new(1, 0, 0.2, 0))
 
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
 local scrollOffset = 0
 
 local windowObject
@@ -117,7 +109,7 @@ RunService.GuiRender:Connect(function()
 		windowObject.y,
 		windowObject.width,
 		windowObject.height,
-		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+		const.WHITE
 	)
 end)
 
@@ -155,7 +147,7 @@ window.stepped = function(windowData)
 
 		for i, log in ipairs(logs) do
 			local cellY = winY + (i - 1) * (cellHeight + padding) - scrollOffset
-			local rect = { x = winX + 5, y = cellY, width = winWidth - 10, height = cellHeight }
+			local rect = arectlib.new(winX + 5, cellY, winWidth - 10, cellHeight)
 
 			if cellY + cellHeight >= winY and cellY <= winY + winHeight then
 				local logColor = TextColor
@@ -172,6 +164,15 @@ window.stepped = function(windowData)
 				end
 				local ts = os.date("%H:%M:%S", log.time)
 				local text = string.format("[%s] %s", ts, log.message)
+
+				local col = Color3.new(0, 0.235294, 1)
+				local transparency = 1
+
+				if arectlib.MouseIsInRect(rect) then
+					transparency = 0.5
+					rl.DrawRectangleRounded(arectlib:translate(rect), 0.2, 6, col:ToRaylib(transparency))
+				end
+
 				rl.DrawTextEx(vend, text, vector.create(rect.x + 8, rect.y + 4), 17, 1, logColor)
 			end
 		end

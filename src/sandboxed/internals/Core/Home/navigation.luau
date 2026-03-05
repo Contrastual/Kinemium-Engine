@@ -29,6 +29,7 @@ local SecondaryTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor:T
 )
 local ImageColor =
 	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
+local ThirdBackgroundColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor
 
 local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 local frame = gui.frame({ x = 0, y = 0, width = 0, height = 0 })
@@ -47,6 +48,7 @@ local nav = gui.navigation({
 	items = {},
 	selectedColor = StudioThemeService.SelectedTheme.Accent,
 	selectedIconColor = SecondaryBackgroundColor,
+	itemBackgroundColor = SecondaryBackgroundColor,
 	font = vend,
 
 	onItemClick = function(item, index)
@@ -55,12 +57,12 @@ local nav = gui.navigation({
 	end,
 })
 
-nav.addItem("home", "icon", "Projects")
-nav.addItem("compass", "icon", "Explore")
-nav.addItem("settings", "icon", "Settings")
-nav.addItem("credits", "icon", "Credits")
-nav.addItem("marketplace", "icon", "Marketplace")
-nav.addItem("marketplace", "icon", "API")
+nav.addItem("home", "icon", "Projects", KinemiumIconLoader.ToTexture("./src/assets/images/home.png"))
+nav.addItem("compass", "icon", "Explore", KinemiumIconLoader.ToTexture("./src/assets/images/compass.png"))
+nav.addItem("settings", "icon", "Settings", KinemiumIconLoader.ToTexture("./src/assets/images/settings.png"))
+nav.addItem("credits", "icon", "Credits", KinemiumIconLoader.ToTexture("./src/assets/images/info.png"))
+nav.addItem("marketplace", "icon", "Marketplace", KinemiumIconLoader.ToTexture("./src/assets/images/marketplace.png"))
+nav.addItem("marketplace", "icon", "API", KinemiumIconLoader.ToTexture("./src/assets/images/api.png"))
 
 ishared.EnableHomescreen = true
 

@@ -12,6 +12,8 @@ local Selection = game:GetService("Selection")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ScriptRunnerService = game:GetService("ScriptRunnerService")
+local syntax_highlighter = require("@syntax_highlighter")
+local syntax_autocomplete = require("@syntax_autocomplete")
 local aereon = require("@Aereon")
 
 local gui = aereon.gui
@@ -45,6 +47,8 @@ local box = textbox.new({
 	font = vend,
 	backgroundColor = theme.SecondaryBackgroundColor,
 	borderColor = theme.SecondaryBackgroundColor,
+	syntaxHighlighter = syntax_highlighter.highlight,
+	autocompleteProvider = syntax_autocomplete,
 
 	onSubmit = function(new)
 		kilang:execute(new, {

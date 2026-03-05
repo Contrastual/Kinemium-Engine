@@ -1,7 +1,5 @@
 local ffi = zune.ffi
 
-local structs = require("./structs")
-
 local funcs = {
 	JPH_JobSystem_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_Init = { returns = ffi.types.u8, args = {} },

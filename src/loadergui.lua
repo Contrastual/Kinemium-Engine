@@ -7,9 +7,6 @@ local color3 = require("@Color3")
 local gui = aereon.gui
 
 local module = {}
-local dragging = false
-local dragStartMouse
-local dragStartWindow
 
 local progressBar = gui.progressBar({
 	x = 330,

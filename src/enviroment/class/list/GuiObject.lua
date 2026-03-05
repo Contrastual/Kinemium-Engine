@@ -27,31 +27,20 @@ local function getAbsoluteDrawPos(object, lib)
 	local pos = object.Position:ToPixels(parentSize)
 	local size = object.Size:ToPixels(parentSize)
 	local anchor = object.AnchorPoint or ZERO_VECTOR2
-	return Vector2.new(parentAbsPos.X + pos.X - size.X * anchor.X, parentAbsPos.Y + pos.Y - size.Y * anchor.Y)
+	local drawPos = Vector2.new(parentAbsPos.X + pos.X - size.X * anchor.X, parentAbsPos.Y + pos.Y - size.Y * anchor.Y)
+
+	if parent and parent.ClassName == "ScrollingFrame" then
+		drawPos = Vector2.new(drawPos.X, drawPos.Y - (parent.CanvasPosition or 0))
+	end
+
+	return drawPos
 end
 
-local function IsMouseInGuiRecursive(object, mousePos, lib)
-	local size = object.Size:ToPixels(GetAbsoluteSize(object.Parent, lib))
-	local drawPos = getAbsoluteDrawPos(object, lib)
-
-	if
-		mousePos.X >= drawPos.X
+local function isMouseInRect(mousePos, drawPos, size)
+	return mousePos.X >= drawPos.X
 		and mousePos.X <= drawPos.X + size.X
 		and mousePos.Y >= drawPos.Y
 		and mousePos.Y <= drawPos.Y + size.Y
-	then
-		return true
-	end
-
-	if object.GetChildren then
-		for _, child in ipairs(object:GetChildren()) do
-			if child.Position and IsMouseInGuiRecursive(child, mousePos, lib) then
-				return true
-			end
-		end
-	end
-
-	return false
 end
 
 local function calculateDrawParams(object, lib)
@@ -65,11 +54,15 @@ local function calculateDrawParams(object, lib)
 	elseif object._LayoutControlled and object._LayoutRelativePosition then
 		size = object.Size:ToPixels(parentSize)
 		anchor = object.AnchorPoint or ZERO_VECTOR2
-		local parentDrawPos = getAbsoluteDrawPos(object.Parent, lib)
+		local parentObject = object.Parent
+		local parentDrawPos = getAbsoluteDrawPos(parentObject, lib)
 		drawPos = Vector2.new(
 			parentDrawPos.X + object._LayoutRelativePosition.X - size.X * anchor.X,
 			parentDrawPos.Y + object._LayoutRelativePosition.Y - size.Y * anchor.Y
 		)
+		if parentObject and parentObject.ClassName == "ScrollingFrame" then
+			drawPos = Vector2.new(drawPos.X, drawPos.Y - (parentObject.CanvasPosition or 0))
+		end
 	else
 		size = object.Size:ToPixels(parentSize)
 		anchor = object.AnchorPoint or ZERO_VECTOR2
@@ -103,12 +96,13 @@ local propTable = {
 			return
 		end
 
-		local mousePos = Vector2.new(lib.GetMouseX(), lib.GetMouseY())
-		object.MouseIsInObject = IsMouseInGuiRecursive(object, mousePos, lib)
-		object.MouseEnter:FireOncePerPress("MouseEnter", object.MouseIsInObject)
-		object.MouseLeave:FireOncePerPress("MouseLeave", not object.MouseIsInObject)
-
 		local drawPos, size = calculateDrawParams(object, lib)
+		local mousePos = Vector2.new(lib.GetMouseX(), lib.GetMouseY())
+		local mouseIsInObject = isMouseInRect(mousePos, drawPos, size)
+		rawset(object, "MouseIsInObject", mouseIsInObject)
+		object.MouseEnter:FireOncePerPress("MouseEnter", mouseIsInObject)
+		object.MouseLeave:FireOncePerPress("MouseLeave", not mouseIsInObject)
+
 		local color = object.BackgroundColor3:ToRaylib(object.BackgroundTransparency)
 
 		local corner = object:FindFirstChildOfClass("UICorner")
@@ -119,15 +113,9 @@ local propTable = {
 		local rec = structs.Rectangle:new({ x = drawPos.X, y = drawPos.Y, width = size.X, height = size.Y })
 		local origin = vector.create(0, 0)
 
-		if blur and object.AbsolutePosition and object.AbsoluteSize then
+		if blur then
 			renderer.Blur.blurRadius = blur.Size
-			renderer.Blur:DrawBlurredRegion(
-				object.AbsolutePosition.X,
-				object.AbsolutePosition.Y,
-				object.AbsoluteSize.X,
-				object.AbsoluteSize.Y,
-				Color3.new(1, 1, 1):ToRaylib(0)
-			)
+			renderer.Blur:DrawBlurredRegion(drawPos.X, drawPos.Y, size.X, size.Y, Color3.new(1, 1, 1):ToRaylib(0))
 		end
 
 		local minDim = math.min(size.X, size.Y)
@@ -247,8 +235,8 @@ local propTable = {
 			end
 		end
 
-		object.AbsolutePosition = drawPos
-		object.AbsoluteSize = size
+		rawset(object, "AbsolutePosition", drawPos)
+		rawset(object, "AbsoluteSize", size)
 
 		return drawPos, size
 	end,
@@ -287,20 +275,20 @@ return {
 	end,
 
 	calculatePositions = function(lib, object, dt, structs, renderer)
+		local drawPos, size = calculateDrawParams(object, lib)
 		local mousePos = Vector2.new(lib.GetMouseX(), lib.GetMouseY())
-		object.MouseIsInObject = IsMouseInGuiRecursive(object, mousePos, lib)
+		local mouseIsInObject = isMouseInRect(mousePos, drawPos, size)
+		rawset(object, "MouseIsInObject", mouseIsInObject)
 
 		if object.MouseEnter then
-			object.MouseEnter:FireOncePerPress("MouseEnter", object.MouseIsInObject)
+			object.MouseEnter:FireOncePerPress("MouseEnter", mouseIsInObject)
 		end
 		if object.MouseLeave then
-			object.MouseLeave:FireOncePerPress("MouseLeave", not object.MouseIsInObject)
+			object.MouseLeave:FireOncePerPress("MouseLeave", not mouseIsInObject)
 		end
 
-		local drawPos, size = calculateDrawParams(object, lib)
-
-		object.AbsolutePosition = drawPos
-		object.AbsoluteSize = size
+		rawset(object, "AbsolutePosition", drawPos)
+		rawset(object, "AbsoluteSize", size)
 
 		return drawPos, size
 	end,

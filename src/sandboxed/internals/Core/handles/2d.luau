@@ -545,7 +545,7 @@ renderer.Pool.new("2d", function()
 		highlight(v)
 	end
 
-	if first then
+	if first and game.Stop3DInput ~= true then
 		if first.MouseIsInObject == true then
 			game.Stop3DInput = true
 

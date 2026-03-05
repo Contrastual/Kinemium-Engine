@@ -8,8 +8,6 @@ local function dist(a, b)
 	return dx * dx + dy * dy + dz * dz
 end
 
-local Color3 = require("@Color3")
-
 local BrickColorMap = require("@BrickColorMap")
 
 -- the train of colors

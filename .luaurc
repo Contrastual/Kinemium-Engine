@@ -13,6 +13,8 @@
         "CustomPhysicalProperties": "./src/enviroment/datatypes/CustomPhysicalProperties",
         "Vector2": "./src/enviroment/datatypes/Vector2",
         "Color3": "./src/enviroment/datatypes/Color3",
+        "syntax_highlighter": "./src/modules/Aereon/ide/syntax",
+        "syntax_autocomplete": "./src/modules/Aereon/ide/autocomplete",
         "UDim2": "./src/enviroment/datatypes/UDim2",
         "CFrame": "./src/enviroment/datatypes/CFrame",
         "zembed": "./src/libs/zembed",

@@ -58,7 +58,6 @@ return {
 		end
 
 		renderer.EventBus:Fire("UpdatePart", instance)
-
 		instance:SetProperties(propTable)
 
 		return instance

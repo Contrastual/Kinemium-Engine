@@ -78,13 +78,14 @@ local function create_window(title, frame)
 	repeat
 		task.wait()
 	until frame.AbsolutePosition and frame.AbsoluteSize
+	local dpiScale = rl.GetWindowScaleDPI().x
 	local myWindow = window.create({
 		title = title,
-		x = frame.AbsolutePosition.X,
-		y = frame.AbsolutePosition.Y,
-		width = frame.AbsoluteSize.X,
+		x = frame.AbsolutePosition.X * dpiScale,
+		y = frame.AbsolutePosition.Y * dpiScale,
+		width = frame.AbsoluteSize.X * dpiScale,
 		DisableClipping = true,
-		height = frame.AbsoluteSize.Y,
+		height = frame.AbsoluteSize.Y * dpiScale,
 	})
 	return myWindow
 end
@@ -385,11 +386,12 @@ window.stepped = function(windowData)
 	if windowData.title == "Toolbar" then
 		windowObject = windowData
 		if rl.IsWindowResized() == 1 then
+			local dpiScale = rl.GetWindowScaleDPI().x
 			window.dragspring:target(windowData, {
-				x = frame.AbsolutePosition.X,
-				y = frame.AbsolutePosition.Y,
-				width = frame.AbsoluteSize.X,
-				height = frame.AbsoluteSize.Y,
+				x = frame.AbsolutePosition.X * dpiScale,
+				y = frame.AbsolutePosition.Y * dpiScale,
+				width = frame.AbsoluteSize.X * dpiScale,
+				height = frame.AbsoluteSize.Y * dpiScale,
 			})
 		end
 

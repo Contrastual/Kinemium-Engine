@@ -13,8 +13,6 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		return
 	end
 	local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
-	object.AbsolutePosition = pos
-	object.AbsoluteSize = size
 
 	GuiObject.renderChildren(lib, object, dt, structs, renderer)
 

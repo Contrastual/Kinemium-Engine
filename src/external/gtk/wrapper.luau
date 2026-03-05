@@ -1,6 +1,5 @@
 local wrapper = {}
 
-local task = zune.task
 local ffi = zune.ffi
 local gtklib = require("./init")
 local gobject = gtklib.gobject

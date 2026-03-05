@@ -8,7 +8,6 @@ if zembed.IsEmbedded() then
 	path = "./"
 end
 local ffi = zune.ffi
-local Downloader = require("@Downloader")
 
 local structs = require("./gtk/structs")
 local funcs = require("./gtk/funcs")

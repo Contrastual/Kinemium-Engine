@@ -87,8 +87,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local anyWindowFocused = false
 
 	local function isMouseInViewport(mousePos)
-		local screenWidth = raylib.GetMonitorWidth(0)
-		local screenHeight = raylib.GetMonitorHeight(0)
+		local screenWidth = raylib.GetRenderWidth()
+		local screenHeight = raylib.GetRenderHeight()
 		local toolbarHeight = 160
 		local viewportX = 0
 		local viewportY = toolbarHeight
@@ -151,8 +151,24 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		local mouseDown = raylib.IsMouseButtonDown(0)
 		local mouseReleased = raylib.IsMouseButtonReleased(0)
 
+		-- Find the topmost window the mouse is over
+		local hoveredWindow = nil
+		for i = #windowRegistry, 1, -1 do
+			local window = windowRegistry[i]
+			if not window.Closed and window.enabled and isMouseOverWindow(window, mousePos) then
+				hoveredWindow = window
+				break
+			end
+		end
+
+		-- Handle right-click on window to halt 3D input
+		if mouseRightPressed == 1 and hoveredWindow then
+			game.Stop3DInput = true
+			anyWindowFocused = true
+		end
+
 		-- Handle right-click on viewport to enable 3D input (for freecam)
-		if mouseRightPressed == 1 then
+		if mouseRightPressed == 1 and not hoveredWindow then
 			if isMouseInViewport(mousePos) then
 				game.Stop3DInput = false
 				anyWindowFocused = false
@@ -169,14 +185,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 		if mousePressed == 1 then
 			-- Focus/unfocus logic: find the topmost window the mouse is over
-			local clickedWindow = nil
-			for i = #windowRegistry, 1, -1 do
-				local window = windowRegistry[i]
-				if not window.Closed and window.enabled and isMouseOverWindow(window, mousePos) then
-					clickedWindow = window
-					break
-				end
-			end
+			local clickedWindow = hoveredWindow
 
 			-- Track if any window gets focused this click
 			local windowFocusedThisClick = false

@@ -145,6 +145,7 @@ table.insert(ishared.Home.rendering, {
 
 		group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
 		group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
+		cells.setWidth(screenx - 150)
 		group.render(dt, { "newProjectPrompt" })
 		cells.render(dt)
 	end,

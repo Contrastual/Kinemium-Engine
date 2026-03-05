@@ -23,6 +23,9 @@ local propTable = {
 		end
 
 		local function GetAbsoluteSize(obj)
+			if obj.AbsoluteSize then
+				return obj.AbsoluteSize
+			end
 			if obj:IsA("ScreenGui") then
 				return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
 			else
@@ -41,7 +44,7 @@ local propTable = {
 			end
 		end
 
-		if object.SortOrder == Enum.SortOrder.LayoutOrder then
+		if object.SortOrder == Enum.SortOrder.LayoutOrder and #children > 1 then
 			table.sort(children, function(a, b)
 				return (a.LayoutOrder or 0) < (b.LayoutOrder or 0)
 			end)
@@ -56,8 +59,8 @@ local propTable = {
 					* (object.Direction == Enum.FillDirection.Vertical and parentSize.Y or parentSize.X)
 				+ object.Padding.Offset
 
-			child._LayoutControlled = true
-			child._LayoutAbsolutePosition = Vector2.new(0, 0)
+			rawset(child, "_LayoutControlled", true)
+			rawset(child, "_LayoutAbsolutePosition", Vector2.new(0, 0))
 
 			---------------------------
 			--   VERTICAL LAYOUT     --
@@ -71,7 +74,7 @@ local propTable = {
 					alignedX = parentSize.X - size.X
 				end
 
-				child._LayoutRelativePosition = Vector2.new(alignedX, offset)
+				rawset(child, "_LayoutRelativePosition", Vector2.new(alignedX, offset))
 
 				offset = offset + size.Y + paddingPx
 
@@ -87,7 +90,7 @@ local propTable = {
 					alignedY = parentSize.Y - size.Y
 				end
 
-				child._LayoutRelativePosition = Vector2.new(offset, alignedY)
+				rawset(child, "_LayoutRelativePosition", Vector2.new(offset, alignedY))
 
 				offset = offset + size.X + paddingPx
 			end

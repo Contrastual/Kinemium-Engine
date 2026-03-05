@@ -243,6 +243,10 @@ function Color3:ToTable()
 	}
 end
 
+function Color3:Random()
+	return Color3.new(math.random(), math.random(), math.random())
+end
+
 function Color3:ToSRGB()
 	return Color3.new(linearToSrgbChannel(self.R), linearToSrgbChannel(self.G), linearToSrgbChannel(self.B))
 end

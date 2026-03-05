@@ -47,6 +47,11 @@ return function(objects, data)
 		expandSpeed = 12,
 		font = data.font or raylib.lib.GetFontDefault(),
 
+		-- Indicator bar
+		indicatorY = 0,
+		indicatorTargetY = 0,
+		indicatorHeight = 0,
+
 		-- Interaction
 		hoveredIndex = -1,
 		selectedIndex = -1,
@@ -244,10 +249,17 @@ return function(objects, data)
 				-- Regular item
 				local itemX = config.isExpanded and r.x + config.padding
 					or r.x + (config.currentWidth - config.itemSize) / 2
-				local itemRect = rect.new(itemX, currentY, config.itemSize, config.itemSize)
+				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 2)
+					or config.itemSize
+				local itemRect = rect.new(itemX, currentY, itemRenderWidth, config.itemSize)
 
 				local isHovered = rect.MouseIsInRect(itemRect)
 				local isSelected = item.selected or config.selectedIndex == i
+
+				if isSelected then
+					config.indicatorTargetY = currentY + (config.itemSize - 28) / 2
+					config.indicatorHeight = 28
+				end
 
 				if isHovered then
 					config.hoveredIndex = i
@@ -261,12 +273,8 @@ return function(objects, data)
 					bgColor = config.hoverColor
 				end
 
-				-- Adjust item width when expanded
-				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 2)
-					or config.itemSize
-				local adjustedItemRect = rect.new(itemX, currentY, itemRenderWidth, config.itemSize)
-
-				raylib.lib.DrawRectangleRounded(rect:translate(adjustedItemRect), 0.15, 8, c3tr(bgColor, 0))
+				raylib.lib.DrawRectangleRounded(rect:translate(itemRect), 0.15, 8, c3tr(bgColor, 0))
+				local iconColor = isSelected and config.selectedIconColor or config.iconColor
 
 				if item.texture ~= nil then
 					raylib.lib.DrawTexturePro(
@@ -280,10 +288,9 @@ return function(objects, data)
 						}),
 						vector.create(0, 0),
 						0,
-						raylib.const.WHITE
+						iconColor:ToRaylib(0)
 					)
 				else
-					local iconColor = isSelected and config.selectedIconColor or config.iconColor
 					drawIcon(
 						itemX + (config.itemSize - config.iconSize) / 2,
 						currentY + (config.itemSize - config.iconSize) / 2,

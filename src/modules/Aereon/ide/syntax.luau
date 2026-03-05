@@ -442,5 +442,5 @@ end
 
 return {
 	highlight = highlightLine,
-	colors = COLORS, -- Export colors for customization
+	colors = COLORS,
 }

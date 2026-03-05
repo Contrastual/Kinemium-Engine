@@ -1,7 +1,6 @@
 local Color3 = require("@Color3")
 local GuiObject = require("@GuiObject")
 local raylib = require("@Raylib")
-local UDim2 = require("@UDim2")
 local structs = raylib.structs
 local Vector2 = require("@Vector2")
 local UDim = require("@UDim")
@@ -90,22 +89,40 @@ return {
 			if not object.Visible then
 				return
 			end
-			object._draggingThumb = object._draggingThumb or false
-			object._dragOffsetY = object._dragOffsetY or 0
-			object._scrollBarAlpha = object._scrollBarAlpha or (object.ScrollBarAutoHide and 0 or 1)
-			object._timeSinceLastScroll = object._timeSinceLastScroll or 999
-			object._velocity = object._velocity or 0
-			object._isOverscrolled = object._isOverscrolled or false
-			object._lastScroll = object._lastScroll or object.Scroll
-			object._isHoveringThumb = object._isHoveringThumb or false
-			object._isHoveringTrack = object._isHoveringTrack or false
+			if rawget(object, "_draggingThumb") == nil then
+				rawset(object, "_draggingThumb", false)
+			end
+			if rawget(object, "_dragOffsetY") == nil then
+				rawset(object, "_dragOffsetY", 0)
+			end
+			if rawget(object, "_scrollBarAlpha") == nil then
+				rawset(object, "_scrollBarAlpha", object.ScrollBarAutoHide and 0 or 1)
+			end
+			if rawget(object, "_timeSinceLastScroll") == nil then
+				rawset(object, "_timeSinceLastScroll", 999)
+			end
+			if rawget(object, "_velocity") == nil then
+				rawset(object, "_velocity", 0)
+			end
+			if rawget(object, "_isOverscrolled") == nil then
+				rawset(object, "_isOverscrolled", false)
+			end
+			if rawget(object, "_lastScroll") == nil then
+				rawset(object, "_lastScroll", object.Scroll)
+			end
+			if rawget(object, "_isHoveringThumb") == nil then
+				rawset(object, "_isHoveringThumb", false)
+			end
+			if rawget(object, "_isHoveringTrack") == nil then
+				rawset(object, "_isHoveringTrack", false)
+			end
 
 			-- Accumulate time since last scroll
 			object._timeSinceLastScroll = object._timeSinceLastScroll + dt
 
 			local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
-			object.AbsolutePosition = pos
-			object.AbsoluteSize = size
+			rawset(object, "AbsolutePosition", pos)
+			rawset(object, "AbsoluteSize", size)
 
 			local backgroundRect = arect.new(pos.X, pos.Y, size.X, size.Y)
 
@@ -136,7 +153,7 @@ return {
 			end
 
 			-- Only render scrollbar if visible and there's content to scroll
-			local scrollbarWidth = instance.ScrollBarThickness
+			local scrollbarWidth = object.ScrollBarThickness
 			local scrollbarRect =
 				arect.new(pos.X + size.X - scrollbarWidth - object.ScrollBarPadding, pos.Y, scrollbarWidth, size.Y)
 
@@ -301,21 +318,14 @@ return {
 			-- Calculate canvas position (allow negative for overscroll effect)
 			object.CanvasPosition = object.Scroll * maxScroll
 
-			-- Render children with clipping and offset
+			-- Render children with clipping and offset (without mutating child Position every frame)
+			lib.BeginScissorMode(pos.X, pos.Y, size.X, size.Y)
 			for _, child in pairs(object:GetChildren()) do
 				if child.render then
-					-- Store base position once
-					child._basePosition = child._basePosition or child.Position
-
-					local base = child._basePosition
-					child.Position =
-						UDim2.new(base.X.Scale, base.X.Offset, base.Y.Scale, base.Y.Offset - object.CanvasPosition)
-
-					lib.BeginScissorMode(pos.X, pos.Y, size.X, size.Y)
 					child.render(lib, child, dt, structs, renderer)
-					lib.EndScissorMode()
 				end
 			end
+			lib.EndScissorMode()
 		end
 
 		instance:SetProperties(propTable)

@@ -4,13 +4,6 @@
 
 local ffi = zune.ffi
 
--- Basic type aliases
-local int = ffi.types.i32
-local uint = ffi.types.u32
-local bool = ffi.types.u8
-local float = ffi.types.float
-local double = ffi.types.double
-
 -- Function definitions
 local funcs = {
 	swr_init = { returns = ffi.types.i32, args = { ffi.types.pointer } },

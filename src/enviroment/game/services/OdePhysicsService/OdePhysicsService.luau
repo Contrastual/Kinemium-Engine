@@ -159,14 +159,12 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 		for _, part in pairs(workspace:GetDescendants()) do
 			if part.BaseClass == "BasePart" then
-				iodebug("Created physics object for part:", part.Name)
 				--createPhysicsBody(worldId, space, part)
 			end
 		end
 
 		workspace.DescendantAdded:Connect(function(descendant)
 			if descendant.BaseClass == "BasePart" then
-				iodebug("Created physics object for part:", descendant.Name)
 				--createPhysicsBody(worldId, space, descendant)
 			end
 		end)
@@ -179,7 +177,6 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				if dt == 0 then
 					return
 				end
-
 			end
 		end)
 

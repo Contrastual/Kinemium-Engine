@@ -57,6 +57,66 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		return bestCol
 	end
 
+	local function getAutocompleteItemText(item)
+		if type(item) == "string" then
+			return item
+		end
+		if type(item) ~= "table" then
+			return nil
+		end
+		return item.text or item.label or item.insertText
+	end
+
+	local function normalizeAutocompleteItem(item)
+		if type(item) == "string" then
+			return {
+				label = item,
+				text = item,
+				type = "value",
+				icon = "Variable.png",
+			}
+		end
+
+		if type(item) ~= "table" then
+			return nil
+		end
+
+		local text = item.text or item.label or item.insertText
+		if type(text) ~= "string" or #text == 0 then
+			return nil
+		end
+
+		item.label = item.label or text
+		item.text = item.text or text
+		item.type = item.type or "value"
+		item.icon = item.icon or "Variable.png"
+
+		return item
+	end
+
+	local function normalizeAutocompleteItems(items)
+		local normalized = {}
+		if type(items) ~= "table" then
+			return normalized
+		end
+		for _, item in ipairs(items) do
+			local normalizedItem = normalizeAutocompleteItem(item)
+			if normalizedItem then
+				table.insert(normalized, normalizedItem)
+			end
+		end
+		return normalized
+	end
+
+	local NullIconLoader = {
+		Get = function()
+			return nil
+		end,
+		ToTexture = function()
+			return nil
+		end,
+	}
+
 	-- Constructor
 	function TextBox.new(config)
 		config = config or {}
@@ -95,7 +155,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.clearOnEscape = config.clearOnEscape or false
 		self.escapeBlurs = config.escapeBlurs or false
 		self.syntaxHighlighter = config.syntaxHighlighter -- function(line) -> tokens[]
-		self.autocompleteProvider = config.autocompleteProvider -- function(text, cursorPos) -> suggestions[]
+		self.autocompleteProvider = config.autocompleteProvider -- function(text, cursorPos) -> suggestions[] or autocomplete module table
+		self.useProviderAutocompleteUI = config.useProviderAutocompleteUI ~= false
 		self.contextMenu = config.contextMenu ~= false
 		self.doubleClickSelect = config.doubleClickSelect ~= false
 		self.tripleClickSelect = config.tripleClickSelect ~= false
@@ -174,6 +235,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			popupBackground = Color3ToRaylib(config.popupBackgroundColor or Color3.new(0.1, 0.1, 0.1), 0),
 			shadow = Color3ToRaylib(config.shadowColor or Color3.new(0, 0, 0), self.shadowTransparency),
 		}
+		self.autocompleteTheme = config.autocompleteTheme or default_theme.autocomplete or {}
 
 		-- State
 		self.buffer = ideBuffer.create()
@@ -216,7 +278,16 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			selectedIndex = 1,
 			x = 0,
 			y = 0,
+			currentX = 0,
+			currentY = 0,
+			targetX = 0,
+			targetY = 0,
+			lerpSpeed = 35,
 		}
+		local okIconLoader, iconLoader = pcall(function()
+			return game:GetService("KinemiumIconLoader")
+		end)
+		self.iconLoader = okIconLoader and iconLoader or NullIconLoader
 
 		-- Click tracking for double/triple click
 		self.lastClickTime = 0
@@ -510,8 +581,58 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 		local text = self:getText()
 		local cursorPos = self:getCursorPosition()
-		local suggestions = self.autocompleteProvider(text, cursorPos)
+		local provider = self.autocompleteProvider
+		local suggestions
 
+		if type(provider) == "function" then
+			local ok, result = pcall(provider, text, cursorPos, self)
+			if not ok then
+				self.autocomplete.visible = false
+				return
+			end
+			suggestions = result
+		elseif type(provider) == "table" then
+			if type(provider.updateAutocomplete) == "function" then
+				local editorAdapter = {
+					text = self.buffer,
+					autocomplete = self.autocomplete,
+				}
+				if type(provider.indexVariables) == "function" then
+					pcall(provider.indexVariables, editorAdapter, game)
+				end
+				local ok = pcall(provider.updateAutocomplete, editorAdapter, game)
+				if ok then
+					self.autocomplete.items = normalizeAutocompleteItems(self.autocomplete.items)
+					if self.autocomplete.visible and #self.autocomplete.items > 0 then
+						self.autocomplete.selectedIndex = math.clamp(
+							self.autocomplete.selectedIndex,
+							1,
+							#self.autocomplete.items
+						)
+					else
+						self.autocomplete.visible = false
+					end
+				else
+					self.autocomplete.visible = false
+				end
+				return
+			elseif type(provider.getSuggestions) == "function" then
+				local ok, result = pcall(provider.getSuggestions, text, cursorPos, self)
+				if not ok then
+					self.autocomplete.visible = false
+					return
+				end
+				suggestions = result
+			else
+				self.autocomplete.visible = false
+				return
+			end
+		else
+			self.autocomplete.visible = false
+			return
+		end
+
+		suggestions = normalizeAutocompleteItems(suggestions)
 		if suggestions and #suggestions > 0 then
 			self.autocomplete.items = suggestions
 			self.autocomplete.visible = true
@@ -544,10 +665,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			-- Delete current word and insert completion
 			self.buffer.cursor.col = wordStart
 			for i = wordStart, col - 1 do
-				self.buffer:deleteChar()
+				self.buffer:delete()
 			end
 
-			local insertText = type(selected) == "string" and selected or selected.text
+			local insertText = getAutocompleteItemText(selected)
+			if not insertText then
+				self.autocomplete.visible = false
+				return
+			end
 			self:saveHistory()
 			self.buffer:insertString(insertText)
 
@@ -1175,64 +1300,128 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 		-- Draw autocomplete popup
 		if self.autocomplete.visible and #self.autocomplete.items > 0 then
-			local acWidth = 200
-			local acItemHeight = 24
-			local acHeight = math.min(#self.autocomplete.items * acItemHeight, 200)
-
-			-- Position near cursor
-			local c = self.buffer.cursor
-			local textBeforeCursor = self.buffer.lines[c.line]:sub(1, c.col - 1)
-			local acX = x + gutterWidth + self.padding + measureTextWidth(textBeforeCursor, self.fontSize, spacing)
-			local acY = y + self.padding + c.line * lineHeight - self.scrollY
-
-			-- Keep in bounds
-			if acX + acWidth > x + width then
-				acX = x + width - acWidth
-			end
-			if acY + acHeight > y + height then
-				acY = y + self.padding + (c.line - 1) * lineHeight - self.scrollY - acHeight
-			end
-
-			local acRect = structs.Rectangle:new({ x = acX, y = acY, width = acWidth, height = acHeight })
-			if self.popupCornerRadius > 0 then
-				raylib.DrawRectangleRounded(
-					acRect,
-					self.popupCornerRadius,
-					self.cornerSegments,
-					self.theme.popupBackground
+			local provider = self.autocompleteProvider
+			local renderedByProvider = false
+			if
+				self.useProviderAutocompleteUI
+				and type(provider) == "table"
+				and type(provider.step) == "function"
+				and self.iconLoader
+			then
+				local editorAdapter = {
+					isActive = self.isFocused,
+					text = self.buffer,
+					autocomplete = self.autocomplete,
+					scrollY = self.scrollY,
+				}
+				renderedByProvider = pcall(
+					provider.step,
+					editorAdapter,
+					x,
+					gutterWidth,
+					self.padding,
+					measureTextWidth,
+					self.fontSize,
+					self.tabSize,
+					lineHeight,
+					self.autocompleteTheme,
+					rect,
+					raylib,
+					Color3ToRaylib,
+					vend,
+					spacing,
+					self.TextColor or self.theme.text,
+					self.theme.popupBackground,
+					y,
+					dt,
+					self.iconLoader
 				)
-				raylib.DrawRectangleRoundedLinesEx(
-					acRect,
-					self.popupCornerRadius,
-					self.cornerSegments,
-					self.borderWidth,
-					self.theme.border
-				)
-			else
-				raylib.DrawRectangle(acX, acY, acWidth, acHeight, self.theme.popupBackground)
-				raylib.DrawRectangleLinesEx(acRect, self.borderWidth, self.theme.border)
 			end
 
-			local visibleStart = math.max(1, self.autocomplete.selectedIndex - 8)
-			local visibleEnd =
-				math.min(#self.autocomplete.items, visibleStart + math.floor(acHeight / acItemHeight) - 1)
-
-			for i = visibleStart, visibleEnd do
-				local item = self.autocomplete.items[i]
-				local itemY = acY + (i - visibleStart) * acItemHeight
-				local itemText = type(item) == "string" and item or item.text
-
-				if i == self.autocomplete.selectedIndex then
-					raylib.DrawRectangle(
-						acX,
-						itemY,
-						acWidth,
-						acItemHeight,
-						Color3ToRaylib(Color3.new(0.2, 0.4, 0.8), 0)
-					)
+			if not renderedByProvider then
+				local acWidth = 200
+				local acItemHeight = 24
+				local acHeight = math.min(#self.autocomplete.items * acItemHeight, 200)
+				local viewportW, viewportH
+				if type(raylib.GetRenderWidth) == "function" and type(raylib.GetRenderHeight) == "function" then
+					viewportW = raylib.GetRenderWidth()
+					viewportH = raylib.GetRenderHeight()
+				elseif type(raylib.GetScreenWidth) == "function" and type(raylib.GetScreenHeight) == "function" then
+					viewportW = raylib.GetScreenWidth()
+					viewportH = raylib.GetScreenHeight()
+				else
+					viewportW = x + width
+					viewportH = y + height
 				end
 
-				raylib.DrawTextEx(vend, itemText, vector.create(acX + 5, itemY + 4), 14, 1, self.theme.text)
+				-- Position near cursor
+				local c = self.buffer.cursor
+				local textBeforeCursor = self.buffer.lines[c.line]:sub(1, c.col - 1)
+				local acX = x + gutterWidth + self.padding + measureTextWidth(textBeforeCursor, self.fontSize, spacing)
+				local caretY = y + self.padding + (c.line - 1) * lineHeight - self.scrollY
+
+				local pad = 4
+				local minX = pad
+				local maxX = math.max(minX, viewportW - acWidth - pad)
+				local minY = pad
+				local maxY = math.max(minY, viewportH - acHeight - pad)
+
+				local belowY = caretY + lineHeight + 5
+				local aboveY = caretY - acHeight - 5
+				local spaceAbove = caretY - minY
+				local spaceBelow = (viewportH - pad) - (caretY + lineHeight)
+				local acY
+
+				if spaceAbove >= acHeight or spaceAbove >= spaceBelow then
+					acY = aboveY
+				else
+					acY = belowY
+				end
+
+				acX = math.clamp(acX, minX, maxX)
+				acY = math.clamp(acY, minY, maxY)
+
+				local acRect = structs.Rectangle:new({ x = acX, y = acY, width = acWidth, height = acHeight })
+				if self.popupCornerRadius > 0 then
+					raylib.DrawRectangleRounded(
+						acRect,
+						self.popupCornerRadius,
+						self.cornerSegments,
+						self.theme.popupBackground
+					)
+					raylib.DrawRectangleRoundedLinesEx(
+						acRect,
+						self.popupCornerRadius,
+						self.cornerSegments,
+						self.borderWidth,
+						self.theme.border
+					)
+				else
+					raylib.DrawRectangle(acX, acY, acWidth, acHeight, self.theme.popupBackground)
+					raylib.DrawRectangleLinesEx(acRect, self.borderWidth, self.theme.border)
+				end
+
+				local visibleStart = math.max(1, self.autocomplete.selectedIndex - 8)
+				local visibleEnd =
+					math.min(#self.autocomplete.items, visibleStart + math.floor(acHeight / acItemHeight) - 1)
+
+				for i = visibleStart, visibleEnd do
+					local item = self.autocomplete.items[i]
+					local itemY = acY + (i - visibleStart) * acItemHeight
+					local itemText = getAutocompleteItemText(item) or ""
+
+					if i == self.autocomplete.selectedIndex then
+						raylib.DrawRectangle(
+							acX,
+							itemY,
+							acWidth,
+							acItemHeight,
+							Color3ToRaylib(Color3.new(0.2, 0.4, 0.8), 0)
+						)
+					end
+
+					raylib.DrawTextEx(vend, itemText, vector.create(acX + 5, itemY + 4), 14, 1, self.theme.text)
+				end
 			end
 		end
 
@@ -1628,7 +1817,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			if self.buffer.selection.active then
 				self.buffer:deleteSelection()
 			else
-				self.buffer:deleteChar()
+				self.buffer:delete()
 			end
 			if self.onChange then
 				self.onChange(self:getText())

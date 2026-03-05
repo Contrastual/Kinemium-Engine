@@ -43,7 +43,18 @@ return {
 			end
 
 			if not instance.OverrideScreenSize then
-				instance.Size = UDim2.new(0, renderWidth, 0, renderHeight)
+				local currentSize = instance.Size
+				local needsResize = currentSize == nil
+					or currentSize.X == nil
+					or currentSize.Y == nil
+					or currentSize.X.Scale ~= 0
+					or currentSize.Y.Scale ~= 0
+					or currentSize.X.Offset ~= renderWidth
+					or currentSize.Y.Offset ~= renderHeight
+
+				if needsResize then
+					instance.Size = UDim2.new(0, renderWidth, 0, renderHeight)
+				end
 			end
 
 			for _, child in pairs(instance:GetChildren()) do

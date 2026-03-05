@@ -16,7 +16,7 @@ SQLiteService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		local userdata = SerializationService.userdata
 
 		SQLiteService:SetProperties({
-			GetSQLiteBase = function(name: string)
+			CreateBase = function(name: string)
 				if SQLiteBases[name] then
 					return SQLiteBases[name]
 				end
@@ -26,12 +26,7 @@ SQLiteService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 				local db = sqlite.open(name .. ".db")
 
-				db:execute([[
-					CREATE TABLE IF NOT EXISTS datastore (
-						key TEXT PRIMARY KEY,
-						value TEXT
-					)
-				]])
+				db:exec("CREATE TABLE IF NOT EXISTS datastore(key TEXT PRIMARY KEY, value TEXT)")
 
 				store:SetProperties({
 					Open = function(self)
@@ -41,27 +36,26 @@ SQLiteService.InitRenderer = function(renderer, renderer_signal, datamodel)
 					GetAsync = function(key, callback)
 						task.spawn(function()
 							local success, result = pcall(function()
-								local stmt = db:query("SELECT value FROM datastore WHERE key = ?", key)
-								local rows = stmt:rows()
-								if rows[1] then
-									return userdata.Decode(rows[1].value)
+								local stmt = db:query("SELECT value FROM datastore WHERE key = :key")
+								local row = stmt:get({ [":key"] = key })
+								if row then
+									return userdata.Decode(row.value)
 								end
 								return nil
 							end)
-							callback(success, result)
+							if callback then
+								callback(success, result)
+							end
+							return result
 						end)
 					end,
 
 					SetAsync = function(key, value, callback)
 						task.spawn(function()
 							local success, err = pcall(function()
-								db:execute(
-									[[
-                INSERT INTO datastore(key, value)
-                VALUES (?, ?)
-                ON CONFLICT(key) DO UPDATE SET value=excluded.value
-            ]],
-									{ key, userdata.Encode(value) }
+								db:exec(
+									"INSERT INTO datastore(key, value) VALUES (:key, :value) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+									{ [":key"] = key, [":value"] = userdata.Encode(value) }
 								)
 							end)
 							if callback then

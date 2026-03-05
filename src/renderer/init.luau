@@ -21,7 +21,13 @@ local r3d = require("@r3d")
 local rlib = r3d.lib
 
 -- TYPES
-export type KiRendConf = { width: number, height: number, maxFps: number, title: string }
+export type KiRendConf = {
+	width: number,
+	height: number,
+	maxFps: number,
+	title: string,
+	vsync: boolean?,
+}
 
 -- RAYLIB INIT
 local lib = raylib.lib
@@ -34,16 +40,27 @@ function KiRend.new(config: KiRendConf)
 	local Dimension = "3D"
 
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
-	lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
-	lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
+
+	local useVsync = if config.vsync == nil then true else config.vsync
+	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE, const.ConfigFlags.FLAG_MSAA_4X_HINT)
+	if useVsync then
+		windowFlags = bit32.bor(windowFlags, const.ConfigFlags.FLAG_VSYNC_HINT)
+	end
+	lib.SetConfigFlags(windowFlags)
 
 	lib.InitWindow(config.width, config.height, config.title)
-	lib.SetTargetFPS(config.maxFps)
+	if config.maxFps and config.maxFps > 0 then
+		lib.SetTargetFPS(config.maxFps)
+	elseif not useVsync then
+		lib.SetTargetFPS(0)
+	end
 	lib.SetExitKey(0)
 	ki3d.init()
 
 	rlib.R3D_Init(config.width, config.height)
 	rlib.R3D_SetUpscaleMode(2)
+	rlib.R3D_SetAntiAliasingMode(1)
+	local lastRenderWidth, lastRenderHeight = config.width, config.height
 
 	local function getSortedPool(pool)
 		local sorted = {}
@@ -78,8 +95,23 @@ function KiRend.new(config: KiRendConf)
 		fonts = {},
 	}
 	local renderer_draw_calls = {}
+	local renderer_instanced_draw_calls = {}
+	local renderer_instance_buffers_to_unload = {}
 	local renderer_meshes = {}
 	local ENGINE_PROFILER = {}
+	local perf_stats = {
+		frame_ms = 0,
+		fps = 0,
+		update_ms = 0,
+		render3d_ms = 0,
+		ui_ms = 0,
+		gui_roots = 0,
+		scene_roots_3d = 0,
+		mesh_calls = 0,
+		instanced_batches = 0,
+		instanced_instances = 0,
+		batches_3d = 0,
+	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
 	local rendererObject
@@ -96,6 +128,8 @@ function KiRend.new(config: KiRendConf)
 		Blur = newBlurInstance,
 
 		DrawFps = true,
+		ShowPerfOverlay = false,
+		PerfStats = perf_stats,
 
 		SetDimension = function(self, dimension: "2D" | "3D")
 			Dimension = dimension
@@ -110,6 +144,7 @@ function KiRend.new(config: KiRendConf)
 			const = const,
 			dt = lib.GetFrameTime(),
 			time = lib.GetTime(),
+			perf = perf_stats,
 		},
 
 		EventBus = renderer_eventbus,
@@ -154,11 +189,24 @@ function KiRend.new(config: KiRendConf)
 		},
 
 		MeshPool = {
-			DrawMesh = function(mesh, material, matrix)
+			DrawMesh = function(mesh, material, matrix, begin, End)
 				table.insert(renderer_draw_calls, {
 					mesh = mesh,
 					material = material,
 					matrix = matrix,
+					Begin = begin,
+					End = End,
+				})
+			end,
+			DrawMeshInstanced = function(mesh, material, instances, count, begin, End, unloadAfterFrame)
+				table.insert(renderer_instanced_draw_calls, {
+					mesh = mesh,
+					material = material,
+					instances = instances,
+					count = count,
+					Begin = begin,
+					End = End,
+					unloadAfterFrame = unloadAfterFrame == true,
 				})
 			end,
 
@@ -432,6 +480,12 @@ function KiRend.new(config: KiRendConf)
 		if not activeCamera then
 			return
 		end
+		local render3DStart = os.clock()
+		local meshCalls = 0
+		local instancedBatches = 0
+		local instancedInstances = 0
+		local sorted3DPool = getSortedPool(renderer_pool.object)
+		perf_stats.scene_roots_3d = #sorted3DPool
 
 		lib.BeginMode3D(activeCamera)
 		lib.rlEnableBackfaceCulling()
@@ -441,24 +495,49 @@ function KiRend.new(config: KiRendConf)
 			v(rendererObject.RuntimeLibrary)
 		end
 
-		for _, item in ipairs(getSortedPool(renderer_pool.object)) do
+		for _, item in ipairs(sorted3DPool) do
 			local entry = item.entry
 			if entry.render then
 				entry.render(rendererObject.RuntimeLibrary)
 			end
 		end
+		meshCalls = #renderer_draw_calls
+		instancedBatches = #renderer_instanced_draw_calls
 
-		if #renderer_draw_calls > 0 then
+		if #renderer_draw_calls > 0 or #renderer_instanced_draw_calls > 0 then
 			if Dimension == "3D" then
 				rlib.R3D_Begin(activeCamera)
-				for i, drawCall in pairs(renderer_draw_calls) do
+				for _, drawCall in ipairs(renderer_draw_calls) do
+					if drawCall.Begin then
+						drawCall.Begin()
+					end
 					rlib.R3D_DrawMeshPro(drawCall.mesh, drawCall.material, drawCall.matrix)
-					renderer_draw_calls[i] = nil
+					if drawCall.End then
+						drawCall.End()
+					end
+				end
+				for _, drawCall in ipairs(renderer_instanced_draw_calls) do
+					instancedInstances += drawCall.count or 0
+					if drawCall.Begin then
+						drawCall.Begin()
+					end
+					rlib.R3D_DrawMeshInstanced(drawCall.mesh, drawCall.material, drawCall.instances, drawCall.count)
+					if drawCall.End then
+						drawCall.End()
+					end
+					if drawCall.unloadAfterFrame then
+						table.insert(renderer_instance_buffers_to_unload, drawCall.instances)
+					end
 				end
 				rlib.R3D_End()
+				for i = 1, #renderer_instance_buffers_to_unload do
+					pcall(rlib.R3D_UnloadInstanceBuffer, renderer_instance_buffers_to_unload[i])
+				end
+				table.clear(renderer_instance_buffers_to_unload)
 			end
 		end
 		table.clear(renderer_draw_calls)
+		table.clear(renderer_instanced_draw_calls)
 
 		for _, item in ipairs(getSortedPool(renderer_pool.gizmos)) do
 			local entry = item.entry
@@ -474,14 +553,23 @@ function KiRend.new(config: KiRendConf)
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
 		renderer_eventbus:Fire("End3D")
+
+		perf_stats.mesh_calls = meshCalls
+		perf_stats.instanced_batches = instancedBatches
+		perf_stats.instanced_instances = instancedInstances
+		perf_stats.batches_3d = meshCalls + instancedBatches
+		perf_stats.render3d_ms = (os.clock() - render3DStart) * 1000
 	end
 
 	function rendererObject:Render2D()
+		local uiStart = os.clock()
 		for _, v in pairs(renderer_hooks.Before2D) do
 			v(rendererObject.RuntimeLibrary)
 		end
 
-		for _, item in ipairs(getSortedPool(renderer_pool.gui)) do
+		local sortedGuiPool = getSortedPool(renderer_pool.gui)
+		perf_stats.gui_roots = #sortedGuiPool
+		for _, item in ipairs(sortedGuiPool) do
 			local gui = item.entry
 			gui.render(lib, gui.object and gui.object() or nil, time, structs, rendererObject.RuntimeLibrary)
 		end
@@ -493,9 +581,55 @@ function KiRend.new(config: KiRendConf)
 		if rendererObject.DrawFps then
 			lib.DrawFPS(10, 10)
 		end
+
+		if rendererObject.ShowPerfOverlay then
+			local color = const.WHITE
+			local y = 30
+			lib.DrawText(
+				string.format("Frame: %.2f ms | FPS: %d", perf_stats.frame_ms, perf_stats.fps),
+				10,
+				y,
+				18,
+				color
+			)
+			y += 18
+			lib.DrawText(
+				string.format(
+					"Update: %.2f ms | UI: %.2f ms | UI Roots: %d",
+					perf_stats.update_ms,
+					perf_stats.ui_ms,
+					perf_stats.gui_roots
+				),
+				10,
+				y,
+				18,
+				color
+			)
+			y += 18
+			lib.DrawText(
+				string.format(
+					"3D: %.2f ms | Batches: %d (%d mesh + %d inst) | Instances: %d",
+					perf_stats.render3d_ms,
+					perf_stats.batches_3d,
+					perf_stats.mesh_calls,
+					perf_stats.instanced_batches,
+					perf_stats.instanced_instances
+				),
+				10,
+				y,
+				18,
+				color
+			)
+			y += 18
+			lib.DrawText(string.format("3D Roots: %d", perf_stats.scene_roots_3d), 10, y, 18, color)
+		end
+
+		perf_stats.ui_ms = (os.clock() - uiStart) * 1000
 	end
 
 	function rendererObject:step(time)
+		local frameStart = os.clock()
+		local updateStart = os.clock()
 		rendererObject.RuntimeLibrary.dt = lib.GetFrameTime()
 		rendererObject.RuntimeLibrary.time = lib.GetTime()
 
@@ -517,7 +651,15 @@ function KiRend.new(config: KiRendConf)
 		time += delta
 
 		if raylib.lib.IsWindowResized() == 1 then
-			rlib.R3D_UpdateResolution(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight())
+			local renderWidth, renderHeight = raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()
+			if
+				renderWidth > 0
+				and renderHeight > 0
+				and (renderWidth ~= lastRenderWidth or renderHeight ~= lastRenderHeight)
+			then
+				lastRenderWidth, lastRenderHeight = renderWidth, renderHeight
+				rlib.R3D_UpdateResolution(renderWidth, renderHeight)
+			end
 		end
 
 		for name, keycode in pairs(const.KeyboardKey) do
@@ -533,17 +675,18 @@ function KiRend.new(config: KiRendConf)
 			if lib.IsKeyUp(keycode) == 1 then
 				renderer_eventbus:Fire("IsKeyUp", keycode)
 			end
-
-			local mouseDelta = lib.GetMouseDelta()
-			if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
-				renderer_eventbus:Fire("MouseMoved", mouseDelta)
-			end
-
-			local wheel = lib.GetMouseWheelMove()
-			if wheel ~= 0 then
-				renderer_eventbus:Fire("MouseWheel", wheel)
-			end
 		end
+
+		local mouseDelta = lib.GetMouseDelta()
+		if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
+			renderer_eventbus:Fire("MouseMoved", mouseDelta)
+		end
+
+		local wheel = lib.GetMouseWheelMove()
+		if wheel ~= 0 then
+			renderer_eventbus:Fire("MouseWheel", wheel)
+		end
+		perf_stats.update_ms = (os.clock() - updateStart) * 1000
 
 		if ENGINE_PROFILER then
 			ENGINE_PROFILER:End()
@@ -560,6 +703,8 @@ function KiRend.new(config: KiRendConf)
 		lib.EndDrawing()
 
 		renderer_eventbus:Fire("Heartbeat", delta)
+		perf_stats.frame_ms = (os.clock() - frameStart) * 1000
+		perf_stats.fps = lib.GetFPS()
 
 		if ENGINE_PROFILER then
 			ENGINE_PROFILER:SetCounter("FPS", lib.GetFPS())
@@ -569,7 +714,6 @@ function KiRend.new(config: KiRendConf)
 		for _, v in pairs(renderer_hooks.Afterstep) do
 			v(delta)
 		end
-
 		task.wait(0)
 	end
 
@@ -611,6 +755,18 @@ function KiRend.new(config: KiRendConf)
 			render3DCount = gui3DCount,
 			render2DCount = gui2DCount,
 			gizmoCount = gizmoCount,
+			perf = {
+				frame_ms = perf_stats.frame_ms,
+				update_ms = perf_stats.update_ms,
+				render3d_ms = perf_stats.render3d_ms,
+				ui_ms = perf_stats.ui_ms,
+				batches_3d = perf_stats.batches_3d,
+				mesh_calls = perf_stats.mesh_calls,
+				instanced_batches = perf_stats.instanced_batches,
+				instanced_instances = perf_stats.instanced_instances,
+				gui_roots = perf_stats.gui_roots,
+				scene_roots_3d = perf_stats.scene_roots_3d,
+			},
 			windowSize = {
 				width = lib.GetRenderWidth(),
 				height = lib.GetRenderHeight(),

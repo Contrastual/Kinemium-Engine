@@ -10,6 +10,7 @@ local lib = raylib.lib
 local structs = raylib.structs
 local bufferUtils = require("@bufferUtils")
 local r3d = require("@r3d")
+local const = r3d.constants
 local rlib = r3d.lib
 
 local material_shader_manager = require("./materialShaders")
@@ -40,6 +41,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 		-- rendering
 		MAX_VIEW_DISTANCE = 150,
+		UseGpuInstancing = true,
+		MinInstancesPerBatch = 1,
 		EnableDefaultPlayerMenu = true,
 
 		-- debugging
@@ -82,7 +85,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	IdPool = proptable.Pool.GetAllUniqueIds()
 
 	local function addPart(part)
-		local cx, cy, cz = worldToChunk(part.Position)
+		local pos = part.CFrame and part.CFrame.Position or part.Position
+		local cx, cy, cz = worldToChunk(pos)
 		local key = cx .. "," .. cy .. "," .. cz
 
 		local chunk = chunks[key]
@@ -91,12 +95,99 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				parts = {},
 				aabbMin = Vector3.new(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE),
 				aabbMax = Vector3.new((cx + 1) * CHUNK_SIZE, (cy + 1) * CHUNK_SIZE, (cz + 1) * CHUNK_SIZE),
+				dirty = true,
+				batches = {},
+				singleParts = {},
 			}
 			chunks[key] = chunk
 		end
 
 		chunk.parts[#chunk.parts + 1] = part
-		part._chunk = chunk
+		chunk.dirty = true
+		rawset(part, "__workspaceChunk", chunk)
+		rawset(part, "__workspaceChunkKey", key)
+	end
+
+	local function markChunkDirty(chunk)
+		if chunk then
+			chunk.dirty = true
+		end
+	end
+
+	local function unloadChunkBatches(chunk)
+		if not chunk or not chunk.batches then
+			return
+		end
+		for _, batch in pairs(chunk.batches) do
+			if batch.instanceBuffer then
+				pcall(rlib.R3D_UnloadInstanceBuffer, batch.instanceBuffer)
+				batch.instanceBuffer = nil
+			end
+		end
+	end
+
+	local function removePart(part)
+		local chunk = rawget(part, "__workspaceChunk")
+		local key = rawget(part, "__workspaceChunkKey")
+		if not chunk then
+			return
+		end
+
+		local idx = table.find(chunk.parts, part)
+		if idx then
+			table.remove(chunk.parts, idx)
+		end
+		chunk.dirty = true
+
+		rawset(part, "__workspaceChunk", nil)
+		rawset(part, "__workspaceChunkKey", nil)
+
+		if #chunk.parts <= 0 and key then
+			unloadChunkBatches(chunk)
+			chunks[key] = nil
+		end
+	end
+
+	local function updatePartChunk(part)
+		local oldChunk = rawget(part, "__workspaceChunk")
+		local oldKey = rawget(part, "__workspaceChunkKey")
+		local pos = part.CFrame and part.CFrame.Position or part.Position
+		local cx, cy, cz = worldToChunk(pos)
+		local newKey = cx .. "," .. cy .. "," .. cz
+
+		if oldKey == newKey then
+			markChunkDirty(oldChunk)
+			return
+		end
+
+		removePart(part)
+		addPart(part)
+	end
+
+	local function watchRenderablePart(part)
+		if rawget(part, "__workspaceRenderConn") ~= nil then
+			return
+		end
+
+		local conn = part.Changed:Connect(function(prop)
+			if prop == "Position" or prop == "CFrame" then
+				updatePartChunk(part)
+				return
+			end
+
+			if
+				prop == "Size"
+				or prop == "Color"
+				or prop == "Transparency"
+				or prop == "Material"
+				or prop == "Shape"
+				or prop == "Destroyed"
+			then
+				markChunkDirty(rawget(part, "__workspaceChunk"))
+			end
+		end)
+
+		rawset(part, "__workspaceRenderConn", conn)
 	end
 
 	local function chunkVisible(chunk, camPos, maxDist)
@@ -118,12 +209,19 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local meshlib = renderer.Mesh
 	local materialList = renderer.Texture.GetMaterials()
 	local loadedMaterials = {}
-	local MAX_INSTANCES = 150000
-	local MATRIX_SIZE = 64 -- 16 floats x 4 bytes = 64 bytes per matrix
-	local COLOR_SIZE = 4 -- 4 bytes: R, G, B, A
-
-	-- Batch storage: key = "shape|material", value = batch object
-	local shapeMaterialBatches = {}
+	local INSTANCE_POSITION_STRIDE = 12 -- vec3 (f32 x3)
+	local INSTANCE_ROTATION_STRIDE = 16 -- quat (f32 x4)
+	local INSTANCE_SCALE_STRIDE = 12 -- vec3 (f32 x3)
+	local INSTANCE_COLOR_STRIDE = 4 -- rgba8
+	local INSTANCE_FLAGS = bit32.bor(
+		const.R3D_INSTANCE_POSITION,
+		const.R3D_INSTANCE_ROTATION,
+		const.R3D_INSTANCE_SCALE,
+		const.R3D_INSTANCE_COLOR
+	)
+	local instancedMaterialCache = {}
+	local lastUseGpuInstancing = true
+	local lastMinInstancesPerBatch = 1
 
 	local preloadedMeshes
 	if not IsHeadless then
@@ -165,8 +263,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	Workspace.DescendantAdded:Connect(function(v)
 		pool[v.UniqueId] = v
-		addPart(v)
 		if isRenderable(v) then
+			addPart(v)
+			watchRenderablePart(v)
 			signal:Fire("UpdatePart", v)
 			pool[v.UniqueId]._renderable = true
 			table.insert(renderablePool, v)
@@ -175,84 +274,367 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end)
 
 	Workspace.DescendantRemoving:Connect(function(v)
+		if isRenderable(v) then
+			local conn = rawget(v, "__workspaceRenderConn")
+			if conn and conn.Disconnect then
+				conn:Disconnect()
+			end
+			rawset(v, "__workspaceRenderConn", nil)
+			removePart(v)
+		end
 		pool[v.UniqueId] = nil
 		IdPool = proptable.Pool.GetAllUniqueIds()
-		table.remove(renderablePool, table.find(renderablePool, v))
+		local idx = table.find(renderablePool, v)
+		if idx then
+			table.remove(renderablePool, idx)
+		end
 	end)
 
 	for _, child in pairs(Workspace:GetDescendants()) do
 		pool[child.UniqueId] = child
 		if isRenderable(child) then
+			addPart(child)
+			watchRenderablePart(child)
 			pool[child.UniqueId]._renderable = true
+			table.insert(renderablePool, child)
 		end
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
-	local function drawChunks()
-		local Kinemium_camera = Workspace.Camera
-		local camPos = Kinemium_camera.CFrame.Position
-		local camTarget = Kinemium_camera.CFrame:GetLookVector()
-		local camFovy = Kinemium_camera.FieldOfView
-
-		for _, batch in pairs(shapeMaterialBatches) do
-			batch.count = 0
+	local function getInstancedMaterial(materialName)
+		local cached = instancedMaterialCache[materialName]
+		if cached then
+			return cached
 		end
 
-		for _, chunk in pairs(chunks) do
-			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
-				for i = 1, #chunk.parts do
-					local part = chunk.parts[i]
+		local matData = loadedMaterials[materialName]
+		if not matData then
+			return nil
+		end
 
-					if isRenderable(part) then
-						if part.Destroyed then
-							continue
-						end
-						local meshData = preloadedMeshes[part.Shape.Value]
-						local matData = loadedMaterials[part.Material.Value]
-						local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
-						local mesh = meshData[2]
+		local material = buffer.create(r3d.structs.R3D_Material:size())
+		buffer.copy(material, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+		buffer.writei32(material, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+		buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
 
-						local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
+		instancedMaterialCache[materialName] = material
+		return material
+	end
 
-						buffer.copy(
-							tmpAlbedo,
-							0,
-							matData.material,
-							r3d.structs.R3D_Material:offset("albedo"),
-							r3d.structs.R3D_AlbedoMap:size()
-						)
+	local function queueSinglePartDraw(part, r3dAABB)
+		local shapeName = part.Shape and part.Shape.Value
+		local materialName = part.Material and part.Material.Value
+		if not shapeName or not materialName then
+			return
+		end
 
-						buffer.copy(
-							tmpAlbedo,
-							r3d.structs.R3D_AlbedoMap:offset("color"),
-							part.Color:ToRaylib(part.Transparency)
-						)
+		local meshData = preloadedMeshes and preloadedMeshes[shapeName]
+		local matData = loadedMaterials[materialName]
+		if not meshData or not matData then
+			return
+		end
 
-						local tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
-						buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
-						buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
-						buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
-						buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
+		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+		local mesh = meshData[2]
 
-						if mtsh_sh[part.Material.Value] then
-							mtsh_sh[part.Material.Value].Apply3DObj(part, tmpAlbedo, tmpMaterial)
-						end
+		local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
+		buffer.copy(
+			tmpAlbedo,
+			0,
+			matData.material,
+			r3d.structs.R3D_Material:offset("albedo"),
+			r3d.structs.R3D_AlbedoMap:size()
+		)
+		buffer.copy(tmpAlbedo, r3d.structs.R3D_AlbedoMap:offset("color"), part.Color:ToRaylib(part.Transparency or 0))
 
-						renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix)
+		local tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
+		buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+		buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
+		buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+		buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
 
-						--drawRaylibInstanced(part, meshBuf, matData)
+		local materialShader = mtsh_sh[materialName]
+		local applyPerObject = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
+		if applyPerObject then
+			applyPerObject(part, tmpAlbedo, tmpMaterial)
+		end
+
+		renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix, function()
+			rlib.R3D_BeginCluster(r3dAABB)
+		end, function()
+			rlib.R3D_EndCluster()
+		end)
+	end
+
+	local function uploadBatchInstances(batch)
+		local count = #batch.parts
+		if count <= 0 then
+			return false
+		end
+
+		if batch.instanceBuffer and batch.capacity and batch.capacity < count then
+			pcall(rlib.R3D_UnloadInstanceBuffer, batch.instanceBuffer)
+			batch.instanceBuffer = nil
+			batch.capacity = 0
+		end
+
+		if not batch.instanceBuffer then
+			local okLoad, loadedBuffer = pcall(rlib.R3D_LoadInstanceBuffer, count, INSTANCE_FLAGS)
+			if not okLoad or not loadedBuffer then
+				return false
+			end
+			batch.instanceBuffer = loadedBuffer
+			batch.capacity = count
+		end
+
+		local mappedPosition = nil
+		local mappedRotation = nil
+		local mappedScale = nil
+		local mappedColor = nil
+
+		local okMap = pcall(function()
+			mappedPosition = rlib.R3D_MapInstances(batch.instanceBuffer, const.R3D_INSTANCE_POSITION)
+			mappedRotation = rlib.R3D_MapInstances(batch.instanceBuffer, const.R3D_INSTANCE_ROTATION)
+			mappedScale = rlib.R3D_MapInstances(batch.instanceBuffer, const.R3D_INSTANCE_SCALE)
+			mappedColor = rlib.R3D_MapInstances(batch.instanceBuffer, const.R3D_INSTANCE_COLOR)
+		end)
+
+		local okUpload = false
+		local mappedFlags = bit32.bor(
+			mappedPosition and const.R3D_INSTANCE_POSITION or 0,
+			mappedRotation and const.R3D_INSTANCE_ROTATION or 0,
+			mappedScale and const.R3D_INSTANCE_SCALE or 0,
+			mappedColor and const.R3D_INSTANCE_COLOR or 0
+		)
+
+		if okMap and mappedFlags == INSTANCE_FLAGS then
+			local okWrite = pcall(function()
+				for i = 1, count do
+					local part = batch.parts[i]
+					local position = part.CFrame and part.CFrame.Position or part.Position
+					local size = part.Size
+					local qx, qy, qz, qw = part.CFrame:ToQuaternion()
+					local r, g, b = part.Color:ToRGB()
+					local alpha = math.clamp(math.floor(255 * (1 - (part.Transparency or 0))), 0, 255)
+
+					local pOffset = (i - 1) * INSTANCE_POSITION_STRIDE
+					mappedPosition:writef32(pOffset, position.X)
+					mappedPosition:writef32(pOffset + 4, position.Y)
+					mappedPosition:writef32(pOffset + 8, position.Z)
+
+					local rOffset = (i - 1) * INSTANCE_ROTATION_STRIDE
+					mappedRotation:writef32(rOffset, qx)
+					mappedRotation:writef32(rOffset + 4, qy)
+					mappedRotation:writef32(rOffset + 8, qz)
+					mappedRotation:writef32(rOffset + 12, qw)
+
+					local sOffset = (i - 1) * INSTANCE_SCALE_STRIDE
+					mappedScale:writef32(sOffset, size.X)
+					mappedScale:writef32(sOffset + 4, size.Y)
+					mappedScale:writef32(sOffset + 8, size.Z)
+
+					local cOffset = (i - 1) * INSTANCE_COLOR_STRIDE
+					mappedColor:writeu8(cOffset, r)
+					mappedColor:writeu8(cOffset + 1, g)
+					mappedColor:writeu8(cOffset + 2, b)
+					mappedColor:writeu8(cOffset + 3, alpha)
+				end
+			end)
+
+			local okUnmap = pcall(rlib.R3D_UnmapInstances, batch.instanceBuffer, INSTANCE_FLAGS)
+			okUpload = okWrite and okUnmap
+		else
+			if mappedFlags ~= 0 then
+				pcall(rlib.R3D_UnmapInstances, batch.instanceBuffer, mappedFlags)
+			end
+
+			local positionBuffer = buffer.create(count * INSTANCE_POSITION_STRIDE)
+			local rotationBuffer = buffer.create(count * INSTANCE_ROTATION_STRIDE)
+			local scaleBuffer = buffer.create(count * INSTANCE_SCALE_STRIDE)
+			local colorBuffer = buffer.create(count * INSTANCE_COLOR_STRIDE)
+
+			for i = 1, count do
+				local part = batch.parts[i]
+				local position = part.CFrame and part.CFrame.Position or part.Position
+				local size = part.Size
+				local qx, qy, qz, qw = part.CFrame:ToQuaternion()
+				local r, g, b = part.Color:ToRGB()
+				local alpha = math.clamp(math.floor(255 * (1 - (part.Transparency or 0))), 0, 255)
+
+				local pOffset = (i - 1) * INSTANCE_POSITION_STRIDE
+				buffer.writef32(positionBuffer, pOffset, position.X)
+				buffer.writef32(positionBuffer, pOffset + 4, position.Y)
+				buffer.writef32(positionBuffer, pOffset + 8, position.Z)
+
+				local rOffset = (i - 1) * INSTANCE_ROTATION_STRIDE
+				buffer.writef32(rotationBuffer, rOffset, qx)
+				buffer.writef32(rotationBuffer, rOffset + 4, qy)
+				buffer.writef32(rotationBuffer, rOffset + 8, qz)
+				buffer.writef32(rotationBuffer, rOffset + 12, qw)
+
+				local sOffset = (i - 1) * INSTANCE_SCALE_STRIDE
+				buffer.writef32(scaleBuffer, sOffset, size.X)
+				buffer.writef32(scaleBuffer, sOffset + 4, size.Y)
+				buffer.writef32(scaleBuffer, sOffset + 8, size.Z)
+
+				local cOffset = (i - 1) * INSTANCE_COLOR_STRIDE
+				buffer.writeu8(colorBuffer, cOffset, r)
+				buffer.writeu8(colorBuffer, cOffset + 1, g)
+				buffer.writeu8(colorBuffer, cOffset + 2, b)
+				buffer.writeu8(colorBuffer, cOffset + 3, alpha)
+			end
+
+			okUpload = pcall(function()
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_POSITION, 0, count, positionBuffer)
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_ROTATION, 0, count, rotationBuffer)
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_SCALE, 0, count, scaleBuffer)
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_COLOR, 0, count, colorBuffer)
+			end)
+		end
+
+		if not okUpload then
+			pcall(rlib.R3D_UnloadInstanceBuffer, batch.instanceBuffer)
+			batch.instanceBuffer = nil
+			batch.capacity = 0
+			return false
+		end
+
+		batch.count = count
+		return true
+	end
+
+	local function rebuildChunkBatches(chunk)
+		unloadChunkBatches(chunk)
+		chunk.batches = {}
+		chunk.singleParts = {}
+
+		for i = 1, #chunk.parts do
+			local part = chunk.parts[i]
+			if not isRenderable(part) or part.Destroyed then
+				continue
+			end
+
+			local shapeName = part.Shape and part.Shape.Value
+			local materialName = part.Material and part.Material.Value
+			local meshData = shapeName and preloadedMeshes[shapeName]
+			local matData = materialName and loadedMaterials[materialName]
+
+			if not meshData or not matData then
+				continue
+			end
+
+			local materialShader = mtsh_sh[materialName]
+			local hasPerObjectShader = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
+			local canInstance = Workspace.UseGpuInstancing
+				and renderer.MeshPool.DrawMeshInstanced ~= nil
+				and not hasPerObjectShader
+
+			if canInstance then
+				local key = shapeName .. "|" .. materialName
+				local batch = chunk.batches[key]
+				if not batch then
+					local instancedMaterial = getInstancedMaterial(materialName)
+					if not instancedMaterial then
+						table.insert(chunk.singleParts, part)
+						continue
+					end
+
+					batch = {
+						mesh = meshData[2],
+						material = instancedMaterial,
+						parts = {},
+						count = 0,
+						instanceBuffer = nil,
+						capacity = 0,
+					}
+					chunk.batches[key] = batch
+				end
+				table.insert(batch.parts, part)
+			else
+				table.insert(chunk.singleParts, part)
+			end
+		end
+
+		for _, batch in pairs(chunk.batches) do
+			if #batch.parts >= Workspace.MinInstancesPerBatch then
+				local ok = uploadBatchInstances(batch)
+				if not ok then
+					for i = 1, #batch.parts do
+						table.insert(chunk.singleParts, batch.parts[i])
 					end
 				end
 			end
 		end
 
-		--[[
-		for _, batch in pairs(shapeMaterialBatches) do
-			if batch.count > 0 then
-				lib.DrawMeshInstanced(batch.mesh, batch.material, batch.matrices, batch.count)
+		chunk.dirty = false
+	end
+
+	local function drawChunks()
+		local Kinemium_camera = Workspace.Camera
+		if not Kinemium_camera then
+			return
+		end
+
+		if
+			Workspace.UseGpuInstancing ~= lastUseGpuInstancing
+			or Workspace.MinInstancesPerBatch ~= lastMinInstancesPerBatch
+		then
+			lastUseGpuInstancing = Workspace.UseGpuInstancing
+			lastMinInstancesPerBatch = Workspace.MinInstancesPerBatch
+			for _, chunk in pairs(chunks) do
+				chunk.dirty = true
 			end
 		end
-		--]]
+
+		local camPos = Kinemium_camera.CFrame.Position
+
+		for _, chunk in pairs(chunks) do
+			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
+				if chunk.dirty then
+					rebuildChunkBatches(chunk)
+				end
+
+				local r3dAABB = structs.BoundingBox:new({
+					min = vector.create(chunk.aabbMin.X, chunk.aabbMin.Y, chunk.aabbMin.Z),
+					max = vector.create(chunk.aabbMax.X, chunk.aabbMax.Y, chunk.aabbMax.Z),
+				})
+
+				for i = 1, #chunk.singleParts do
+					queueSinglePartDraw(chunk.singleParts[i], r3dAABB)
+				end
+
+				for _, batch in pairs(chunk.batches) do
+					if #batch.parts >= Workspace.MinInstancesPerBatch then
+						if not batch.instanceBuffer then
+							local ok = uploadBatchInstances(batch)
+							if not ok then
+								for i = 1, #batch.parts do
+									queueSinglePartDraw(batch.parts[i], r3dAABB)
+								end
+								continue
+							end
+						end
+
+						renderer.MeshPool.DrawMeshInstanced(
+							batch.mesh,
+							batch.material,
+							batch.instanceBuffer,
+							batch.count,
+							function()
+								rlib.R3D_BeginCluster(r3dAABB)
+							end,
+							function()
+								rlib.R3D_EndCluster()
+							end
+						)
+					else
+						for i = 1, #batch.parts do
+							queueSinglePartDraw(batch.parts[i], r3dAABB)
+						end
+					end
+				end
+			end
+		end
 	end
 
 	Workspace:SetProperties(proptable)

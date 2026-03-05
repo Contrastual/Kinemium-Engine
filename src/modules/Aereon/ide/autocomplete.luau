@@ -988,11 +988,38 @@ return {
 			local maxVisible = 10
 			local acHeight = math.min(#editor.autocomplete.items, maxVisible) * acItemHeight
 
-			local targetX = cx
-			local targetY = cy - acHeight - 5
-			if targetY < y then
-				targetY = cy + lineHeight + 5
+			local viewportW, viewportH
+			if type(raylib.GetRenderWidth) == "function" and type(raylib.GetRenderHeight) == "function" then
+				viewportW = raylib.GetRenderWidth()
+				viewportH = raylib.GetRenderHeight()
+			elseif type(raylib.GetScreenWidth) == "function" and type(raylib.GetScreenHeight) == "function" then
+				viewportW = raylib.GetScreenWidth()
+				viewportH = raylib.GetScreenHeight()
+			else
+				viewportW = x + acWidth + 8
+				viewportH = y + acHeight + 8
 			end
+
+			local pad = 4
+			local minX = pad
+			local maxX = math.max(minX, viewportW - acWidth - pad)
+			local minY = pad
+			local maxY = math.max(minY, viewportH - acHeight - pad)
+
+			local belowY = cy + lineHeight + 5
+			local aboveY = cy - acHeight - 5
+			local spaceAbove = cy - minY
+			local spaceBelow = (viewportH - pad) - (cy + lineHeight)
+
+			local targetY
+			if spaceAbove >= acHeight or spaceAbove >= spaceBelow then
+				targetY = aboveY
+			else
+				targetY = belowY
+			end
+
+			local targetX = math.clamp(cx, minX, maxX)
+			targetY = math.clamp(targetY, minY, maxY)
 
 			editor.autocomplete.targetX = targetX
 			editor.autocomplete.targetY = targetY
