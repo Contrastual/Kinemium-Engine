@@ -16,9 +16,12 @@ function mtsh:AddFilters()
 	for i, file in pairs(files) do
 		local path = zembed.IsEmbedded() and file or looping .. "/" .. file.name
 		local basename = fs.path.stem(path)
-		local newname = string.gsub(file.name, ".luau", "")
-		local required = require(zembed.IsEmbedded() and file or "./materialShaders/stepped/" .. newname)
-		collected[basename] = required -- should be a table
+		local newname = string.gsub(basename, ".luau", "")
+		local require_path = zembed.IsEmbedded() and file or "./stepped/" .. newname
+		require_path = string.gsub(require_path, ".luau", "")
+		newname = string.gsub(newname, "_", "")
+		local required = require(require_path)
+		collected[newname] = required
 	end
 
 	return collected

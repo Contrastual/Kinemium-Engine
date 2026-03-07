@@ -10,6 +10,14 @@ function lib.IsEmbedded()
 	end
 end
 
+function lib.Path(path)
+	if lib.IsEmbedded() then
+		return "." .. path -- assuming "./"
+	else
+		return path
+	end
+end
+
 function lib.GetEmbeddedScripts()
 	return fs.embeddedScripts()
 end

@@ -203,7 +203,7 @@ renderer:UseRlCamera(Kinemium_camera._raylibcam)
 local function loop(base, callback)
 	base = base or "src/sandboxed"
 	filesystem.entryloop(base, function(entry)
-		local path = base .. "/" .. entry.name
+		local path = entry.path or base .. "/" .. entry.name
 
 		if entry.kind == "directory" then
 			loop(path, callback)
@@ -231,7 +231,17 @@ local function loadInternals()
 			return
 		end
 
-		local code = zune.fs.readFile(path)
+		local readPath = path
+		if zembed.IsEmbedded() and entry.path then
+			readPath = "../" .. entry.path
+		end
+
+		local code = zune.fs.readFile(readPath)
+
+		if not code then
+			warn("Failed to read file: " .. tostring(readPath))
+			return
+		end
 
 		if string.find(path, ".luau") or string.find(path, ".lua") then
 			local threadid, success, result = kilang:execute(code, {
@@ -251,7 +261,7 @@ local function loadInternals()
 		local luaCleaned = string.gsub(luauCleaned, ".lua", "")
 
 		local object = Instance.new("LocalScript")
-		object.Source = filesystem.read(path)
+		object.Source = code
 		object.Name = luaCleaned
 		object.Parent = Folder
 	end)
@@ -268,11 +278,18 @@ function Kinemium:playtest()
 			return
 		end
 
-		local code = filesystem.read(path)
+		local readPath = path
+		if zembed.IsEmbedded() and entry.path then
+			readPath = entry.path
+		end
+
+		local code = filesystem.read(readPath)
 		local superset = "kilang"
 
 		if string.find(entry.name, ".cpp") then
 			superset = "cpp"
+		elseif string.find(entry.name, ".ts") then
+			superset = "typescript"
 		end
 
 		kilang:execute(code, {

@@ -4,6 +4,7 @@ local signal = require("@Kinemium.signal")
 local KineFileService = Instance.new("KineFileService")
 KineFileService.ExplorerHidden = true
 
+local zembed = require("@zembed")
 local fs = zune.fs
 local process = zune.process
 local os = zune.platform.os
@@ -28,19 +29,19 @@ local sArgs = {
 
 	"src/modules/**/*.lua*",
 	"src/renderer/**/*.lua*",
-	"src/sandboxed/**/*.lua*",
+	"src/sandboxed/**",
 	"src/runtime/**/*.lua*",
 	"src/external/**/*.lua*",
 	"src/objects/**",
 	"src/libs/**",
 	"src/**",
-	"src/template/**",
 	"src/external/signal.lua",
 }
 
 local function build(placeFile)
 	local args = {
 		"bundle",
+		"--compression=zstd",
 		"-f",
 		"./**/.luaurc",
 		"src/assets/**",
@@ -50,6 +51,7 @@ local function build(placeFile)
 		"src/assets/meshes/**",
 		"src/assets/fonts/**",
 		"src/assets/sky/**",
+		"src/projects.toml",
 		"src/assets/sounds/**",
 		"src/assets/videos/**",
 	}
@@ -102,6 +104,9 @@ end
 KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	KineFileService:SetProperties({
 		BuildRuntime = function()
+			if zembed.IsEmbedded() then
+				return
+			end
 			local SerializationService = datamodel:GetService("SerializationService")
 			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
 			if serialized then
@@ -123,6 +128,9 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end
 		end,
 		Save = function(pathName)
+			if zembed.IsEmbedded() then
+				return
+			end
 			local SerializationService = datamodel:GetService("SerializationService")
 			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
 			if serialized then

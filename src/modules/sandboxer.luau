@@ -43,26 +43,6 @@ function sandboxer.run(code, chunk, env)
 	return thread, success, result
 end
 
-function sandboxer.rblxrequire(path: string, callbackScript)
-	local file = fs.readFile(path)
-	local result
-	if file then
-		local code = gsub(file)
-		if code then
-			-- require implementation already added in enviroment, skip
-			local object = callbackScript(code, path)
-
-			local enviroment = table.clone(sandboxer.enviroment)
-			enviroment.script = object
-			result = sandboxer.run(code, path, enviroment)
-		end
-	end
-	if result then
-		return result
-	end
-	return
-end
-
 -- Threads API
 function sandboxer.thread.new(path, entry, env)
 	local code = filesystem.read(path)

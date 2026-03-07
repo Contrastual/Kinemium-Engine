@@ -8,6 +8,7 @@ local ode = require("@ode")
 local CFrame = require("@CFrame")
 local raylib = require("@raylib")
 local Vector3 = require("@Vector3")
+local zembed = require("@zembed")
 local Enum = require("@EnumMap")
 local lib = ode.lib
 
@@ -133,8 +134,9 @@ OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		until game.Workspace
 		local workspace = game.Workspace
 
-		print("Ode init")
+		log("Ode init")
 		lib.dInitODE()
+		log("After ode")
 
 		local worldId = lib.dWorldCreate()
 		local space = lib.dHashSpaceCreate(nil)

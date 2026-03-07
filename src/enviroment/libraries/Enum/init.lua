@@ -6,10 +6,6 @@ function EnumItem:IsA(value)
 	return self.EnumType == value
 end
 
-function EnumItem:__tostring()
-	return string.format("Enum.%s.%s", self.EnumType.Name, self.Name)
-end
-
 function EnumItem:__eq(other)
 	if getmetatable(other) == EnumItem then
 		return self.EnumType == other.EnumType and self.Value == other.Value

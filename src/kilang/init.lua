@@ -16,7 +16,15 @@ function kilang:init(cam)
 end
 
 function kilang:execute(code, opts)
-	code, syntax = preprocessor.runLang(code, opts.superset or "kilang")
+	opts = opts or {}
+	local superset = opts.superset or "kilang"
+
+	local transpileOk, transpiledCode = pcall(preprocessor.runLang, code, superset)
+	if not transpileOk then
+		return nil, false, transpiledCode
+	end
+
+	code = transpiledCode
 
 	local SecurityCapabilities = opts.SecurityCapabilities
 	local id = opts.StackId

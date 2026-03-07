@@ -7,7 +7,7 @@ local rlstructs = raylib.structs
 local Lighting = Instance.new("Lighting")
 local Color3 = require("@Color3")
 local PointLights = {}
-local clouds = require("./clouds")
+local clouds = require("./_clouds")
 local r3d = require("@r3d")
 local rlib = r3d.lib
 
@@ -257,7 +257,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
 	})
 
-	if zune.platform.os == "linux" then 
+	if zune.platform.os == "linux" then
 		loadSky("./src/assets/sky/test/images/sky.png")
 	else
 		local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)

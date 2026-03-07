@@ -1,5 +1,6 @@
 local platform = zune.platform
 local ffi = zune.ffi
+local zembed = require("@zembed")
 
 local void = ffi.types.void
 local int = ffi.types.i32
@@ -24,6 +25,9 @@ local function fn(returns: any, args: { any })
 end
 
 local libLocation = "./src/external/raylib/native/bin/raylib-gizmo." .. ffi.suffix
+if zembed.IsEmbedded() then
+	libLocation = "./raylib-gizmo." .. ffi.suffix
+end
 
 type Fns = {
 	GizmoIdentity: () -> any,

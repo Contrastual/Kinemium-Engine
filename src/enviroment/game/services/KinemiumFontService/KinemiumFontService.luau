@@ -28,6 +28,11 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
 	local code_font = "./src/assets/fonts/JetBrainsMono-Light.ttf"
 
+	if zembed.IsEmbedded() then
+		default_font = "." .. default_font
+		code_font = "." .. code_font
+	end
+
 	local font = renderer.Font.new("DefaultEngineFont", default_font, 32)
 	local loaded_cf = renderer.Font.new("DefaultCodeEngineFont", code_font, 32)
 
@@ -61,8 +66,8 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 			local cache = {}
 
 			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
-				local path = zembed.IsEmbedded() and font or engine_fonts .. "/" .. font.name
-				local transformed = transformFontName(zembed.IsEmbedded() and font or font.name)
+				local path = zembed.IsEmbedded() and "../" .. font or engine_fonts .. "/" .. font.name
+				local transformed = transformFontName(zembed.IsEmbedded() and zune.fs.path.basename(path) or font.name)
 				if cache[transformed] then
 					continue
 				end

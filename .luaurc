@@ -8,6 +8,7 @@
         "BrickColorMap": "./src/enviroment/classlibs/brickColorMap",
         "Ray": "./src/enviroment/datatypes/Ray",
         "UDim": "./src/enviroment/datatypes/UDim",
+        "dllLib": "./src/libs/dllLib",
         "ColorSequenceKeypoint": "./src/enviroment/datatypes/ColorSequenceKeypoint",
         "ColorSequence": "./src/enviroment/datatypes/ColorSequence",
         "CustomPhysicalProperties": "./src/enviroment/datatypes/CustomPhysicalProperties",

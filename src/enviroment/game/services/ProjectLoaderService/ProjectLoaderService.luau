@@ -9,6 +9,13 @@ local serde = zune.serde
 local toml = zune.serde.toml
 local fs = zune.fs
 local projectsFile = "./src/projects.toml"
+local zembed = require("@zembed")
+
+if zembed.IsEmbedded() then
+	local tomlFile = zembed.GetFilesThatHas("projects.toml")
+	print(tomlFile)
+	projectsFile = "../" .. tomlFile[1]
+end
 
 local settings = {
 	["luau-lsp.types.definitionFiles"] = { "kinemium.d.luau" },

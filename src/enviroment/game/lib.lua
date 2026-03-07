@@ -34,12 +34,18 @@ function DataModel.new(RENDERER, ...)
 		local path
 		if zembed.IsEmbedded() then
 			name = fs.path.basename(service):gsub(".luau", "")
-			name = string.gsub(name, ".lua", "")
+			name = string.gsub(name, ".luau", "")
 			path = `./services/{name}/{name}`
+
+			if string.find(path, "_") then
+				print("Skipping " .. path)
+				continue
+			end
 		else
-			name = service.name:gsub(".lua", "")
+			name = service.name:gsub(".luau", "")
 			path = `./services/{name}/{name}`
 		end
+
 		local success, returnedData = pcall(require, path)
 
 		if success then

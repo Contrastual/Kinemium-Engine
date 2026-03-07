@@ -25,17 +25,26 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		table.clear(textures)
 
 		for _, file in pairs(type(general) == "string" and fs.entries(general) or general) do
-			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+			if zembed.IsEmbedded() then
+				file = "../" .. string.gsub(file, [[\]], "/")
+			end
+			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
 				or general .. "/" .. file.name
 		end
 
 		for _, file in pairs(type(objects) == "string" and fs.entries(objects) or objects) do
-			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+			if zembed.IsEmbedded() then
+				file = "../" .. string.gsub(file, [[\]], "/")
+			end
+			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
 				or objects .. "/" .. file.name
 		end
 
 		for _, file in pairs(type(kinemiumIcons) == "string" and fs.entries(kinemiumIcons) or kinemiumIcons) do
-			registry[zembed.IsEmbedded() and file or file.name] = zembed.IsEmbedded() and file
+			if zembed.IsEmbedded() then
+				file = "../" .. string.gsub(file, [[\]], "/")
+			end
+			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
 				or kinemiumIcons .. "/" .. file.name
 		end
 	end
@@ -45,6 +54,17 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		ToTexture = function(path: string)
 			if textures[path] then
 				return textures[path]
+			end
+
+			if zembed.IsEmbedded() then
+				if not path:match("^%a:") then -- ignore C:\ style paths
+					if path:match("^%.%./") then
+					elseif path:match("^%./") then
+						path = "../" .. path:sub(3)
+					else
+						path = "../" .. path
+					end
+				end
 			end
 
 			local texture = lib.LoadTexture(path)

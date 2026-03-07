@@ -39,7 +39,7 @@ function lang.process(code)
 		{
 			name = "flags",
 			gsub = function(code)
-				code = code:gsub("#flag: %s", function(flag)
+				code = code:gsub("#flag:%s*([%w_%-]+)%s*\n?", function(flag)
 					ProcessedDataThread.flags[flag] = true
 					return ""
 				end)
@@ -55,9 +55,9 @@ function lang.process(code)
 				code = code:gsub("([%w_]+)%s*%*=%s*(.-);", "%1 = %1 * %2")
 				code = code:gsub("([%w_]+)%s*/=%s*(.-);", "%1 = %1 / %2")
 				code = code:gsub("!=", "~=")
-				code = code:gsub("&&", "and")
-				code = code:gsub("||", "or")
-				code = code:gsub("!%s*", "not ")
+				code = code:gsub("&&", " and ")
+				code = code:gsub("||", " or ")
+				code = code:gsub("!%s*([%w_%(])", "not %1")
 
 				return code
 			end,

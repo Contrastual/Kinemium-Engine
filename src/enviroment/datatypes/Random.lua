@@ -1,5 +1,5 @@
 --!strict
-
+local Vector3 = require("@Vector3")
 local Random = {}
 Random.__index = Random
 
@@ -12,7 +12,7 @@ function Random.new(seed: number?)
 end
 
 function Random:_next()
-	return self._rng:next_u32()
+	return self._rng:nextNumber()
 end
 
 function Random:NextInteger(min: number, max: number)

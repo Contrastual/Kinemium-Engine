@@ -20,12 +20,13 @@ return function(lib)
 		for i, v in pairs(entries) do
 			if zembed.IsEmbedded() then
 				local basename = fs.path.basename(v)
-				result[basename:gsub(".png", "")] = v
+				result[basename:gsub(".png", "")] = "../" .. v
 			else
 				local objectPath = "src/assets/materials/" .. v.name
 				result[v.name:gsub(".png", "")] = objectPath
 			end
 		end
+
 		return result
 	end
 

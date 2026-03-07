@@ -1,6 +1,8 @@
 --!strict
 --!optimize 2
 
+local Vector3 = require("@Vector3")
+
 export type AABB = {
 	id: number,
 	position: Vector3,
