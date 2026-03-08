@@ -40,9 +40,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		PhysicsEngine = Enum.PhysicsEngine.Default, -- jolt
 
 		-- rendering
-		MAX_VIEW_DISTANCE = 150,
+		MAX_VIEW_DISTANCE = 4000,
 		UseGpuInstancing = true,
-		MinInstancesPerBatch = 1,
+		MinInstancesPerBatch = 2,
 		EnableDefaultPlayerMenu = true,
 
 		-- debugging

@@ -1,6 +1,3 @@
-local UDim = require("@UDim")
-local UDim2 = require("@UDim2")
-local Vector2 = require("@Vector2")
 local ColorSequence = require("@ColorSequence")
 local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
 local Color3 = require("@Color3")

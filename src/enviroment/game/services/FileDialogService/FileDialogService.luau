@@ -9,8 +9,6 @@ local ffi = zune.ffi
 FileDialogService.InitRenderer = function(renderer, renderer_signal)
 	local nfd = require("@nfd")
 	local lib = nfd.lib
-	local structs = nfd.structs
-	local const = nfd.const
 
 	lib.NFD_Init()
 

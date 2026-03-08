@@ -531,7 +531,7 @@ function CFrame.__sub(a, b)
 	elseif type(b) == "table" and b.__type == "CFrame" then
 		return CFrame.new(a.Position - b.Position, a.Rotation)
 	end
-	error("Cannot subtract " .. type(b) .. " from CFrame")
+	error("Cannot subtract " .. b.__type .. " from CFrame")
 end
 
 function CFrame.__eq(a, b)

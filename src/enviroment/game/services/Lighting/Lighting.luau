@@ -3,60 +3,13 @@ local Vector3 = require("@Vector3")
 local raylib = require("@raylib")
 local const = raylib.const
 local lib = raylib.lib
-local rlstructs = raylib.structs
 local Lighting = Instance.new("Lighting")
 local Color3 = require("@Color3")
-local PointLights = {}
-local clouds = require("./_clouds")
 local r3d = require("@r3d")
 local rlib = r3d.lib
 
 local DAY_TOP = Color3.new(0.090196, 0.6, 0.839216)
 local NIGHT_TOP = Color3.fromRGB(10, 15, 35)
-
-function Lighting:AddPointLight(id, position, color, intensity, range)
-	for _, obj in pairs(PointLights) do
-		if obj.Id == id then
-			obj.Position = position
-			obj.Color = color
-			obj.Intensity = intensity
-			obj.Range = range
-
-			return obj
-		end
-	end
-	local light = {
-		Id = id,
-		Position = position,
-		Color = color,
-		Intensity = intensity,
-		Range = range,
-		Enabled = true,
-	}
-	table.insert(PointLights, light)
-	return light
-end
-
-function Lighting:ClearLights()
-	table.clear(PointLights)
-end
-
-function Lighting:RemovePointLight(light)
-	for i, v in ipairs(PointLights) do
-		if v == light then
-			table.remove(PointLights, i)
-			return
-		end
-	end
-end
-
-function Lighting:GetPointLights()
-	return PointLights
-end
-
-function Lighting:ClearPointLights()
-	table.clear(PointLights)
-end
 
 local Stars = {}
 
@@ -74,91 +27,8 @@ for i = 1, STAR_COUNT do
 	})
 end
 
-local function lerp(a, b, t)
-	return a + (b - a) * t
-end
-
-local function lerpColor(c1, c2, t)
-	return Color3.fromRGB(lerp(c1.R, c2.R, t), lerp(c1.G, c2.G, t), lerp(c1.B, c2.B, t))
-end
-
 local function getDayAlpha(clockTime)
 	return (clockTime % 24) / 24
-end
-
-local function DrawNightSky(camera, night)
-	if night <= 0.001 then
-		return
-	end
-
-	local cameraPos = zune.mem.toVector3(camera, 0)
-	local size = 300
-
-	lib.rlDisableDepthMask()
-	lib.rlDisableBackfaceCulling()
-	lib.rlPushMatrix()
-	lib.rlTranslatef(cameraPos.X, cameraPos.Y, cameraPos.Z)
-	lib.rlBegin(7)
-
-	-- Define cube faces as tables of 4 vertices
-	local faces = {
-		-- {v0, v1, v2, v3} each vertex is a Vector3
-		{
-			Vector3.new(-size, size, -size),
-			Vector3.new(size, size, -size),
-			Vector3.new(size, size, size),
-			Vector3.new(-size, size, size),
-		}, -- top
-		{
-			Vector3.new(-size, -size, -size),
-			Vector3.new(size, -size, -size),
-			Vector3.new(size, -size, size),
-			Vector3.new(-size, -size, size),
-		}, -- bottom
-		{
-			Vector3.new(size, -size, -size),
-			Vector3.new(size, size, -size),
-			Vector3.new(size, size, size),
-			Vector3.new(size, -size, size),
-		}, -- +X
-		{
-			Vector3.new(-size, -size, -size),
-			Vector3.new(-size, size, -size),
-			Vector3.new(-size, size, size),
-			Vector3.new(-size, -size, size),
-		}, -- -X
-		{
-			Vector3.new(-size, -size, size),
-			Vector3.new(-size, size, size),
-			Vector3.new(size, size, size),
-			Vector3.new(size, -size, size),
-		}, -- +Z
-		{
-			Vector3.new(-size, -size, -size),
-			Vector3.new(-size, size, -size),
-			Vector3.new(size, size, -size),
-			Vector3.new(size, -size, -size),
-		}, -- -Z
-	}
-
-	-- Night-to-horizon gradient
-	local topColor = Color3.fromRGB(20, 25, 45)
-	local bottomColor = Color3.fromRGB(5, 5, 10)
-
-	for _, face in ipairs(faces) do
-		for i, vert in ipairs(face) do
-			-- Vertices with Y > 0 are "top", Y < 0 are "bottom"
-			local t = (vert.Y + size) / (2 * size) -- 0 at bottom, 1 at top
-			local color = lerpColor(bottomColor, topColor, t * night)
-			lib.rlColor4ub(color.R, color.G, color.B, 255)
-			lib.rlVertex3f(vert.X, vert.Y, vert.Z)
-		end
-	end
-
-	lib.rlEnd()
-	lib.rlPopMatrix()
-	lib.rlEnableBackfaceCulling()
-	lib.rlEnableDepthMask()
 end
 
 function Lighting:GetSunDirection()
@@ -286,10 +156,10 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 	local function applyEffectToEnv(effect)
 		local map = effectToEnvMap[effect.ClassName]
-		if map and effect._r3deffect then
+		if map and effect:GetMetadata("EffectObject") then
 			local envType = r3d.structs.R3D_Environment
 			local environment: FFIPointer = rlib.R3D_GetEnvironment()
-			environment:write(envType:offset(map.offset), effect._r3deffect, 0, map.struct:size())
+			environment:write(envType:offset(map.offset), effect:GetMetadata("EffectObject"), 0, map.struct:size())
 		end
 	end
 

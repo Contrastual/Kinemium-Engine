@@ -10,12 +10,9 @@ local KiRend = {}
 local skybox = require("./renderer/skybox")
 local texture = require("./renderer/texture")
 local signal = require("@Kinemium.signal")
-local Vector2 = require("@Vector2")
 local shader = require("./renderer/shader")
 local freecam = require("./renderer/freecam")
 local meshlib = require("./renderer/mesh")
-local ki3d = require("@ki3d")
-local ffi = zune.ffi
 local utils = require("@bufferutils")
 local r3d = require("@r3d")
 local rlib = r3d.lib
@@ -42,7 +39,7 @@ function KiRend.new(config: KiRendConf)
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 
 	local useVsync = if config.vsync == nil then true else config.vsync
-	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE, const.ConfigFlags.FLAG_MSAA_4X_HINT)
+	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 	if useVsync then
 		windowFlags = bit32.bor(windowFlags, const.ConfigFlags.FLAG_VSYNC_HINT)
 	end
@@ -55,11 +52,11 @@ function KiRend.new(config: KiRendConf)
 		lib.SetTargetFPS(0)
 	end
 	lib.SetExitKey(0)
-	ki3d.init()
 
 	rlib.R3D_Init(config.width, config.height)
 	rlib.R3D_SetUpscaleMode(2)
 	rlib.R3D_SetAntiAliasingMode(1)
+
 	local lastRenderWidth, lastRenderHeight = config.width, config.height
 
 	local function getSortedPool(pool)
@@ -94,6 +91,7 @@ function KiRend.new(config: KiRendConf)
 	local renderer_storage = {
 		fonts = {},
 	}
+	local renderer_watching_keys = {}
 	local renderer_draw_calls = {}
 	local renderer_instanced_draw_calls = {}
 	local renderer_instance_buffers_to_unload = {}
@@ -124,11 +122,10 @@ function KiRend.new(config: KiRendConf)
 		Raylib = raylib,
 		Texture = texture(raylib.lib),
 		Enable3D = true,
-		Ki3d = ki3d,
 		Blur = newBlurInstance,
 
 		DrawFps = true,
-		ShowPerfOverlay = false,
+		ShowPerfOverlay = true,
 		PerfStats = perf_stats,
 
 		SetDimension = function(self, dimension: "2D" | "3D")
@@ -347,6 +344,14 @@ function KiRend.new(config: KiRendConf)
 		return
 	end
 
+	function rendererObject:WatchKey(RaylibKeyObject)
+		renderer_watching_keys[RaylibKeyObject] = true
+	end
+
+	function rendererObject:StopWatchingKey(RaylibKeyObject)
+		renderer_watching_keys[RaylibKeyObject] = nil
+	end
+
 	function rendererObject:GetInverseProjectionMatrix()
 		local proj = self:GetProjectionMatrix()
 		if not proj then
@@ -446,10 +451,6 @@ function KiRend.new(config: KiRendConf)
 
 	function rendererObject:SetGlobalShader(shader)
 		globalShaderOverride = shader
-	end
-
-	function rendererObject:MakeShader(name, ki3dConfig)
-		return ki3d.filters.new(name, ki3dConfig)
 	end
 
 	function rendererObject:SetIcon(Texture)
@@ -569,6 +570,7 @@ function KiRend.new(config: KiRendConf)
 
 		local sortedGuiPool = getSortedPool(renderer_pool.gui)
 		perf_stats.gui_roots = #sortedGuiPool
+
 		for _, item in ipairs(sortedGuiPool) do
 			local gui = item.entry
 			gui.render(lib, gui.object and gui.object() or nil, time, structs, rendererObject.RuntimeLibrary)
@@ -638,7 +640,6 @@ function KiRend.new(config: KiRendConf)
 			ENGINE_PROFILER:Begin("Update")
 		end
 
-		--lib.SetWindowState(const.ConfigFlags.FLAG_BORDERLESS_WINDOWED_MODE)
 		local delta = lib.GetFrameTime()
 
 		for _, v in pairs(renderer_hooks.Renderstep) do
@@ -662,7 +663,7 @@ function KiRend.new(config: KiRendConf)
 			end
 		end
 
-		for name, keycode in pairs(const.KeyboardKey) do
+		for keycode, _ in pairs(renderer_watching_keys) do
 			if lib.IsKeyPressed(keycode) == 1 then
 				renderer_eventbus:Fire("Pressed", keycode)
 			end
@@ -671,9 +672,6 @@ function KiRend.new(config: KiRendConf)
 			end
 			if lib.IsKeyReleased(keycode) == 1 then
 				renderer_eventbus:Fire("IsKeyReleased", keycode)
-			end
-			if lib.IsKeyUp(keycode) == 1 then
-				renderer_eventbus:Fire("IsKeyUp", keycode)
 			end
 		end
 

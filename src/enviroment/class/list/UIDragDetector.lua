@@ -1,7 +1,4 @@
 local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
-local Enum = require("@EnumMap")
 local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
 

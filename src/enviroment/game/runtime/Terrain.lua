@@ -545,12 +545,11 @@ local TRI_TABLE = {
 Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 	local workspace = datamodel:GetService("Workspace")
 	local materials = workspace.materials
-	local shader = renderer.defaultLitShader
 
 	Terrain:SetProperties({
 		Decoration = true,
 		GrassLength = 1,
-
+		BaseClass = "Singleton",
 		MaterialColors = "",
 		WaterColor = Color3.new(0, 0, 0),
 		WaterReflectance = 0,

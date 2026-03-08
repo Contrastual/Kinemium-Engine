@@ -21,19 +21,7 @@ local EngineSignal = game.EngineSignal
 
 local StudioThemeService = game:GetService("StudioThemeService")
 
-local backgroundColor =
-	StudioThemeService.SelectedTheme.BackgroundColor:ToRaylib(StudioThemeService.SelectedTheme.BackgroundTransparency)
 local TextColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(StudioThemeService.SelectedTheme.TextTransparency)
-local GuiHandlesColor =
-	StudioThemeService.SelectedTheme.GuiHandlesColor:ToRaylib(StudioThemeService.SelectedTheme.GuiHandlesTransparency)
-local SecondaryBackgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor:ToRaylib(
-	StudioThemeService.SelectedTheme.SecondaryBackgroundColorTransparency
-)
-local SecondaryTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor:ToRaylib(
-	StudioThemeService.SelectedTheme.SecondaryTextTransparency
-)
-local ImageColor =
-	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
 
 if game.Context ~= Enum.GameContext.Editor then
 	return
@@ -554,6 +542,9 @@ window.stepped = function(windowData)
 				if propValue._history then
 					continue
 				end
+			end
+			if propName == "UniqueId" then
+				continue
 			end
 			if string.find(propName, "_") then
 				continue

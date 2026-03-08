@@ -22,7 +22,7 @@ return {
 			focusScale = instance.FocusScale,
 			maxBlurSize = instance.MaxBlurSize,
 		})
-		instance._r3deffect = envdof
+		instance:SetMetadata("EffectObject", envdof)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -34,7 +34,7 @@ return {
 				focusScale = instance.FocusScale,
 				maxBlurSize = instance.MaxBlurSize,
 			})
-			instance._r3deffect = envdof
+			instance:SetMetadata("EffectObject", envdof)
 		end)
 
 		return instance

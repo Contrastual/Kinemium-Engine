@@ -28,7 +28,7 @@ return {
 			softThreshold = instance.SoftThreshold,
 			filterRadius = instance.FilterRadius,
 		})
-		instance._r3deffect = envBloom
+		instance:SetMetadata("EffectObject", envBloom)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -42,7 +42,7 @@ return {
 				softThreshold = instance.SoftThreshold,
 				filterRadius = instance.FilterRadius,
 			})
-			instance._r3deffect = envBloom
+			instance:SetMetadata("EffectObject", envBloom)
 		end)
 
 		return instance

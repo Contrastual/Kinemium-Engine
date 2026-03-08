@@ -19,14 +19,8 @@ end
 local MainGui = Instance.new("ScreenGui")
 MainGui.Parent = game.Players.LocalPlayer.PlayerGui
 
-local KinemiumRaylib = game:GetService("KinemiumRaylib")
-local renderer = KinemiumRaylib.renderer
-
 local d, f = 0.64, 2.8
-
-local spring = include(game.CoreGui:WaitForChild("spring"))
 local NetworkService = game:GetService("NetworkService")
-local KinemiumPhysicsService = game:GetService("PhysicsService")
 
 local mainFps = 0
 

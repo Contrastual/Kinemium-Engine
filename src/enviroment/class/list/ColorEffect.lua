@@ -20,7 +20,7 @@ return {
 			contrast = instance.Contrast,
 			saturation = instance.Saturation,
 		})
-		instance._r3deffect = envcolor
+		instance:SetMetadata("EffectObject", envcolor)
 
 		instance.Changed:Connect(function(property, value)
 			envcolor = r3d.structs.R3D_EnvColor:new({
@@ -28,7 +28,7 @@ return {
 				contrast = instance.Contrast,
 				saturation = instance.Saturation,
 			})
-			instance._r3deffect = envcolor
+			instance:SetMetadata("EffectObject", envcolor)
 		end)
 
 		return instance

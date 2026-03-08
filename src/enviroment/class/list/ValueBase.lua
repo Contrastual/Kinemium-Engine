@@ -1,6 +1,3 @@
-local UDim = require("@UDim")
-local Color3 = require("@Color3")
-
 local propTable = {
 	Value = nil,
 }

@@ -22,7 +22,7 @@ return {
 			exposure = instance.Exposure,
 			white = instance.White,
 		})
-		instance._r3deffect = envtonemap
+		instance:SetMetadata("EffectObject", envtonemap)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -33,7 +33,7 @@ return {
 				exposure = instance.Exposure,
 				white = instance.White,
 			})
-			instance._r3deffect = envtonemap
+			instance:SetMetadata("EffectObject", envtonemap)
 		end)
 
 		return instance

@@ -31,7 +31,7 @@ return {
 			density = instance.Density,
 			skyAffect = instance.SkyAffect,
 		})
-		instance._r3deffect = envfog
+		instance:SetMetadata("EffectObject", envfog)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -47,7 +47,7 @@ return {
 				density = instance.Density,
 				skyAffect = instance.SkyAffect,
 			})
-			instance._r3deffect = envfog
+			instance:SetMetadata("EffectObject", envfog)
 		end)
 
 		return instance

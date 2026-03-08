@@ -7,8 +7,6 @@ local InputBegan = signal.new()
 local InputEnded = signal.new()
 local MouseMoved = signal.new()
 local MouseWheel = signal.new()
-local GamepadConnected = signal.new()
-local GamepadDisconnected = signal.new()
 
 local active_keys = {}
 
@@ -18,7 +16,6 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 		return
 	end
 	local Enum = require("@EnumMap")
-
 	local lib = renderer.Raylib.lib
 	local const = renderer.Raylib.const
 
@@ -32,6 +29,30 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 		TouchEnabled = false,
 		GamepadEnabled = false,
 	})
+
+	local function findSuitable(value: number)
+		for _, keycode in pairs(Enum.KeyCode:GetEnumItems()) do
+			if keycode.Value == value then
+				return keycode
+			end
+		end
+	end
+
+	function UserInputService:EnableKey(key)
+		local raylibKeyFound = nil
+		for _, keyValue in pairs(const.KeyboardKey) do
+			if keyValue == key.Value then
+				renderer:WatchKey(keyValue)
+				raylibKeyFound = keyValue
+				break
+			end
+		end
+		return {
+			Disable = function()
+				renderer:StopWatchingKey(raylibKeyFound)
+			end,
+		}
+	end
 
 	function UserInputService:GetKeysDown()
 		local keysDown = {}
@@ -61,14 +82,6 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 
 	function UserInputService:IsKeyReleased(key)
 		return lib.IsKeyReleased(const.KeyboardKey[key]) == 1
-	end
-
-	local function findSuitable(value: number)
-		for _, keycode in pairs(Enum.KeyCode:GetEnumItems()) do
-			if keycode.Value == value then
-				return keycode
-			end
-		end
 	end
 
 	renderer_signal:Connect(function(route, data)

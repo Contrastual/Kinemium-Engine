@@ -25,7 +25,7 @@ return {
 			bias = instance.Bias,
 			enabled = instance.Enabled and 1 or 0,
 		})
-		instance._r3deffect = envssao
+		instance:SetMetadata("EffectObject", envssao)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -39,7 +39,7 @@ return {
 				bias = instance.Bias,
 				enabled = instance.Enabled and 1 or 0,
 			})
-			instance._r3deffect = envssao
+			instance:SetMetadata("EffectObject", envssao)
 		end)
 
 		return instance

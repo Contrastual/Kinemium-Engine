@@ -1,6 +1,4 @@
 local Vector2 = require("@Vector2")
-local UDim2 = require("@UDim2")
-local signal = require("@Kinemium.signal")
 local Enum = require("@EnumMap")
 local UDim = require("@UDim")
 

@@ -1,5 +1,4 @@
 local UDim2 = require("@UDim2")
-local Vector2 = require("@Vector2")
 local Color3 = require("@Color3")
 local Aereon = require("@Aereon")
 local gui = Aereon.gui

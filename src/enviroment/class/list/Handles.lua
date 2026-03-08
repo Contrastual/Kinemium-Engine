@@ -1,15 +1,7 @@
-local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
 local signal = require("@kinemium.signal")
 local Enum = require("@EnumMap")
-local raylib = require("@raylib")
-local lib, const, structs = raylib.lib, raylib.const, raylib.structs
-local raycastlib = require("@raycastlib")
 local ffi = zune.ffi
-local arrows = {}
-
-local hoveredArrow = nil
-local dragData = {} -- [normalId] = { startMouseWorld = Vector3, startPosition = Vector3, direction = Vector3 }
 local CFrame = require("@CFrame")
 
 local propTable = {
@@ -30,9 +22,6 @@ local propTable = {
 
 	_gizmoTransform = ffi.alloc(12 + 16 + 12),
 }
-
-local fired = {}
-local activeDrag = nil
 
 return {
 	class = "Handles",

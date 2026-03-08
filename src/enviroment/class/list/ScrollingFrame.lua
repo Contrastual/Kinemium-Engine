@@ -126,7 +126,6 @@ return {
 
 			local backgroundRect = arect.new(pos.X, pos.Y, size.X, size.Y)
 
-			-- Compute total content height first
 			local contentHeight = 0
 			for _, child in pairs(object:GetChildren()) do
 				local childOffset = child.Position.Y.Offset
@@ -139,7 +138,6 @@ return {
 			local maxScroll = math.max(0, object.ContentSize - object.AbsoluteSize.Y)
 			local canScroll = maxScroll > 0
 
-			-- Auto-hide scrollbar logic
 			if object.ScrollBarAutoHide then
 				local fadeDelay = 0.5 -- seconds before fading
 

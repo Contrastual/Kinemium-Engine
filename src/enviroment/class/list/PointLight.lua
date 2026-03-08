@@ -31,11 +31,15 @@ return {
 		rlib.R3D_SetLightEnergy(light, instance.Brightness)
 		rlib.R3D_SetLightRange(light, instance.Range)
 		rlib.R3D_SetLightActive(light, false)
-		instance._rlight = light
+		instance:SetMetadata("LightObject", light)
 
 		if instance.CastShadow == true then
 			rlib.R3D_EnableShadow(light)
 		end
+
+		instance.Destroying:Connect(function()
+			rlib.R3D_DestroyLight(light)
+		end)
 
 		instance.Changed:Connect(function()
 			if instance.Enabled == true then

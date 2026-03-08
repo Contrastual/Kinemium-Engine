@@ -141,6 +141,7 @@ group = aereon.create({
 					ishared.GameName = gnInput
 					ishared.FolderPath = projInput
 					ishared.GameIcon = gameiconPath
+					print("New project: " .. ishared.GameName, ishared.FolderPath)
 					ProjectLoaderService.NewProject(ishared.GameName, ishared.FolderPath, gameiconPath)
 					ProjectSyncService:StartSyncing(ishared.FolderPath)
 					ishared.EnableHomescreen = false

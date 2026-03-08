@@ -57,6 +57,10 @@ function instance_mt.__newindex(self, key, value)
 		return
 	end
 
+	if key == "UniqueId" then
+		error("UniqueId is read-only", 2)
+	end
+
 	if key == "Parent" then
 		local oldParent = props.Parent
 		if self.AncestryChanged then

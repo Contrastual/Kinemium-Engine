@@ -29,7 +29,7 @@ return {
 			denoiseSteps = instance.DenoiseSteps,
 			enabled = instance.Enabled and 1 or 0,
 		})
-		instance._r3deffect = envssil
+		instance:SetMetadata("EffectObject", envssil)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -45,7 +45,7 @@ return {
 				denoiseSteps = instance.DenoiseSteps,
 				enabled = instance.Enabled and 1 or 0,
 			})
-			instance._r3deffect = envssil
+			instance:SetMetadata("EffectObject", envssil)
 		end)
 
 		return instance

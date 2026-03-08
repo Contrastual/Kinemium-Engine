@@ -31,7 +31,7 @@ return {
 			denoiseSteps = instance.DenoiseSteps,
 			enabled = instance.Enabled and 1 or 0,
 		})
-		instance._r3deffect = envssgi
+		instance:SetMetadata("EffectObject", envssgi)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -48,7 +48,7 @@ return {
 				denoiseSteps = instance.DenoiseSteps,
 				enabled = instance.Enabled and 1 or 0,
 			})
-			instance._r3deffect = envssgi
+			instance:SetMetadata("EffectObject", envssgi)
 		end)
 
 		return instance

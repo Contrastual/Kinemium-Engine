@@ -27,7 +27,7 @@ return {
 			edgeFade = instance.EdgeFade,
 			enabled = instance.Enabled and 1 or 0,
 		})
-		instance._r3deffect = envssr
+		instance:SetMetadata("EffectObject", envssr)
 
 		instance.Changed:Connect(function(property, value)
 			if property == "_r3deffect" then
@@ -42,7 +42,7 @@ return {
 				edgeFade = instance.EdgeFade,
 				enabled = instance.Enabled and 1 or 0,
 			})
-			instance._r3deffect = envssr
+			instance:SetMetadata("EffectObject", envssr)
 		end)
 
 		return instance

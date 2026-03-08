@@ -16,6 +16,7 @@
         "Color3": "./src/enviroment/datatypes/Color3",
         "syntax_highlighter": "./src/modules/Aereon/ide/syntax",
         "syntax_autocomplete": "./src/modules/Aereon/ide/autocomplete",
+        "glfw": "./src/external/glfw",
         "UDim2": "./src/enviroment/datatypes/UDim2",
         "CFrame": "./src/enviroment/datatypes/CFrame",
         "zembed": "./src/libs/zembed",
