@@ -1,5 +1,7 @@
 local ffi = zune.ffi
 
+local structs = require("./structs")
+
 local funcs = {
 	JPH_JobSystem_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_Init = { returns = ffi.types.u8, args = {} },
@@ -85,7 +87,7 @@ local funcs = {
 			ffi.types.pointer, -- position (RVec3*)
 			ffi.types.pointer, -- rotation (Quat*) - can be null
 			ffi.types.u8, -- motion type
-			ffi.types.u16, -- object layer
+			ffi.types.u32, -- object layer
 		},
 	},
 	JPH_BoxShapeSettings_Create = {
@@ -583,10 +585,10 @@ local funcs = {
 	},
 	JPH_BodyCreationSettings_GetUserData = { returns = ffi.types.u64, args = { ffi.types.pointer } },
 	JPH_BodyCreationSettings_SetUserData = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
-	JPH_BodyCreationSettings_GetObjectLayer = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_BodyCreationSettings_GetObjectLayer = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_BodyCreationSettings_SetObjectLayer = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyCreationSettings_GetCollisionGroup = {
 		returns = ffi.types.void,
@@ -1068,11 +1070,16 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_GearConstraint_GetTotalLambda = { returns = ffi.types.float, args = { ffi.types.pointer } },
-	JPH_BodyInterface_DestroyBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_DestroyBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_CreateAndAddBody = {
-		returns = ffi.types.pointer,
+		returns = ffi.types.u32, -- returns JPH_BodyID
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
 	},
+	JPH_BodyInterface_CreateBody = {
+		returns = ffi.types.pointer, -- returns JPH_Body*
+		args = { ffi.types.pointer, ffi.types.pointer },
+	},
+	-- Body_GetID (Removed duplicate, definition exists at line 1082)
 	JPH_BodyInterface_DestroyBodyWithoutID = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },
@@ -1080,7 +1087,7 @@ local funcs = {
 	JPH_BodyInterface_AssignBodyID = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_BodyInterface_AssignBodyID2 = {
 		returns = ffi.types.u8,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyInterface_CreateAndAddSoftBody = {
 		returns = ffi.types.pointer,
@@ -1088,12 +1095,12 @@ local funcs = {
 	},
 	JPH_BodyInterface_AddBody = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u8 },
 	},
-	JPH_BodyInterface_RemoveBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_RemoveBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_RemoveAndDestroyBody = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_ObjectLayerPairFilterTable_Create = {
 		returns = ffi.types.pointer,
@@ -1152,7 +1159,7 @@ local funcs = {
 		returns = ffi.types.void,
 		args = {
 			ffi.types.pointer, -- bodyInterface
-			ffi.types.pointer, -- bodyId
+			ffi.types.u32, -- bodyId
 			ffi.types.pointer, -- position (JPH_RVec3*)
 			ffi.types.pointer, -- rotation (JPH_Quat*)
 		},
@@ -1164,10 +1171,7 @@ local funcs = {
 	},
 
 	-- Convex Hull shape
-	JPH_ConvexHullShapeSettings_Create = {
-		returns = ffi.types.pointer,
-		args = { ffi.types.pointer, ffi.types.u32, ffi.types.float },
-	},
+	-- ConvexHullShapeSettings_Create was duplicate, removed here (keeping definition at line 25)
 
 	-- Rotated/Translated shape (for offsetting shapes)
 	JPH_RotatedTranslatedShapeSettings_Create = {
@@ -1189,64 +1193,64 @@ local funcs = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	JPH_BodyInterface_IsAdded = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.pointer } },
-	JPH_BodyInterface_GetBodyType = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_IsAdded = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.u32 } },
+	JPH_BodyInterface_GetBodyType = { returns = ffi.types.u32, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetLinearVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetLinearVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetCenterOfMassPosition = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
-	JPH_BodyInterface_GetMotionType = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_GetMotionType = { returns = ffi.types.u32, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetMotionType = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.u32, ffi.types.i32, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u32, ffi.types.u32 },
 	},
-	JPH_BodyInterface_GetRestitution = { returns = ffi.types.float, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_GetRestitution = { returns = ffi.types.float, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetRestitution = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.float },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.float },
 	},
-	JPH_BodyInterface_GetFriction = { returns = ffi.types.float, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_GetFriction = { returns = ffi.types.float, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetFriction = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.float },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.float },
 	},
 	JPH_BodyInterface_SetPosition = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyInterface_GetPosition = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetRotation = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyInterface_GetRotation = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetPositionAndRotation = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyInterface_SetPositionAndRotationWhenChanged = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyInterface_SetPositionRotationAndVelocity = {
 		returns = ffi.types.void,
 		args = {
 			ffi.types.pointer,
-			ffi.types.pointer,
+			ffi.types.u32,
 			ffi.types.pointer,
 			ffi.types.pointer,
 			ffi.types.pointer,
@@ -1255,21 +1259,21 @@ local funcs = {
 	},
 	JPH_BodyInterface_GetCollisionGroup = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetCollisionGroup = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetShape = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u8, ffi.types.i32 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.u8, ffi.types.u32 },
 	},
 	JPH_BodyInterface_NotifyShapeChanged = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.u8, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.u8, ffi.types.u32 },
 	},
-	JPH_BodyInterface_ActivateBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_ActivateBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_ActivateBodies = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
@@ -1278,35 +1282,35 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	JPH_BodyInterface_DeactivateBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_DeactivateBody = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_DeactivateBodies = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u32 },
 	},
-	JPH_BodyInterface_IsActive = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.pointer } },
-	JPH_BodyInterface_ResetSleepTimer = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
-	JPH_BodyInterface_GetObjectLayer = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_IsActive = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.u32 } },
+	JPH_BodyInterface_ResetSleepTimer = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
+	JPH_BodyInterface_GetObjectLayer = { returns = ffi.types.u32, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetObjectLayer = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u32 },
 	},
 	JPH_BodyInterface_GetWorldTransform = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetCenterOfMassTransform = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_MoveKinematic = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.float },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer, ffi.types.float },
 	},
 	JPH_BodyInterface_ApplyBuoyancyImpulse = {
 		returns = ffi.types.u8,
 		args = {
 			ffi.types.pointer,
-			ffi.types.pointer,
+			ffi.types.u32,
 			ffi.types.pointer,
 			ffi.types.pointer,
 			ffi.types.float,
@@ -1319,59 +1323,59 @@ local funcs = {
 	},
 	JPH_BodyInterface_SetLinearAndAngularVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetLinearAndAngularVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddLinearVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddLinearAndAngularVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetAngularVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetAngularVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_GetPointVelocity = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddForce = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddForce2 = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddTorque = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddForceAndTorque = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddImpulse = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddImpulse2 = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.pointer },
 	},
 	JPH_BodyInterface_AddAngularImpulse = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyInterface_SetMotionQuality = {
 		returns = ffi.types.void,
@@ -1400,26 +1404,26 @@ local funcs = {
 	},
 	JPH_BodyInterface_SetUserData = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u64 },
 	},
-	JPH_BodyInterface_GetUserData = { returns = ffi.types.u64, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_GetUserData = { returns = ffi.types.u64, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_SetIsSensor = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u8 },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u8 },
 	},
-	JPH_BodyInterface_IsSensor = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_BodyInterface_IsSensor = { returns = ffi.types.u8, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_BodyInterface_InvalidateContactCache = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_BodyLockInterface_LockRead = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyLockInterface_UnlockRead = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_BodyLockInterface_LockWrite = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	JPH_BodyLockInterface_UnlockWrite = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_BodyLockMultiRead_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -1467,8 +1471,8 @@ local funcs = {
 	},
 	JPH_CollideShapeSettings_Init = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_ShapeCastSettings_Init = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	JPH_Body_GetID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	JPH_Body_GetBodyType = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_Body_GetID = { returns = ffi.types.u32, args = { ffi.types.pointer } },
+	JPH_Body_GetBodyType = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_Body_IsRigidBody = { returns = ffi.types.u8, args = { ffi.types.pointer } },
 	JPH_Body_IsSoftBody = { returns = ffi.types.u8, args = { ffi.types.pointer } },
 	JPH_Body_IsActive = { returns = ffi.types.u8, args = { ffi.types.pointer } },
@@ -1494,10 +1498,10 @@ local funcs = {
 		returns = ffi.types.u8,
 		args = { ffi.types.pointer, ffi.types.pointer },
 	},
-	JPH_Body_GetMotionType = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	JPH_Body_SetMotionType = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
-	JPH_Body_GetBroadPhaseLayer = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	JPH_Body_GetObjectLayer = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_Body_GetMotionType = { returns = ffi.types.u32, args = { ffi.types.pointer } },
+	JPH_Body_SetMotionType = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
+	JPH_Body_GetBroadPhaseLayer = { returns = ffi.types.u8, args = { ffi.types.pointer } },
+	JPH_Body_GetObjectLayer = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_Body_GetCollisionGroup = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_Body_SetCollisionGroup = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_Body_GetAllowSleeping = { returns = ffi.types.u8, args = { ffi.types.pointer } },
@@ -1583,8 +1587,8 @@ local funcs = {
 	JPH_BodyFilter_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_ShapeFilter_SetProcs = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_ShapeFilter_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	JPH_ShapeFilter_GetBodyID2 = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	JPH_ShapeFilter_SetBodyID2 = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
+	JPH_ShapeFilter_GetBodyID2 = { returns = ffi.types.u32, args = { ffi.types.pointer } },
+	JPH_ShapeFilter_SetBodyID2 = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u32 } },
 	JPH_SimShapeFilter_SetProcs = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_SimShapeFilter_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_ContactListener_SetProcs = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -1620,7 +1624,7 @@ local funcs = {
 	JPH_CharacterBase_GetGroundPosition = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_CharacterBase_GetGroundNormal = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_CharacterBase_GetGroundVelocity = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
-	JPH_CharacterBase_GetGroundBodyId = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_CharacterBase_GetGroundBodyId = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_CharacterBase_GetGroundSubShapeId = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	JPH_CharacterBase_GetGroundUserData = { returns = ffi.types.u64, args = { ffi.types.pointer } },
 	JPH_CharacterSettings_Init = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -1654,7 +1658,7 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	JPH_Character_GetBodyID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_Character_GetBodyID = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_Character_GetPositionAndRotation = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
@@ -1697,7 +1701,7 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.float, ffi.types.pointer },
 	},
 	JPH_CharacterVirtualSettings_Init = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	JPH_CharacterVirtual_GetID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_CharacterVirtual_GetID = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_CharacterVirtual_SetListener = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_CharacterVirtual_SetCharacterVsCharacterCollision = {
 		returns = ffi.types.void,
@@ -1750,7 +1754,7 @@ local funcs = {
 	JPH_CharacterVirtual_SetShapeOffset = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_CharacterVirtual_GetUserData = { returns = ffi.types.u64, args = { ffi.types.pointer } },
 	JPH_CharacterVirtual_SetUserData = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
-	JPH_CharacterVirtual_GetInnerBodyID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_CharacterVirtual_GetInnerBodyID = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_CharacterVirtual_CancelVelocityTowardsSteepSlopes = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
@@ -2155,7 +2159,7 @@ local funcs = {
 	JPH_Wheel_GetSteerAngle = { returns = ffi.types.float, args = { ffi.types.pointer } },
 	JPH_Wheel_SetSteerAngle = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.float } },
 	JPH_Wheel_HasContact = { returns = ffi.types.u8, args = { ffi.types.pointer } },
-	JPH_Wheel_GetContactBodyID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_Wheel_GetContactBodyID = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_Wheel_GetContactSubShapeID = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	JPH_Wheel_GetContactPosition = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_Wheel_GetContactPointVelocity = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
@@ -2257,10 +2261,10 @@ local funcs = {
 	JPH_VehicleTransmission_GetCurrentRatio = { returns = ffi.types.float, args = { ffi.types.pointer } },
 	JPH_VehicleTransmission_AllowSleep = { returns = ffi.types.u8, args = { ffi.types.pointer } },
 	JPH_VehicleCollisionTester_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	JPH_VehicleCollisionTester_GetObjectLayer = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	JPH_VehicleCollisionTester_GetObjectLayer = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_VehicleCollisionTester_SetObjectLayer = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32 },
 	},
 	JPH_VehicleControllerSettings_Destroy = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_WheelSettingsWV_GetInertia = { returns = ffi.types.float, args = { ffi.types.pointer } },

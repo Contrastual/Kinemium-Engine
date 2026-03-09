@@ -12,22 +12,22 @@ local structs = jolt.structs
 local KinemiumPhysicsService = Instance.new("KinemiumPhysicsService")
 KinemiumPhysicsService.ExplorerHidden = true
 
+local function log(...)
+	print("[Physics]", ...)
+end
+
 local function roundVec3(v)
 	return Vector3.new(math.round(v.X * 1e4) / 1e4, math.round(v.Y * 1e4) / 1e4, math.round(v.Z * 1e4) / 1e4)
 end
 
 local bodiesMap = {} -- Part -> BodyID (uint32)
+local bodyPointerMap = {} -- Part -> BodyPointer (ffi.pointer)
 local inverseMap = {} -- BodyID -> Part
+local bodyConnections = {} -- Part -> RBXScriptConnection
 
 local LAYER_NON_MOVING = 0 -- Static objects
-local LAYER_MOVING = 2 -- Dynamic objects
+local LAYER_MOVING = 1 -- Dynamic objects
 local NUM_OBJECT_LAYERS = 2
-
-local function float_ptr(value: number): buffer
-	local buf = buffer.create(4) -- 4 bytes for float32
-	buffer.writef32(buf, 0, value)
-	return buf
-end
 
 local function isZero(v)
 	if v == -0 then
@@ -38,30 +38,12 @@ local function isZero(v)
 	return false
 end
 
-local function u32(value)
-	local buf = buffer.create(4)
-	buffer.writeu32(buf, 0, value)
-	return buf
-end
-
 local function ToJoltVec3(vec3)
 	return {
 		x = vec3.X,
 		y = vec3.Y,
 		z = vec3.Z,
 	}
-end
-
-local function u8(value)
-	local buf = buffer.create(1)
-	buffer.writeu8(buf, 0, value)
-	return buf
-end
-
-local function u16(value)
-	local buf = buffer.create(2)
-	buffer.writeu16(buf, 0, value)
-	return buf
 end
 
 local function RVec3(x, y, z)
@@ -76,14 +58,14 @@ local function FromJoltVec3(jvec)
 	return Vector3.new(jvec.x, jvec.y, jvec.z)
 end
 
-local function CFrameToJolt(cf)
+local function _CFrameToJolt(cf)
 	return {
 		pos = ToJoltVec3(cf.Position),
 		rot = { x = 0, y = 0, z = 0, w = 1 }, -- Identity quaternion
 	}
 end
 
-local function debugBody(bodyInterface, bodyID, partName)
+local function _debugBody(bodyInterface, bodyID, partName)
 	local isActive = lib.JPH_BodyInterface_IsActive(bodyInterface, bodyID)
 	local isAdded = lib.JPH_BodyInterface_IsAdded(bodyInterface, bodyID)
 
@@ -115,7 +97,7 @@ local function createBody(bodyInterface, part, motionType)
 
 	local shape
 	if part.Shape == Enum.PartType.Block then
-		shape = lib.JPH_BoxShape_Create(halfSize, float_ptr(0.05))
+		shape = lib.JPH_BoxShape_Create(halfSize, 0.05)
 	elseif part.Shape == Enum.PartType.Ball then
 		local radius = part.Size.X * 0.5
 		shape = lib.JPH_SphereShape_Create(radius)
@@ -129,34 +111,37 @@ local function createBody(bodyInterface, part, motionType)
 	position:writef64(16, part.Position.Z)
 
 	local rotation = ffi.alloc(structs.JPH_Quat:size(), structs.JPH_Quat:alignment())
-	rotation:writef32(0, 0) -- x
-	rotation:writef32(4, 0) -- y
-	rotation:writef32(8, 0) -- z
-	rotation:writef32(12, 1) -- w (identity quaternion)
+	local rotX, rotY, rotZ, rotW = part.CFrame:ToQuaternion()
+	rotation:writef32(0, rotX)
+	rotation:writef32(4, rotY)
+	rotation:writef32(8, rotZ)
+	rotation:writef32(12, rotW)
 
 	local layer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
 
-	local bodySettings = lib.JPH_BodyCreationSettings_Create3(shape, position, rotation, u8(motionType), u16(layer))
+	local bodySettings = lib.JPH_BodyCreationSettings_Create3(shape, position, rotation, motionType, layer)
 	lib.JPH_BodyCreationSettings_SetAllowSleeping(bodySettings, 0)
 
-	local activation = (motionType == 2) and 1 or 0
-	local bodyID = lib.JPH_BodyInterface_CreateAndAddBody(bodyInterface, bodySettings, activation)
-
-	lib.JPH_BodyCreationSettings_Destroy(bodySettings)
-
-	if bodyID == ffi.null then
-		warn("[Physics] Failed to create body for", part.Name)
+	local bodyPtr = lib.JPH_BodyInterface_CreateBody(bodyInterface, bodySettings)
+	if bodyPtr == ffi.null then
+		warn("[Physics] Failed to create body pointer for", part.Name)
+		lib.JPH_BodyCreationSettings_Destroy(bodySettings)
 		return
 	end
 
-	if motionType == 2 then
-		lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
-	end
+	local bodyID = lib.JPH_Body_GetID(bodyPtr)
+	local activation = (motionType == 2) and 0 or 1 -- JPH_Activation_Activate = 0, JPH_Activation_DontActivate = 1
+
+	lib.JPH_BodyInterface_AddBody(bodyInterface, bodyID, activation)
+
+	lib.JPH_BodyCreationSettings_Destroy(bodySettings)
 
 	bodiesMap[part] = bodyID
+	bodyPointerMap[part] = bodyPtr
 	inverseMap[bodyID] = part
 
 	--debugBody(bodyInterface, bodyID, part.Name)
+	return bodyID
 end
 
 local function CalculateBodyPhysics(part, bodyInterface, bodyID)
@@ -217,9 +202,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			task.wait()
 		until game.PlaytestService
 
-		local PlaytestService = game.PlaytestService
+		local _PlaytestService = game.PlaytestService
 
-		local contactListener = structs.JPH_ContactListener_Procs:new({
+		local _contactListener = structs.JPH_ContactListener_Procs:new({
 			OnContactValidate = ffi.closure({
 				returns = ffi.types.i32, -- JPH_ValidateResult
 				args = {
@@ -248,7 +233,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		log("[Physics] Jolt initialized")
 
 		local broadPhaseLayerInterface =
-			lib.JPH_BroadPhaseLayerInterfaceTable_Create(u32(NUM_OBJECT_LAYERS), u32(NUM_OBJECT_LAYERS))
+			lib.JPH_BroadPhaseLayerInterfaceTable_Create(NUM_OBJECT_LAYERS, NUM_OBJECT_LAYERS)
 		if broadPhaseLayerInterface == ffi.null then
 			error("[Physics] Failed to create BroadPhaseLayerInterface")
 		end
@@ -257,7 +242,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, LAYER_MOVING, 1)
 		log("[Physics] BroadPhaseLayerInterface created")
 
-		local objectLayerPairFilter = lib.JPH_ObjectLayerPairFilterTable_Create(u32(NUM_OBJECT_LAYERS))
+		local objectLayerPairFilter = lib.JPH_ObjectLayerPairFilterTable_Create(NUM_OBJECT_LAYERS)
 		if objectLayerPairFilter == ffi.null then
 			error("[Physics] Failed to create ObjectLayerPairFilter")
 		end
@@ -312,7 +297,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		--lib.JPH_ContactListener_SetProcs(contactListener)
 		--lib.JPH_PhysicsSystem_SetContactListener(physicsSystem, listenerPtr)
 
-		local physicsState = {
+		local _physicsState = {
 			system = physicsSystem,
 			bodyInterface = bodyInterface,
 			broadPhaseLayerInterface = broadPhaseLayerInterface,
@@ -337,14 +322,19 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 		log("[Physics] Job system created")
 
-		local bodyInterface = lib.JPH_PhysicsSystem_GetBodyInterface(physicsSystem)
+		-- Use existing bodyInterface from line 285
 
-		local function RemoveBody(Part)
-			local bodyID = bodiesMap[Part]
+		local function RemoveBody(part)
+			local bodyID = bodiesMap[part]
 			if bodyID then
 				lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, bodyID)
-				bodiesMap[Part] = nil
+				bodiesMap[part] = nil
+				bodyPointerMap[part] = nil
 				inverseMap[bodyID] = nil
+				if bodyConnections[part] then
+					bodyConnections[part]:Disconnect()
+					bodyConnections[part] = nil
+				end
 				log("[Physics] Destroyed body for part")
 			end
 		end
@@ -367,6 +357,64 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			if oldBody then
 			else
 				createBody(bodyInterface, part, motion)
+
+				local connection = part.Changed:Connect(function(property)
+					local bodyID = bodiesMap[part]
+					if not bodyID then
+						return
+					end
+
+					if property == "Size" or property == "Shape" then
+						local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+						halfSize:writef32(0, part.Size.X / 2)
+						halfSize:writef32(4, part.Size.Y / 2)
+						halfSize:writef32(8, part.Size.Z / 2)
+
+						local newShape
+						if part.Shape == Enum.PartType.Block then
+							newShape = lib.JPH_BoxShape_Create(halfSize, 0.05)
+						elseif part.Shape == Enum.PartType.Ball then
+							local radius = part.Size.X * 0.5
+							newShape = lib.JPH_SphereShape_Create(radius)
+						end
+
+						lib.JPH_BodyInterface_SetShape(bodyInterface, bodyID, newShape, 1, 1) -- updateMassProperties=1, activationMode=1 (Activate)
+					elseif property == "Anchored" then
+						local newMotion = part.Anchored and 0 or 2
+						local newLayer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
+
+						lib.JPH_BodyInterface_SetMotionType(bodyInterface, bodyID, newMotion, 1) -- activationMode=1 (Activate)
+						lib.JPH_BodyInterface_SetObjectLayer(bodyInterface, bodyID, newLayer)
+						lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+					elseif property == "Position" or property == "CFrame" then
+						if part.Anchored then
+							local pos_rvec =
+								RVec3(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+
+							local rot_quat = structs.JPH_Quat:new({})
+							local x, y, z, w = part.CFrame:ToQuaternion()
+							buffer.writef32(rot_quat, 0, x)
+							buffer.writef32(rot_quat, 4, y)
+							buffer.writef32(rot_quat, 8, z)
+							buffer.writef32(rot_quat, 12, w)
+
+							if lib.JPH_BodyInterface_SetPositionAndRotation then
+								lib.JPH_BodyInterface_SetPositionAndRotation(
+									bodyInterface,
+									bodyID,
+									pos_rvec,
+									rot_quat,
+									1
+								)
+							else
+								lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
+								lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
+							end
+						end
+					end
+				end)
+
+				bodyConnections[part] = connection
 			end
 
 			lib.JPH_PhysicsSystem_OptimizeBroadPhase(physicsSystem)
@@ -404,7 +452,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 				lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
 
-				local isActive = lib.JPH_BodyInterface_IsActive(bodyInterface, bodyID)
+				local _isActive = lib.JPH_BodyInterface_IsActive(bodyInterface, bodyID)
 				local jImpulse = structs.JPH_Vec3:new({ x = impulse.X, y = impulse.Y, z = impulse.Z })
 
 				lib.JPH_BodyInterface_AddImpulse(bodyInterface, bodyID, jImpulse)
@@ -421,14 +469,14 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				local jForce = structs.JPH_Vec3:new({ x = force.X, y = force.Y, z = force.Z })
 				local jPoint = RVec3(applicationPoint.X, applicationPoint.Y, applicationPoint.Z)
 
-				local success, result = pcall(function(...)
+				local _success, _result = pcall(function(...)
 					lib.JPH_BodyInterface_AddForce2(bodyInterface, bodyID, jForce, jPoint)
 				end)
 			end,
 
 			CreateWeld = function(partA, partB)
-				local bodyA = bodiesMap[partA]
-				local bodyB = bodiesMap[partB]
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
 				if not bodyA or not bodyB then
 					return
 				end
@@ -456,9 +504,18 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			Unload = function()
 				-- added this function for
 				-- Memory purposes........
-				for _, body in pairs(bodiesMap) do
-					lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, body)
+				for part, bodyID in pairs(bodiesMap) do
+					local connection = bodyConnections[part]
+					if connection then
+						connection:Disconnect()
+					end
+					lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, bodyID)
 				end
+				table.clear(bodyConnections)
+				table.clear(bodiesMap)
+				table.clear(bodyPointerMap)
+				table.clear(inverseMap)
+
 				lib.JPH_JobSystem_Destroy(jobSystem)
 				lib.JPH_PhysicsSystem_Destroy(physicsSystem)
 				lib.JPH_Shutdown()
@@ -513,12 +570,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			elseif route == "RemovedPartFromRenderPool" then
 				RemoveBody(data)
 			elseif route == "RenderStepped" then
-				--if not PlaytestService.IsPlaytesting then
-				--	return
-				--end
-				if not KinemiumPhysicsService.Enabled then
-					return
-				end
 				if
 					game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Jolt
 					or game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Default
@@ -541,7 +592,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					)
 					renderer_signal:Fire("PhysicsF")
 
-					local loopStart = os.clock()
+					local _loopStart = os.clock()
 					for part, bodyID in pairs(bodiesMap) do
 						if part.Anchored == true then
 							-- set part cframe
@@ -555,13 +606,18 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 							buffer.writef32(rot_quat, 8, z)
 							buffer.writef32(rot_quat, 12, w)
 
-							jolt.lib.JPH_BodyInterface_SetPositionAndRotation(
-								bodyInterface,
-								bodyID,
-								pos_rvec,
-								rot_quat,
-								1
-							)
+							if lib.JPH_BodyInterface_SetPositionAndRotation then
+								lib.JPH_BodyInterface_SetPositionAndRotation(
+									bodyInterface,
+									bodyID,
+									pos_rvec,
+									rot_quat,
+									1
+								)
+							else
+								lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
+								lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
+							end
 							continue
 						end
 

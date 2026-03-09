@@ -139,7 +139,7 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 
 	for _, offset in ipairs(MoveOffsets) do
 		local part = offset.obj
-		if part and part.Parent then
+		if part and part.Parent and part.Anchored == true then
 			local finalCF = snappedPivot * offset.pos
 			part.CFrame = finalCF
 		end
@@ -214,8 +214,6 @@ renderer.Pool.new("gizmo", function()
 			if not Movement.Transform then
 				return
 			end
-
-			lib.DrawGrid(1000, grid)
 		elseif handlestype == "SCALE" then
 			if connection then
 				connection:Disconnect()
