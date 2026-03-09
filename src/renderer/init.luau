@@ -699,8 +699,10 @@ function KiRend.new(config: KiRendConf)
 
 		local inputStart = os.clock()
 		local keyboardListenStart = os.clock()
-		
 		for keycode, _ in pairs(renderer_watching_keys) do
+			if lib.IsKeyPressed(keycode) == 1 then
+				renderer_eventbus:Fire("Pressed", keycode)
+			end
 			if lib.IsKeyDown(keycode) == 1 then
 				renderer_eventbus:Fire("IsKeyDown", keycode)
 			end
