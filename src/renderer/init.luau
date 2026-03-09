@@ -113,6 +113,7 @@ function KiRend.new(config: KiRendConf)
 		input_key_ms = 0,
 		rendereventbus_conns = 0,
 		call3d_ms = 0,
+		dispatch_ms = 0,
 	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -595,7 +596,7 @@ function KiRend.new(config: KiRendConf)
 			local color = const.WHITE
 			local y = 30
 			lib.DrawText(
-				string.format("Frame: %.2f ms | FPS: %d", perf_stats.frame_ms, perf_stats.fps),
+				string.format("Frame: %.2f ms | FPS: %d | Dispatch: %.2f ms", perf_stats.frame_ms, perf_stats.fps, perf_stats.dispatch_ms),
 				10,
 				y,
 				18,
@@ -733,7 +734,9 @@ function KiRend.new(config: KiRendConf)
 		rendererObject:Render3D()
 		rendererObject:Render2D()
 
+		local dispatchStart = os.clock()
 		lib.EndDrawing()
+		perf_stats.dispatch_ms = (os.clock() - dispatchStart) * 1000
 
 		renderer_eventbus:Fire("Heartbeat", delta)
 		perf_stats.frame_ms = (os.clock() - frameStart) * 1000
@@ -803,6 +806,7 @@ function KiRend.new(config: KiRendConf)
 				input_key_ms = perf_stats.input_key_ms,
 				rendereventbus_conns = perf_stats.rendereventbus_conns,
 				call3d_ms = perf_stats.call3d_ms,
+				dispatch_ms = perf_stats.dispatch_ms
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),
