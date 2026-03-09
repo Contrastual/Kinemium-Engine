@@ -109,6 +109,10 @@ function KiRend.new(config: KiRendConf)
 		instanced_batches = 0,
 		instanced_instances = 0,
 		batches_3d = 0,
+		input_ms = 0,
+		input_key_ms = 0,
+		rendereventbus_conns = 0,
+		call3d_ms = 0,
 	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -505,6 +509,8 @@ function KiRend.new(config: KiRendConf)
 		meshCalls = #renderer_draw_calls
 		instancedBatches = #renderer_instanced_draw_calls
 
+		perf_stats.call3d_ms = 0
+		local callStart = os.clock()
 		if #renderer_draw_calls > 0 or #renderer_instanced_draw_calls > 0 then
 			if Dimension == "3D" then
 				rlib.R3D_Begin(activeCamera)
@@ -539,6 +545,7 @@ function KiRend.new(config: KiRendConf)
 		end
 		table.clear(renderer_draw_calls)
 		table.clear(renderer_instanced_draw_calls)
+		perf_stats.call3d_ms = (os.clock() - callStart) * 1000
 
 		for _, item in ipairs(getSortedPool(renderer_pool.gizmos)) do
 			local entry = item.entry
@@ -610,12 +617,13 @@ function KiRend.new(config: KiRendConf)
 			y += 18
 			lib.DrawText(
 				string.format(
-					"3D: %.2f ms | Batches: %d (%d mesh + %d inst) | Instances: %d",
+					"3D: %.2f ms | Batches: %d (%d mesh + %d inst) | Instances: %d | 3D Roots: %d",
 					perf_stats.render3d_ms,
 					perf_stats.batches_3d,
 					perf_stats.mesh_calls,
 					perf_stats.instanced_batches,
-					perf_stats.instanced_instances
+					perf_stats.instanced_instances,
+					perf_stats.scene_roots_3d
 				),
 				10,
 				y,
@@ -623,7 +631,30 @@ function KiRend.new(config: KiRendConf)
 				color
 			)
 			y += 18
-			lib.DrawText(string.format("3D Roots: %d", perf_stats.scene_roots_3d), 10, y, 18, color)
+			lib.DrawText(string.format("3D Drawcalls: %.2f ms", perf_stats.call3d_ms), 10, y, 18, color)
+			y += 18
+			lib.DrawText(
+				string.format(
+					"Input: %.2f ms | Key Process: %.2f ms",
+					perf_stats.input_ms,
+					perf_stats.input_key_ms
+				),
+				10,
+				y,
+				18,
+				color
+			)
+			y += 18
+			lib.DrawText(
+				string.format(
+					"RenderBus Connections: %d",
+					perf_stats.rendereventbus_conns
+				),
+				10,
+				y,
+				18,
+				color
+			)
 		end
 
 		perf_stats.ui_ms = (os.clock() - uiStart) * 1000
@@ -646,6 +677,8 @@ function KiRend.new(config: KiRendConf)
 			v(delta)
 		end
 
+		perf_stats.rendereventbus_conns = renderer_eventbus:GetConnectionCount()
+
 		renderer_eventbus:Fire("PreRender", delta)
 		renderer_eventbus:Fire("RenderStepped", delta)
 
@@ -663,10 +696,10 @@ function KiRend.new(config: KiRendConf)
 			end
 		end
 
+		local inputStart = os.clock()
+		local keyboardListenStart = os.clock()
+		
 		for keycode, _ in pairs(renderer_watching_keys) do
-			if lib.IsKeyPressed(keycode) == 1 then
-				renderer_eventbus:Fire("Pressed", keycode)
-			end
 			if lib.IsKeyDown(keycode) == 1 then
 				renderer_eventbus:Fire("IsKeyDown", keycode)
 			end
@@ -674,6 +707,7 @@ function KiRend.new(config: KiRendConf)
 				renderer_eventbus:Fire("IsKeyReleased", keycode)
 			end
 		end
+		perf_stats.input_key_ms = (os.clock() - keyboardListenStart) * 1000
 
 		local mouseDelta = lib.GetMouseDelta()
 		if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
@@ -684,6 +718,7 @@ function KiRend.new(config: KiRendConf)
 		if wheel ~= 0 then
 			renderer_eventbus:Fire("MouseWheel", wheel)
 		end
+		perf_stats.input_ms = (os.clock() - inputStart) * 1000
 		perf_stats.update_ms = (os.clock() - updateStart) * 1000
 
 		if ENGINE_PROFILER then
@@ -764,6 +799,10 @@ function KiRend.new(config: KiRendConf)
 				instanced_instances = perf_stats.instanced_instances,
 				gui_roots = perf_stats.gui_roots,
 				scene_roots_3d = perf_stats.scene_roots_3d,
+				input_ms = perf_stats.input_ms,
+				input_key_ms = perf_stats.input_key_ms,
+				rendereventbus_conns = perf_stats.rendereventbus_conns,
+				call3d_ms = perf_stats.call3d_ms,
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),
