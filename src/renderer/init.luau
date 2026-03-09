@@ -596,16 +596,12 @@ function KiRend.new(config: KiRendConf)
 			local color = const.WHITE
 			local y = 30
 			lib.DrawText(
-<<<<<<< HEAD
 				string.format(
 					"Frame: %.2f ms | FPS: %d | Dispatch: %.2f ms",
 					perf_stats.frame_ms,
 					perf_stats.fps,
 					perf_stats.dispatch_ms
 				),
-=======
-				string.format("Frame: %.2f ms | FPS: %d | Dispatch: %.2f ms", perf_stats.frame_ms, perf_stats.fps, perf_stats.dispatch_ms),
->>>>>>> 3b3ce1a58a5f65ca76e64c55d91a8f91da177658
 				10,
 				y,
 				18,
@@ -644,35 +640,14 @@ function KiRend.new(config: KiRendConf)
 			lib.DrawText(string.format("3D Drawcalls: %.2f ms", perf_stats.call3d_ms), 10, y, 18, color)
 			y += 18
 			lib.DrawText(
-<<<<<<< HEAD
 				string.format("Input: %.2f ms | Key Process: %.2f ms", perf_stats.input_ms, perf_stats.input_key_ms),
-=======
-				string.format(
-					"Input: %.2f ms | Key Process: %.2f ms",
-					perf_stats.input_ms,
-					perf_stats.input_key_ms
-				),
->>>>>>> 3b3ce1a58a5f65ca76e64c55d91a8f91da177658
 				10,
 				y,
 				18,
 				color
 			)
 			y += 18
-<<<<<<< HEAD
 			lib.DrawText(string.format("RenderBus Connections: %d", perf_stats.rendereventbus_conns), 10, y, 18, color)
-=======
-			lib.DrawText(
-				string.format(
-					"RenderBus Connections: %d",
-					perf_stats.rendereventbus_conns
-				),
-				10,
-				y,
-				18,
-				color
-			)
->>>>>>> 3b3ce1a58a5f65ca76e64c55d91a8f91da177658
 		end
 
 		perf_stats.ui_ms = (os.clock() - uiStart) * 1000
@@ -825,11 +800,7 @@ function KiRend.new(config: KiRendConf)
 				input_key_ms = perf_stats.input_key_ms,
 				rendereventbus_conns = perf_stats.rendereventbus_conns,
 				call3d_ms = perf_stats.call3d_ms,
-<<<<<<< HEAD
 				dispatch_ms = perf_stats.dispatch_ms,
-=======
-				dispatch_ms = perf_stats.dispatch_ms
->>>>>>> 3b3ce1a58a5f65ca76e64c55d91a8f91da177658
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),
