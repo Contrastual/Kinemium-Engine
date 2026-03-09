@@ -253,8 +253,8 @@ return function(objects, data)
 				-- Regular item
 				local itemX = config.isExpanded and r.x + config.padding * 1.5
 					or r.x + (config.currentWidth - config.itemSize) / 2 - collapseOffset
-				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 2.5)
-					or config.itemSize + collapseOffset
+				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 3)
+					or config.itemSize + collapseOffset * 2
 				local itemRect = rect.new(itemX, currentY, itemRenderWidth, config.itemSize)
 
 				local isHovered = rect.MouseIsInRect(itemRect)
