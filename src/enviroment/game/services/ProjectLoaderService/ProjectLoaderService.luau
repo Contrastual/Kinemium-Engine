@@ -45,9 +45,7 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 			if not path then
 				return
 			end
-			if not iconPath then
-				return
-			end
+
 			local kprojFile = path .. "/kproj.toml"
 			-- write to projects list
 			local projects = ProjectLoaderService.GetProjects()
