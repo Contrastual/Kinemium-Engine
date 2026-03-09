@@ -43,6 +43,7 @@ return function(objects, data)
 		iconSize = 24,
 		padding = 8,
 		spacing = 8,
+		scrollStep = 20,
 		dividerHeight = 1,
 		expandSpeed = 12,
 		font = data.font or raylib.lib.GetFontDefault(),
@@ -56,6 +57,7 @@ return function(objects, data)
 		hoveredIndex = -1,
 		selectedIndex = -1,
 		scrollOffset = 0,
+		scrollTarget = 0,
 		isExpanded = false,
 		textAlpha = 0,
 
@@ -201,14 +203,16 @@ return function(objects, data)
 
 		-- Handle scrolling
 		if isHovering then
-			config.scrollOffset = config.scrollOffset - scrollWheel * 20
+			config.scrollTarget = config.scrollTarget - scrollWheel * config.scrollStep
 		end
+		config.scrollOffset = config.scrollOffset + (config.scrollTarget - config.scrollOffset) * (math.min(1, dt * 10) ^ 0.5)
 
 		config.hoveredIndex = -1
 		local currentY = r.y + config.padding - config.scrollOffset
 
 		raylib.lib.BeginScissorMode(r.x, r.y, config.currentWidth, r.height)
 
+		local collapseOffset = config.isExpanded and 0 or (config.currentWidth - config.collapsedWidth) / 2
 		for i, item in ipairs(config.items) do
 			if item.type == "divider" then
 				-- Draw divider
@@ -247,10 +251,10 @@ return function(objects, data)
 				currentY = currentY + 20
 			else
 				-- Regular item
-				local itemX = config.isExpanded and r.x + config.padding
-					or r.x + (config.currentWidth - config.itemSize) / 2
-				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 2)
-					or config.itemSize
+				local itemX = config.isExpanded and r.x + config.padding * 1.5
+					or r.x + (config.currentWidth - config.itemSize) / 2 - collapseOffset
+				local itemRenderWidth = config.isExpanded and (config.currentWidth - config.padding * 2.5)
+					or config.itemSize + collapseOffset
 				local itemRect = rect.new(itemX, currentY, itemRenderWidth, config.itemSize)
 
 				local isHovered = rect.MouseIsInRect(itemRect)

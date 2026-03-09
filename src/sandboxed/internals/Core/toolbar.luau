@@ -342,7 +342,7 @@ local fileMenu = gui.menu({
 			label = "Exit",
 			shortcut = "Alt+F4",
 			onClick = function()
-				zune.process.exit(0)
+				KinemiumRaylib.lib.CloseWindow()
 			end,
 		},
 	},
