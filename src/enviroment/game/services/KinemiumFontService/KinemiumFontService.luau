@@ -63,6 +63,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		end,
 
 		LoadAllEngineFonts = function()
+			local fontLoadStart = os.clock()
 			local cache = {}
 
 			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
@@ -76,7 +77,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 				fontCount += 1
 				print("FONTSERVICE | Loaded font " .. transformed)
 			end
-			print("FONTSERVICE | Loaded " .. fontCount .. " fonts.")
+			print(string.format("FONTSERVICE | Loaded %i fonts in %.2fs", fontCount, os.clock() - fontLoadStart))
 		end,
 		FontAdded = FontAdded,
 		FontRemoved = FontRemoved,

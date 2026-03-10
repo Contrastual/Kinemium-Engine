@@ -19,8 +19,9 @@ else
 end
 
 task.spawn(function()
+	local createClassesStart = os.clock()
 	for _, entry in pairs(entries) do
-		local code
+		local createClassStart = os.clock()
 		local requirePath
 		if zembed.IsEmbedded() then
 			local name = zune.fs.path.basename(entry)
@@ -40,8 +41,16 @@ task.spawn(function()
 		end
 		listOfClasses[returned.class] = returned
 
-		log("CLASS: Successfully created class '" .. returned.class .. "' from file: " .. requirePath)
+		log(
+			string.format(
+				"CLASS: Successfully created class '%s' in %.3fms from file: %s",
+				returned.class,
+				(os.clock() - createClassStart) * 1000,
+				requirePath
+			)
+		)
 	end
+	log(string.format("CLASS: Created all classes in %.3fms", (os.clock() - createClassesStart) * 1000))
 end)
 
 function registry.createclass(data)
