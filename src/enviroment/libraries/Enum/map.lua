@@ -649,13 +649,15 @@ for propName, values in pairs(dump) do
 	if not propName then
 		continue
 	end
-	if enumTable[propName] then
+
+	local enum = enumTable[propName]
+	if enum then
 		for name, value in pairs(values) do
-			if enumTable[propName][name] then
+			if enum[name] then
 				log(`[ENUM] {propName}.{name} already exists, Skipping..`)
 				continue
 			end
-			enumTable[propName][name] = value
+			enum[name] = value
 		end
 	else
 		enumTable[propName] = values
