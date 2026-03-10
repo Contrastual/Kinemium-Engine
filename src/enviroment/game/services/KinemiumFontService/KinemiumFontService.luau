@@ -63,10 +63,11 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		end,
 
 		LoadAllEngineFonts = function()
-			local fontLoadStart = os.clock()
+			local fontsLoadStart = os.clock()
 			local cache = {}
 
 			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
+				local fontLoadStart = os.clock()
 				local path = zembed.IsEmbedded() and "../" .. font or engine_fonts .. "/" .. font.name
 				local transformed = transformFontName(zembed.IsEmbedded() and zune.fs.path.basename(path) or font.name)
 				if cache[transformed] then
@@ -75,9 +76,9 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 				cache[transformed] = true
 				renderer.Font.new(transformed, path, 64)
 				fontCount += 1
-				print("FONTSERVICE | Loaded font " .. transformed)
+				print(string.format("FONTSERVICE | Loaded font %s in %.3fms", transformed, (os.clock() - fontLoadStart) * 1000))
 			end
-			print(string.format("FONTSERVICE | Loaded %i fonts in %.2fs", fontCount, os.clock() - fontLoadStart))
+			print(string.format("FONTSERVICE | Loaded %i fonts in %.2fs", fontCount, os.clock() - fontsLoadStart))
 		end,
 		FontAdded = FontAdded,
 		FontRemoved = FontRemoved,
