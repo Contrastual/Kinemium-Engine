@@ -32,6 +32,7 @@ function DataModel.new(RENDERER, ...)
 	
 	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
+		local addServiceStart = os.clock()
 		local name
 		local path
 		if zembed.IsEmbedded() then
@@ -49,9 +50,9 @@ function DataModel.new(RENDERER, ...)
 		end
 
 		local success, returnedData = pcall(require, path)
+		local initTime = (os.clock() - addServiceStart) * 1000
 
 		if success then
-			local addServiceStart = os.clock()
 			local success2, returnedData2 = pcall(function()
 				self.Services[name] = returnedData
 				if returnedData.InitRenderer then
@@ -63,7 +64,14 @@ function DataModel.new(RENDERER, ...)
 			end)
 
 			if success2 then
-				log(string.format("[ServiceRegistry] Added service %s in %.3fms", name, (os.clock() - addServiceStart) * 1000))
+				log(
+					string.format(
+						"[ServiceRegistry] Added service %s in %.3fms (required in %.3fms)",
+						name,
+						(os.clock() - addServiceStart) * 1000,
+						initTime
+					)
+				)
 			else
 				warn(
 					"Error initializing service '"
