@@ -59,7 +59,7 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
-renderer.Pool.new("2d", function(data)
+renderer.Hook.new("After2D", function(data)
 	if game.Context ~= Enum.GameContext.Editor then
 		return
 	end

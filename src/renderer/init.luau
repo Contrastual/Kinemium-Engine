@@ -114,6 +114,7 @@ function KiRend.new(config: KiRendConf)
 		rendereventbus_conns = 0,
 		call3d_ms = 0,
 		dispatch_ms = 0,
+		render3d_update_ms = 0,
 	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -269,20 +270,26 @@ function KiRend.new(config: KiRendConf)
 
 		Pool = {
 			new = function(type: "2d" | "3d" | "gizmo", renderFn: () -> (), priority: number?)
-				local id = math.random(1, 99999)
+				local pool
+				if type == "2d" then
+					pool = renderer_pool.gui
+				elseif type == "3d" then
+					pool = renderer_pool.object
+				elseif type == "gizmo" then
+					pool = renderer_pool.gizmos
+				end
+
+				local id
+				repeat
+					id = math.random(1, 99999)
+				until pool[id] == nil
 				local poolEntry = {
 					render = renderFn,
 					object = nil,
 					priority = priority or 0,
 				}
 
-				if type == "2d" then
-					renderer_pool.gui[id] = poolEntry
-				elseif type == "3d" then
-					renderer_pool.object[id] = poolEntry
-				elseif type == "gizmo" then
-					renderer_pool.gizmos[id] = poolEntry
-				end
+				pool[id] = poolEntry
 
 				return id
 			end,
@@ -501,12 +508,15 @@ function KiRend.new(config: KiRendConf)
 			v(rendererObject.RuntimeLibrary)
 		end
 
+		local render3DUpdateStart = os.clock()
 		for _, item in ipairs(sorted3DPool) do
 			local entry = item.entry
 			if entry.render then
 				entry.render(rendererObject.RuntimeLibrary)
 			end
 		end
+		perf_stats.render3d_update_ms = (os.clock() - render3DUpdateStart) * 1000
+
 		meshCalls = #renderer_draw_calls
 		instancedBatches = #renderer_instanced_draw_calls
 
@@ -589,41 +599,30 @@ function KiRend.new(config: KiRendConf)
 		end
 
 		if rendererObject.DrawFps then
-			lib.DrawFPS(10, 10)
+			local fpsText = string.format("%2i FPS", lib.GetFPS())
+			local width, height = lib.GetRenderWidth(), lib.GetRenderHeight()
+
+			local size = 10
+			local textLength = lib.MeasureText(fpsText, size)
+
+			local color = structs.Color:new({r = 255, g = 255, b = 255, a = 127})
+			lib.DrawText(fpsText, width - textLength - 10, height - 10 - size, size, color)
 		end
 
 		if rendererObject.ShowPerfOverlay then
-			local color = const.WHITE
-			local y = 30
-			lib.DrawText(
+			local color = structs.Color:new({r = 255, g = 255, b = 255, a = 63})
+			local size = 10
+
+			local text = table.concat({
+				string.format("Frame: %.3f ms | FPS: %d | Dispatch: %.3f ms", perf_stats.frame_ms, perf_stats.fps, perf_stats.dispatch_ms),
 				string.format(
-					"Frame: %.2f ms | FPS: %d | Dispatch: %.2f ms",
-					perf_stats.frame_ms,
-					perf_stats.fps,
-					perf_stats.dispatch_ms
-				),
-				10,
-				y,
-				18,
-				color
-			)
-			y += 18
-			lib.DrawText(
-				string.format(
-					"Update: %.2f ms | UI: %.2f ms | UI Roots: %d",
+					"Update: %.3f ms | UI: %.3f ms | UI Roots: %d",
 					perf_stats.update_ms,
 					perf_stats.ui_ms,
 					perf_stats.gui_roots
 				),
-				10,
-				y,
-				18,
-				color
-			)
-			y += 18
-			lib.DrawText(
 				string.format(
-					"3D: %.2f ms | Batches: %d (%d mesh + %d inst) | Instances: %d | 3D Roots: %d",
+					"3D: %.3f ms | Batches: %d (%d mesh + %d inst) | Instances: %d | 3D Roots: %d",
 					perf_stats.render3d_ms,
 					perf_stats.batches_3d,
 					perf_stats.mesh_calls,
@@ -631,23 +630,23 @@ function KiRend.new(config: KiRendConf)
 					perf_stats.instanced_instances,
 					perf_stats.scene_roots_3d
 				),
-				10,
-				y,
-				18,
-				color
-			)
-			y += 18
-			lib.DrawText(string.format("3D Drawcalls: %.2f ms", perf_stats.call3d_ms), 10, y, 18, color)
-			y += 18
-			lib.DrawText(
-				string.format("Input: %.2f ms | Key Process: %.2f ms", perf_stats.input_ms, perf_stats.input_key_ms),
-				10,
-				y,
-				18,
-				color
-			)
-			y += 18
-			lib.DrawText(string.format("RenderBus Connections: %d", perf_stats.rendereventbus_conns), 10, y, 18, color)
+				string.format(
+					"3D Drawcalls: %.3f ms | 3D Pool Update: %.3f ms",
+					perf_stats.call3d_ms,
+					perf_stats.render3d_update_ms
+				),
+				string.format(
+					"Input: %.3f ms | Key Process: %.3f ms",
+					perf_stats.input_ms,
+					perf_stats.input_key_ms
+				),
+				string.format(
+					"RenderBus Connections: %d",
+					perf_stats.rendereventbus_conns
+				),
+			}, "\n")
+
+			lib.DrawText(text, 10, lib.GetRenderHeight() - 10 - (#string.split(text, "\n") + 1) * size, size, color)
 		end
 
 		perf_stats.ui_ms = (os.clock() - uiStart) * 1000
@@ -754,6 +753,10 @@ function KiRend.new(config: KiRendConf)
 			rendererObject:step(time)
 		end
 
+		rendererObject:Shutdown()
+	end
+
+	function rendererObject:Shutdown()
 		for _, callback in pairs(renderer_hooks.Shutdown) do
 			local success, result = pcall(function()
 				callback()
@@ -762,6 +765,8 @@ function KiRend.new(config: KiRendConf)
 				warn(result)
 			end
 		end
+
+		zune.process.exit(0)
 	end
 
 	function rendererObject:GetStats()
@@ -801,6 +806,7 @@ function KiRend.new(config: KiRendConf)
 				rendereventbus_conns = perf_stats.rendereventbus_conns,
 				call3d_ms = perf_stats.call3d_ms,
 				dispatch_ms = perf_stats.dispatch_ms,
+				render3d_update_ms = perf_stats.render3d_update_ms,
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),
