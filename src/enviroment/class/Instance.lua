@@ -828,12 +828,17 @@ function Instance:QueryDescendants(selector)
 end
 
 function Instance:SetMetadata(key, value)
-	self._meta = self._meta or {}
-	self._meta[key] = value
+	local meta = rawget(self, "_meta")
+	if not meta then
+		meta = {}
+		rawset(self, "_meta", meta)
+	end
+	meta[key] = value
 end
 
 function Instance:GetMetadata(key)
-	return self._meta and self._meta[key]
+	local meta = rawget(self, "_meta")
+	return meta and meta[key]
 end
 
 function Instance:GetAttribute(name)
