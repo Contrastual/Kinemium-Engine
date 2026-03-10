@@ -644,6 +644,7 @@ enumTable.SecurityCapabilities = {
 	Internals = 2,
 }
 
+local enumProcessStart = os.clock()
 for propName, values in pairs(dump) do
 	if not propName then
 		continue
@@ -661,5 +662,6 @@ for propName, values in pairs(dump) do
 	end
 	--log("[ENUM] Created platform enum " .. propName)
 end
+log(string.format("[ENUM] Processed enums in %.3fms", (os.clock() - enumProcessStart) * 1000))
 
 return enumtransformer.new(enumTable)
