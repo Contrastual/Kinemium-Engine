@@ -1812,12 +1812,12 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 
 			if ctrlDown then
-				if raylib.IsKeyReleased(const.KeyboardKey.KEY_C) == 1 then
+				if raylib.IsKeyPressed(const.KeyboardKey.KEY_C) == 1 then
 					local text = editor.text:getSelectedText()
 					if #text > 0 then
 						raylib.SetClipboardText(text)
 					end
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_V) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_V) == 1 then
 					editor:beginTextEdit()
 					if editor.text.selection.active then
 						editor.text:deleteSelection()
@@ -1836,7 +1836,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					autocomplete.updateAutocomplete(editor, game)
 					editor._highlightCache = {}
 					editor:updateLSP()
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_X) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_X) == 1 then
 					local text = editor.text:getSelectedText()
 					if #text > 0 then
 						raylib.SetClipboardText(text)
@@ -1846,29 +1846,29 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						editor._highlightCache = {}
 						editor:updateLSP()
 					end
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_A) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_A) == 1 then
 					editor.text.selection.active = true
 					editor.text.selection.startLine = 1
 					editor.text.selection.startCol = 1
 					editor.text.selection.endLine = #editor.text.lines
 					editor.text.selection.endCol = #editor.text.lines[#editor.text.lines] + 1
 					editor.text:setCursor(#editor.text.lines, #editor.text.lines[#editor.text.lines] + 1)
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_S) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_S) == 1 then
 					editor:format()
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_F) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_F) == 1 then
 					editor.search.active = not editor.search.active
 					if editor.search.active then
 						editor.gotoLine.active = false
 						editor.search.query = editor.text:getSelectedText():gsub("\n", "")
 						editor:updateSearch()
 					end
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_G) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_G) == 1 then
 					editor.gotoLine.active = not editor.gotoLine.active
 					if editor.gotoLine.active then
 						editor.search.active = false
 						editor.gotoLine.query = ""
 					end
-				elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_H) == 1 then
+				elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_H) == 1 then
 					editor.replace.active = not editor.replace.active
 					if editor.replace.active then
 						editor.search.active = true

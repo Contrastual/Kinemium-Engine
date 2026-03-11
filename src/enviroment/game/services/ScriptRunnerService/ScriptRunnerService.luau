@@ -14,6 +14,7 @@ local ScriptRunnerService = Instance.new("ScriptRunnerService")
 ScriptRunnerService.ExplorerHidden = true
 
 local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
+local userThreads = {}
 
 ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 	local ScriptRan = signal.new()
@@ -25,19 +26,16 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 			local object = task.spawn(function()
 				enviroment.script = ScriptInstance
 
-				local thread, success, result = sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, enviroment)
+				local _, success, result = sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, enviroment)
 
 				enviroment.script = nil
 				outsideSuccess = success
 				outsideResult = result
 			end)
-			if outsideSuccess then
-				threads.luau[ScriptInstance.Name] = object
-			else
+			threads.luau[ScriptInstance.Name] = object
+			if not outsideSuccess and outsideResult ~= nil then
 				LogService.CreateLog("error", outsideResult)
 			end
-			print(outsideSuccess)
-			print(outsideResult)
 			return outsideResult
 		end,
 
@@ -80,6 +78,10 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 			return threads
 		end,
 
+		RegisterUserThread = function(thread)
+			table.insert(userThreads, thread)
+		end,
+
 		Clear = function()
 			for _, thread in pairs(threads.luau) do
 				task.cancel(thread)
@@ -92,6 +94,13 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 			for _, thread in pairs(threads.duktape) do
 				thread:close()
 			end
+
+			for _, thread in pairs(userThreads) do
+				pcall(task.cancel, thread)
+			end
+
+			threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
+			userThreads = {}
 		end,
 
 		OpenInExternalEditor = function(script, program, folderPath)

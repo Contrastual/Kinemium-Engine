@@ -117,6 +117,82 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end,
 	}
 
+	-- Default context menu items
+	local function getDefaultContextMenuItems()
+		return {
+			{
+				label = "Cut",
+				shortcut = "Ctrl+X",
+				action = function(self)
+					local text = self:getSelectedText()
+					if #text > 0 then
+						raylib.SetClipboardText(text)
+						self:saveHistory()
+						self.buffer:deleteSelection()
+						if self.onChange then
+							self.onChange(self:getText())
+						end
+						self:validate()
+					end
+				end,
+			},
+			{
+				label = "Copy",
+				shortcut = "Ctrl+C",
+				action = function(self)
+					local text = self:getSelectedText()
+					if #text > 0 then
+						raylib.SetClipboardText(text)
+					end
+				end,
+			},
+			{
+				label = "Paste",
+				shortcut = "Ctrl+V",
+				action = function(self)
+					local text = raylib.GetClipboardText()
+					if text and #text > 0 then
+						self:saveHistory()
+						if self.buffer.selection.active then
+							self.buffer:deleteSelection()
+						end
+						self.buffer:insertString(text)
+						if self.onChange then
+							self.onChange(self:getText())
+						end
+						self:validate()
+						self:updateAutocomplete()
+					end
+				end,
+			},
+			{
+				label = "Select All",
+				shortcut = "Ctrl+A",
+				action = function(self)
+					self:selectAll()
+				end,
+			},
+			{ type = "separator" },
+			{
+				label = "Find...",
+				shortcut = "Ctrl+F",
+				action = function(self)
+					self.search.active = true
+					self.search.query = ""
+				end,
+			},
+			{
+				label = "Replace...",
+				shortcut = "Ctrl+H",
+				action = function(self)
+					self.replace.active = true
+					self.search.active = true
+					self.replace.query = ""
+				end,
+			},
+		}
+	end
+
 	-- Constructor
 	function TextBox.new(config)
 		config = config or {}
@@ -198,6 +274,27 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.sliderPosition = config.sliderPosition or "right" -- "left", "right", "bottom"
 		self.sliderGap = config.sliderGap or 10
 
+		-- NEW: Additional features config
+		self.enableMinimap = config.enableMinimap or false -- Show minimap for large files
+		self.minimapWidth = config.minimapWidth or 80
+		self.enableScrollbar = config.enableScrollbar or true -- Show scrollbar
+		self.scrollbarWidth = config.scrollbarWidth or 10
+		self.enableAnimatedFocus = config.enableAnimatedFocus or true -- Animated focus ring
+		self.focusRingSpeed = config.focusRingSpeed or 8
+		self.enableHyperlinks = config.enableHyperlinks or false -- Detect and highlight URLs
+		self.hyperlinkColor = config.hyperlinkColor or Color3.new(0.3, 0.5, 1)
+		self.enableDragDrop = config.enableDragDrop or true -- Enable drag and drop text
+		self.enableColumnSelection = config.enableColumnSelection or true -- Alt+click for column selection
+		self.virtualTextCutoff = config.virtualTextCutoff or 2000 -- Max characters per line before truncation in display
+		self.customContextMenu = config.customContextMenu -- Custom context menu items
+
+		-- Key repeat acceleration config
+		self.keyRepeatConfig = {
+			initialDelay = config.keyRepeatInitialDelay or 0.5, -- seconds before acceleration starts
+			minInterval = config.keyRepeatMinInterval or 0.02, -- fastest repeat interval
+			acceleration = config.keyRepeatAcceleration or 0.85, -- multiply interval by this each repeat
+		}
+
 		-- Slider state
 		self.sliderDragging = false
 		self.sliderValue = config.defaultValue or config.sliderMin or 0
@@ -234,8 +331,42 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			statusBarBackground = Color3ToRaylib(config.statusBarBackgroundColor or Color3.new(0.05, 0.05, 0.05), 0),
 			popupBackground = Color3ToRaylib(config.popupBackgroundColor or Color3.new(0.1, 0.1, 0.1), 0),
 			shadow = Color3ToRaylib(config.shadowColor or Color3.new(0, 0, 0), self.shadowTransparency),
+			-- New theme colors
+			hyperlink = Color3ToRaylib(config.hyperlinkColor or Color3.new(0.3, 0.5, 1), 0),
+			scrollbar = Color3ToRaylib(config.scrollbarColor or Color3.new(0.3, 0.3, 0.3), 0),
+			scrollbarHover = Color3ToRaylib(config.scrollbarHoverColor or Color3.new(0.4, 0.4, 0.4), 0),
+			minimapBackground = Color3ToRaylib(config.minimapBackgroundColor or Color3.new(0.05, 0.05, 0.05), 0),
+			minimapSelection = Color3ToRaylib(config.minimapSelectionColor or Color3.new(0.2, 0.4, 0.8), 0.5),
 		}
 		self.autocompleteTheme = config.autocompleteTheme or default_theme.autocomplete or {}
+
+		-- New state for additional features
+		self.columnSelection = { active = false, startLine = 0, startCol = 0, endLine = 0, endCol = 0 }
+		self.dragState = { isDragging = false, startPos = nil, dragText = "" }
+		self.incSearch = { active = false, query = "" }
+		self.imeState = { active = false, composition = "", startPos = 0 }
+		self.ctxMenu = { visible = false, x = 0, y = 0, items = {} }
+		self.minimapState = { scrollX = 0 }
+		self.virtualTextState = { enabled = true, cutoff = self.virtualTextCutoff }
+		self.focusRingAnim = { progress = 0, target = 0, speed = self.focusRingSpeed }
+		self.scrollbarState = { visible = false, dragging = false, hoverY = 0 }
+
+		-- Accelerated key repeat state
+		self.keyRepeat = {
+			lastBackspaceTime = 0,
+			lastDeleteTime = 0,
+			backspaceCount = 0,
+			deleteCount = 0,
+			initialDelay = self.keyRepeatConfig.initialDelay,
+			minInterval = self.keyRepeatConfig.minInterval,
+			acceleration = self.keyRepeatConfig.acceleration,
+		}
+
+		-- Performance cache
+		self.textCache = {}
+		self.cacheDirty = true
+		self.lineWidthCache = {}
+		self.hyperlinkCache = {}
 
 		-- State
 		self.buffer = ideBuffer.create()
@@ -998,6 +1129,379 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 	end
 
+	-- Performance: invalidate cache
+	function TextBox:invalidateCache()
+		self.cacheDirty = true
+		self.lineWidthCache = {}
+		self.hyperlinkCache = {}
+	end
+
+	-- Get cached line width
+	function TextBox:getCachedLineWidth(lineIndex)
+		if self.lineWidthCache[lineIndex] and self.lineWidthCache[lineIndex][self.fontSize] then
+			return self.lineWidthCache[lineIndex][self.fontSize]
+		end
+		return nil
+	end
+
+	-- Set cached line width
+	function TextBox:setCachedLineWidth(lineIndex, width)
+		if not self.lineWidthCache[lineIndex] then
+			self.lineWidthCache[lineIndex] = {}
+		end
+		self.lineWidthCache[lineIndex][self.fontSize] = width
+	end
+
+	-- Detect hyperlinks in a line
+	function TextBox:detectHyperlinks(line)
+		if self.hyperlinkCache[line] then
+			return self.hyperlinkCache[line]
+		end
+
+		local hyperlinks = {}
+		local urlPattern = "(https?://[%w%p]+)"
+		local startPos = 1
+
+		while startPos <= #line do
+			local urlStart, urlEnd = line:find(urlPattern, startPos)
+			if not urlStart then
+				break
+			end
+			table.insert(hyperlinks, { start = urlStart, finish = urlEnd, text = line:sub(urlStart, urlEnd) })
+			startPos = urlEnd + 1
+		end
+
+		self.hyperlinkCache[line] = hyperlinks
+		return hyperlinks
+	end
+
+	-- Get context menu items
+	function TextBox:getContextMenuItems()
+		if self.customContextMenu then
+			return self.customContextMenu
+		end
+		return getDefaultContextMenuItems()
+	end
+
+	-- Show context menu
+	function TextBox:showContextMenu(x, y)
+		if not self.contextMenu then
+			return
+		end
+		self.ctxMenu.visible = true
+		self.ctxMenu.x = x
+		self.ctxMenu.y = y
+		self.ctxMenu.items = self:getContextMenuItems()
+	end
+
+	-- Hide context menu
+	function TextBox:hideContextMenu()
+		self.ctxMenu.visible = false
+	end
+
+	-- Draw context menu
+	function TextBox:drawContextMenu()
+		if not self.ctxMenu.visible or #self.ctxMenu.items == 0 then
+			return
+		end
+
+		local menuWidth = 180
+		local itemHeight = 28
+		local menuHeight = #self.ctxMenu.items * itemHeight + 8
+		local x = self.ctxMenu.x
+		local y = self.ctxMenu.y
+
+		-- Clamp to viewport
+		local viewportW, viewportH
+		if type(raylib.GetScreenWidth) == "function" then
+			viewportW = raylib.GetScreenWidth()
+			viewportH = raylib.GetScreenHeight()
+		else
+			viewportW = 1920
+			viewportH = 1080
+		end
+		x = math.min(x, viewportW - menuWidth - 10)
+		y = math.min(y, viewportH - menuHeight - 10)
+
+		-- Draw background
+		local menuRect = structs.Rectangle:new({ x = x, y = y, width = menuWidth, height = menuHeight })
+		raylib.DrawRectangleRounded(menuRect, self.popupCornerRadius, self.cornerSegments, self.theme.popupBackground)
+		raylib.DrawRectangleRoundedLinesEx(menuRect, self.popupCornerRadius, self.cornerSegments, 1, self.theme.border)
+
+		-- Draw items
+		local mousePos = raylib.GetMousePosition()
+		for i, item in ipairs(self.ctxMenu.items) do
+			if item.type == "separator" then
+				-- Separator line
+				raylib.DrawLine(
+					x + 8,
+					y + i * itemHeight - 2,
+					x + menuWidth - 8,
+					y + i * itemHeight - 2,
+					self.theme.border
+				)
+			else
+				local itemY = y + (i - 1) * itemHeight + 4
+				local itemRect = { x = x + 4, y = itemY, width = menuWidth - 8, height = itemHeight }
+				local hovered = isMouseInRect(itemRect, mousePos)
+
+				if hovered then
+					raylib.DrawRectangle(
+						itemRect.x,
+						itemRect.y,
+						itemRect.width,
+						itemRect.height,
+						Color3ToRaylib(Color3.new(0.2, 0.4, 0.8), 0)
+					)
+				end
+
+				-- Draw label
+				raylib.DrawTextEx(vend, item.label or "", vector.create(x + 12, itemY + 6), 14, 1, self.theme.text)
+
+				-- Draw shortcut
+				if item.shortcut then
+					raylib.DrawTextEx(
+						vend,
+						item.shortcut,
+						vector.create(x + menuWidth - 50, itemY + 6),
+						12,
+						1,
+						Color3ToRaylib(Color3.new(0.5, 0.5, 0.5), 0)
+					)
+				end
+			end
+		end
+	end
+
+	-- Draw scrollbar
+	function TextBox:drawScrollbar(x, y, width, height, lineHeight)
+		if not self.enableScrollbar or not self.scrollable or self.maxScroll <= 0 then
+			return
+		end
+
+		local scrollbarX = x + width - self.scrollbarWidth - 4
+		local scrollbarHeight = height - 30 -- Account for status bar
+		local thumbHeight = math.max(20, (height / (#self.buffer.lines + 1)) * scrollbarHeight)
+		local thumbY = y + 4 + (self.scrollY / self.maxScroll) * (scrollbarHeight - thumbHeight)
+
+		-- Draw track
+		raylib.DrawRectangle(scrollbarX, y + 4, self.scrollbarWidth, scrollbarHeight, self.theme.scrollbar)
+
+		-- Draw thumb
+		local mousePos = raylib.GetMousePosition()
+		local thumbRect = { x = scrollbarX, y = thumbY, width = self.scrollbarWidth, height = thumbHeight }
+		local hovered = isMouseInRect(thumbRect, mousePos)
+		local thumbColor = (hovered or self.scrollbarState.dragging) and self.theme.scrollbarHover
+			or self.theme.scrollbar
+		thumbColor = Color3ToRaylib(Color3.new(0.4, 0.4, 0.4), 0)
+		raylib.DrawRectangleRounded(structs.Rectangle:new(thumbRect), 0.3, 4, thumbColor)
+
+		-- Handle scrollbar interaction
+		if raylib.IsMouseButtonPressed(0) == 1 then
+			if hovered then
+				self.scrollbarState.dragging = true
+			else
+				-- Click on track to jump
+				local relY = mousePos.y - (y + 4)
+				local percent = relY / (scrollbarHeight - thumbHeight)
+				self.scrollY = percent * self.maxScroll
+				self.scrollY = math.clamp(self.scrollY, 0, self.maxScroll)
+			end
+		end
+
+		if self.scrollbarState.dragging and raylib.IsMouseButtonDown(0) == 0 then
+			self.scrollbarState.dragging = false
+		end
+
+		if self.scrollbarState.dragging then
+			local relY = mousePos.y - (y + 4)
+			local percent = math.clamp(relY / (scrollbarHeight - thumbHeight), 0, 1)
+			self.scrollY = percent * self.maxScroll
+			self.scrollY = math.clamp(self.scrollY, 0, self.maxScroll)
+		end
+	end
+
+	-- Draw minimap
+	function TextBox:drawMinimap(x, y, width, height, lineHeight)
+		if not self.enableMinimap or #self.buffer.lines < 50 then
+			return
+		end
+
+		local minimapX = x + width - self.minimapWidth - 16
+		local minimapHeight = height - 30
+		local minimapY = y + 10
+
+		-- Draw background
+		raylib.DrawRectangle(minimapX, minimapY, self.minimapWidth, minimapHeight, self.theme.minimapBackground)
+
+		-- Calculate scale
+		local totalLines = #self.buffer.lines
+		local lineScale = minimapHeight / totalLines
+		local visibleStart = math.floor(self.scrollY / lineHeight) + 1
+		local visibleEnd = math.ceil((self.scrollY + height) / lineHeight)
+
+		-- Draw visible region
+		local visStartY = minimapY + (visibleStart - 1) * lineScale
+		local visHeight = (visibleEnd - visibleStart + 1) * lineScale
+		raylib.DrawRectangle(minimapX, visStartY, self.minimapWidth, visHeight, self.theme.minimapSelection)
+
+		-- Draw text preview (simplified)
+		for i = 1, totalLines do
+			local lineY = minimapY + (i - 1) * lineScale
+			if lineScale >= 2 then
+				local line = self.buffer.lines[i]
+				local previewText = #line > 0 and line:sub(1, math.min(#line, 30)) or ""
+				if #previewText > 0 then
+					raylib.DrawTextEx(
+						vend,
+						previewText,
+						vector.create(minimapX + 2, lineY),
+						6,
+						0,
+						Color3ToRaylib(Color3.new(0.4, 0.4, 0.4), 0)
+					)
+				end
+			end
+		end
+
+		-- Minimap click to scroll
+		local mousePos = raylib.GetMousePosition()
+		local minimapRect = { x = minimapX, y = minimapY, width = self.minimapWidth, height = minimapHeight }
+		if raylib.IsMouseButtonPressed(0) == 1 and isMouseInRect(minimapRect, mousePos) then
+			local relY = mousePos.y - minimapY
+			local percent = relY / minimapHeight
+			self.scrollY = percent * self.maxScroll
+			self.scrollY = math.clamp(self.scrollY, 0, self.maxScroll)
+		end
+	end
+
+	-- Draw animated focus ring
+	function TextBox:drawFocusRing(x, y, width, height)
+		if not self.enableAnimatedFocus then
+			return
+		end
+
+		-- Update animation
+		local target = self.isFocused and 1 or 0
+		if self.focusRingAnim.target ~= target then
+			self.focusRingAnim.target = target
+		end
+
+		-- Lerp towards target
+		local speed = self.focusRingAnim.speed * raylib.GetFrameTime()
+		self.focusRingAnim.progress = self.focusRingAnim.progress
+			+ (self.focusRingAnim.target - self.focusRingAnim.progress) * speed
+
+		if self.focusRingAnim.progress > 0.01 then
+			-- Draw animated border
+			local inset = 2
+			local ringColor = Color3ToRaylib(
+				Color3.new(
+					0.4 + 0.2 * self.focusRingAnim.progress,
+					0.6 + 0.2 * self.focusRingAnim.progress,
+					1.0 * self.focusRingAnim.progress
+				),
+				0
+			)
+			if self.cornerRadius > 0 then
+				raylib.DrawRectangleRoundedLinesEx(
+					structs.Rectangle:new({
+						x = x + inset,
+						y = y + inset,
+						width = width - inset * 2,
+						height = height - inset * 2,
+					}),
+					self.cornerRadius,
+					self.cornerSegments,
+					2,
+					ringColor
+				)
+			else
+				raylib.DrawRectangleLinesEx(
+					structs.Rectangle:new({
+						x = x + inset,
+						y = y + inset,
+						width = width - inset * 2,
+						height = height - inset * 2,
+					}),
+					2,
+					ringColor
+				)
+			end
+		end
+	end
+
+	-- Handle column selection (Alt+drag)
+	function TextBox:startColumnSelection(line, col)
+		if not self.enableColumnSelection or not self.multiline then
+			return
+		end
+		self.columnSelection.active = true
+		self.columnSelection.startLine = line
+		self.columnSelection.startCol = col
+		self.columnSelection.endLine = line
+		self.columnSelection.endCol = col
+	end
+
+	function TextBox:updateColumnSelection(line, col)
+		if not self.columnSelection.active then
+			return
+		end
+		self.columnSelection.endLine = line
+		self.columnSelection.endCol = col
+	end
+
+	function TextBox:endColumnSelection()
+		self.columnSelection.active = false
+	end
+
+	-- Draw column selection
+	function TextBox:drawColumnSelection(x, y, gutterWidth, lineHeight, spacing)
+		if not self.columnSelection.active then
+			return
+		end
+
+		local sL = math.min(self.columnSelection.startLine, self.columnSelection.endLine)
+		local eL = math.max(self.columnSelection.startLine, self.columnSelection.endLine)
+		local sC = math.min(self.columnSelection.startCol, self.columnSelection.endCol)
+		local eC = math.max(self.columnSelection.startCol, self.columnSelection.endCol)
+
+		for i = sL, eL do
+			local line = self.buffer.lines[i]
+			if line then
+				local ly = y + self.padding + (i - 1) * lineHeight - self.scrollY
+				local x1 = x
+					+ gutterWidth
+					+ self.padding
+					+ measureTextWidth(line:sub(1, sC - 1), self.fontSize, spacing)
+				local x2 = x
+					+ gutterWidth
+					+ self.padding
+					+ measureTextWidth(line:sub(1, eC - 1), self.fontSize, spacing)
+				raylib.DrawRectangle(x1, ly, x2 - x1, lineHeight, self.theme.selection)
+			end
+		end
+	end
+
+	-- Handle drag and drop
+	function TextBox:startDrag(x, y)
+		if not self.enableDragDrop or not self.buffer.selection.active then
+			return
+		end
+		self.dragState.isDragging = true
+		self.dragState.startPos = { x = x, y = y }
+		self.dragState.dragText = self:getSelectedText()
+	end
+
+	function TextBox:endDrag(x, y)
+		if not self.dragState.isDragging then
+			return
+		end
+		self.dragState.isDragging = false
+		-- Insert text at drop location if different from start
+		-- (simplified - actual implementation would need position calculation)
+	end
+
 	function TextBox:draw(x, y, width, height)
 		local dt = raylib.GetFrameTime()
 
@@ -1076,6 +1580,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		else
 			raylib.DrawRectangleLinesEx(boxRect, borderWidth, borderColor)
 		end
+
+		-- Draw animated focus ring
+		self:drawFocusRing(x, y, width, height)
 
 		-- Draw gutter background
 		if self.showLineNumbers then
@@ -1218,6 +1725,22 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				local displayLine = line
 				if self.mask and #line > 0 then
 					displayLine = string.rep(self.mask, #line)
+				end
+
+				-- Draw hyperlinks if enabled
+				if self.enableHyperlinks and not self.mask then
+					local hyperlinks = self:detectHyperlinks(line)
+					for _, link in ipairs(hyperlinks) do
+						local x1 = x
+							+ gutterWidth
+							+ self.padding
+							+ measureTextWidth(line:sub(1, link.start - 1), self.fontSize, spacing)
+						local x2 = x
+							+ gutterWidth
+							+ self.padding
+							+ measureTextWidth(line:sub(1, link.finish), self.fontSize, spacing)
+						raylib.DrawLine(x1, yLine + lineHeight - 2, x2, yLine + lineHeight - 2, self.theme.hyperlink)
+					end
 				end
 
 				-- Draw line content with syntax highlighting if available
@@ -1482,6 +2005,18 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 		end
 
+		-- Draw scrollbar
+		self:drawScrollbar(x, y, width, height, lineHeight)
+
+		-- Draw minimap
+		self:drawMinimap(x, y, width, height, lineHeight)
+
+		-- Draw column selection
+		self:drawColumnSelection(x, y, gutterWidth, lineHeight, spacing)
+
+		-- Draw context menu
+		self:drawContextMenu()
+
 		-- Handle mouse wheel scrolling
 		if
 			self.scrollable
@@ -1545,26 +2080,54 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			else
 				self:blur()
 			end
-		elseif raylib.IsMouseButtonDown(0) == 1 and self.isFocused and isInBounds then
-			-- Handle dragging selection
-			local relX = mousePos.x - (x + gutterWidth + self.padding)
-			local relY = mousePos.y - (y + self.padding) + self.scrollY
-
-			local clickedLine = math.clamp(math.floor(relY / lineHeight) + 1, 1, #self.buffer.lines)
-			local clickedCol = getColumnFromX(self.buffer.lines[clickedLine], relX, self.fontSize, spacing)
-
-			self.buffer.cursor.line = clickedLine
-			self.buffer.cursor.col = clickedCol
-			self.buffer.selection.endLine = clickedLine
-			self.buffer.selection.endCol = clickedCol
-
-			if
-				self.buffer.selection.startLine == self.buffer.selection.endLine
-				and self.buffer.selection.startCol == self.buffer.selection.endCol
-			then
-				self.buffer.selection.active = false
+		elseif raylib.IsMouseButtonPressed(1) == 1 then
+			-- Right-click for context menu
+			if isInBounds and self.contextMenu then
+				local mousePos = raylib.GetMousePosition()
+				self:showContextMenu(mousePos.x, mousePos.y)
 			else
-				self.buffer.selection.active = true
+				self:hideContextMenu()
+			end
+		elseif raylib.IsMouseButtonPressed(2) == 1 then
+			-- Middle click - close context menu if clicked outside
+			self:hideContextMenu()
+		elseif raylib.IsMouseButtonDown(0) == 1 and self.isFocused and isInBounds then
+			-- Check for Alt key for column selection
+			local altHeld = raylib.IsKeyDown(const.KeyboardKey.KEY_LEFT_ALT) == 1
+				or raylib.IsKeyDown(const.KeyboardKey.KEY_RIGHT_ALT) == 1
+
+			if altHeld and self.enableColumnSelection then
+				-- Handle column selection (Alt+drag)
+				if not self.columnSelection.active then
+					self:startColumnSelection(self.buffer.cursor.line, self.buffer.cursor.col)
+				else
+					local relX = mousePos.x - (x + gutterWidth + self.padding)
+					local relY = mousePos.y - (y + self.padding) + self.scrollY
+					local clickedLine = math.clamp(math.floor(relY / lineHeight) + 1, 1, #self.buffer.lines)
+					local clickedCol = getColumnFromX(self.buffer.lines[clickedLine], relX, self.fontSize, spacing)
+					self:updateColumnSelection(clickedLine, clickedCol)
+				end
+			else
+				-- Handle dragging selection
+				local relX = mousePos.x - (x + gutterWidth + self.padding)
+				local relY = mousePos.y - (y + self.padding) + self.scrollY
+
+				local clickedLine = math.clamp(math.floor(relY / lineHeight) + 1, 1, #self.buffer.lines)
+				local clickedCol = getColumnFromX(self.buffer.lines[clickedLine], relX, self.fontSize, spacing)
+
+				self.buffer.cursor.line = clickedLine
+				self.buffer.cursor.col = clickedCol
+				self.buffer.selection.endLine = clickedLine
+				self.buffer.selection.endCol = clickedCol
+
+				if
+					self.buffer.selection.startLine == self.buffer.selection.endLine
+					and self.buffer.selection.startCol == self.buffer.selection.endCol
+				then
+					self.buffer.selection.active = false
+				else
+					self.buffer.selection.active = true
+				end
 			end
 		end
 
@@ -1793,33 +2356,108 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 		end
 
-		-- Backspace
-		if raylib.IsKeyPressed(const.KeyboardKey.KEY_BACKSPACE) == 1 then
-			self:saveHistory()
+		-- Backspace with acceleration
+		if raylib.IsKeyDown(const.KeyboardKey.KEY_BACKSPACE) == 1 then
+			local currentTime = os.clock()
+			local timeSinceLast = currentTime - self.keyRepeat.lastBackspaceTime
+			local shouldDelete = false
+
+			-- Handle selection deletion on first press
 			if self.buffer.selection.active then
+				self:saveHistory()
 				self.buffer:deleteSelection()
+				if self.onChange then
+					self.onChange(self:getText())
+				end
+				self:validate()
+				self:updateAutocomplete()
 			else
-				self.buffer:backspace()
+				-- Initial delay before acceleration starts
+				if self.keyRepeat.backspaceCount == 0 then
+					if timeSinceLast > self.keyRepeat.initialDelay then
+						shouldDelete = true
+						self.keyRepeat.backspaceCount = 1
+					end
+				else
+					-- Calculate accelerated interval
+					local interval = self.keyRepeat.minInterval
+					for i = 1, self.keyRepeat.backspaceCount do
+						interval = interval / self.keyRepeat.acceleration
+					end
+					interval = math.max(interval, self.keyRepeat.minInterval)
+
+					if timeSinceLast > interval then
+						shouldDelete = true
+						self.keyRepeat.backspaceCount = self.keyRepeat.backspaceCount + 1
+					end
+				end
+
+				self.keyRepeat.lastBackspaceTime = currentTime
+
+				if shouldDelete then
+					self:saveHistory()
+					self.buffer:backspace()
+					if self.onChange then
+						self.onChange(self:getText())
+					end
+					self:validate()
+					self:updateAutocomplete()
+				end
 			end
-			if self.onChange then
-				self.onChange(self:getText())
-			end
-			self:validate()
-			self:updateAutocomplete()
+		else
+			-- Reset backspace count when key is released
+			self.keyRepeat.backspaceCount = 0
 		end
 
-		-- Delete key
-		if raylib.IsKeyPressed(const.KeyboardKey.KEY_DELETE) == 1 then
-			self:saveHistory()
+		-- Delete key with acceleration
+		if raylib.IsKeyDown(const.KeyboardKey.KEY_DELETE) == 1 then
+			local currentTime = os.clock()
+			local timeSinceLast = currentTime - self.keyRepeat.lastDeleteTime
+			local shouldDelete = false
+
+			-- Handle selection deletion on first press
 			if self.buffer.selection.active then
+				self:saveHistory()
 				self.buffer:deleteSelection()
+				if self.onChange then
+					self.onChange(self:getText())
+				end
+				self:validate()
 			else
-				self.buffer:delete()
+				-- Initial delay before acceleration starts
+				if self.keyRepeat.deleteCount == 0 then
+					if timeSinceLast > self.keyRepeat.initialDelay then
+						shouldDelete = true
+						self.keyRepeat.deleteCount = 1
+					end
+				else
+					-- Calculate accelerated interval
+					local interval = self.keyRepeat.minInterval
+					for i = 1, self.keyRepeat.deleteCount do
+						interval = interval / self.keyRepeat.acceleration
+					end
+					interval = math.max(interval, self.keyRepeat.minInterval)
+
+					if timeSinceLast > interval then
+						shouldDelete = true
+						self.keyRepeat.deleteCount = self.keyRepeat.deleteCount + 1
+					end
+				end
+
+				self.keyRepeat.lastDeleteTime = currentTime
+
+				if shouldDelete then
+					self:saveHistory()
+					self.buffer:delete()
+					if self.onChange then
+						self.onChange(self:getText())
+					end
+					self:validate()
+				end
 			end
-			if self.onChange then
-				self.onChange(self:getText())
-			end
-			self:validate()
+		else
+			-- Reset delete count when key is released
+			self.keyRepeat.deleteCount = 0
 		end
 
 		-- Escape key
@@ -1962,14 +2600,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			updateSelection()
 		end
 
-		-- Ctrl shortcuts
+		-- Ctrl shortcuts (using IsKeyPressed for faster response)
 		if ctrl then
-			if raylib.IsKeyReleased(const.KeyboardKey.KEY_C) == 1 then
+			if raylib.IsKeyPressed(const.KeyboardKey.KEY_C) == 1 then
 				local text = self.buffer:getSelectedText()
 				if #text > 0 then
 					raylib.SetClipboardText(text)
 				end
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_X) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_X) == 1 then
 				local text = self.buffer:getSelectedText()
 				if #text > 0 then
 					self:saveHistory()
@@ -1980,9 +2618,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					end
 					self:validate()
 				end
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_A) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_A) == 1 then
 				self:selectAll()
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_V) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_V) == 1 then
 				self:saveHistory()
 				if self.buffer.selection.active then
 					self.buffer:deleteSelection()
@@ -2016,23 +2654,23 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					self:validate()
 					self:updateAutocomplete()
 				end
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_Z) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_Z) == 1 then
 				if shift then
 					self:redo()
 				else
 					self:undo()
 				end
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_Y) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_Y) == 1 then
 				self:redo()
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_D) == 1 and self.multiline then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_D) == 1 and self.multiline then
 				self:duplicateLine()
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_F) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_F) == 1 then
 				self.search.active = not self.search.active
 				if self.search.active then
 					self.search.query = self.buffer:getSelectedText():gsub("\n", "")
 					self:updateSearch()
 				end
-			elseif raylib.IsKeyReleased(const.KeyboardKey.KEY_H) == 1 then
+			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_H) == 1 then
 				self.replace.active = not self.replace.active
 				if self.replace.active then
 					self.search.active = true

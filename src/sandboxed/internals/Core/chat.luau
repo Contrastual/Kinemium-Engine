@@ -42,6 +42,7 @@ for i = 1, numMessages do
 	exampleFrame.Position = UDim2.new(0, 10, 0, (i - 1) * (messageHeight + 5))
 	exampleFrame.BackgroundTransparency = 1
 	exampleFrame.Text = "Hello World"
+	exampleFrame.Font = Enum.Font.Filted
 	exampleFrame.TextXAlignment = Enum.TextXAlignment.Left
 	exampleFrame.TextColor3 = Color3.new(1, 1, 1)
 	exampleFrame.TextSize = 18

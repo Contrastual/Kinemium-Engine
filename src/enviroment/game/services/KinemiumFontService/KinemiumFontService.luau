@@ -74,8 +74,8 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 				cache[transformed] = true
 				renderer.Font.new(transformed, path, 64)
 				fontCount += 1
-				print("FONTSERVICE | Loaded font " .. transformed)
 			end
+			print(cache)
 			print("FONTSERVICE | Loaded " .. fontCount .. " fonts.")
 		end,
 		FontAdded = FontAdded,

@@ -19,7 +19,6 @@ return function(objects, data)
 		textColor = color3.new(0.86, 0.86, 0.86),
 		dimTextColor = color3.new(0.5, 0.5, 0.5),
 
-		-- Zone colors (vibrant for flame graph)
 		zoneColors = {
 			color3.new(0.95, 0.35, 0.24), -- Red-orange
 			color3.new(0.98, 0.68, 0.24), -- Orange

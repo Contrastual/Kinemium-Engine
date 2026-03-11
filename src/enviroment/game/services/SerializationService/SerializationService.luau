@@ -24,11 +24,60 @@ local BoundingBox = require("@BoundingBox")
 local SerializationService = Instance.new("SerializationService")
 SerializationService.ExplorerHidden = true
 
-local blacklisted = {
-	"function",
-	"userdata",
-	"FFIPointer",
-	"buffer",
+local BLACKLISTED_TYPES = {
+	["function"] = true,
+	["userdata"] = true,
+	["FFIPointer"] = true,
+	["buffer"] = true,
+}
+
+local TYPE_DESERIALIZERS = {
+	Vector3 = function(v)
+		return Vector3.FromTable(v)
+	end,
+	CFrame = function(v)
+		return CFrame.FromTable(v)
+	end,
+	Color3 = function(v)
+		return Color3.FromTable(v)
+	end,
+	Color4 = function(v)
+		return Color4.FromTable(v)
+	end,
+	UDim = function(v)
+		return UDim.FromTable(v)
+	end,
+	UDim2 = function(v)
+		return UDim2.FromTable(v)
+	end,
+	Ray = function(v)
+		return Ray.FromTable(v)
+	end,
+	NumberSequence = function(v)
+		return NumberSequence.FromTable(v)
+	end,
+	NumberSequenceKeypoint = function(v)
+		return NumberSequenceKeypoint.FromTable(v)
+	end,
+	ColorSequence = function(v)
+		return ColorSequence.FromTable(v)
+	end,
+	ColorSequenceKeypoint = function(v)
+		return ColorSequenceKeypoint.FromTable(v)
+	end,
+	BrickColorMap = function(v)
+		return BrickColorMap.FromTable(v)
+	end,
+	CustomPhysicalProperties = function(v)
+		return CustomPhysicalProperties.FromTable(v)
+	end,
+	BoundingBox = function(v)
+		return BoundingBox.FromTable(v)
+	end,
+	EnumItem = function(v)
+		print("Got enum item ", v)
+		return Enum[v.EnumType][v.Name]
+	end,
 }
 
 local function compress(tbl)
@@ -37,159 +86,135 @@ local function compress(tbl)
 end
 
 local function decompress(str)
-	local compressed = zstd.decompress(str)
-	return encoder.decode(compressed)
+	local decompressed = zstd.decompress(str)
+	return encoder.decode(decompressed)
 end
 
 local function serialize_value(value)
-	if type(value) == "table" then
-		if value["ToTable"] then
-			print(value)
-			return value:ToTable()
-		end
-	elseif table.find(blacklisted, typeof(value)) then
-		return nil
-	else
-		return value
+	local t = typeof(value)
+	if BLACKLISTED_TYPES[t] then
+		return nil, false
 	end
+	if type(value) == "table" then
+		if value.ToTable then
+			return value:ToTable(), true
+		end
+		return nil, false
+	end
+	return value, true
 end
 
 local function serialize_object(object)
 	local result = {
-		c = object.ClassName,
-		n = object.Name,
-		p = {},
-		ch = {},
-		at = {},
-		t = object.tags,
+		c = object.ClassName, -- class name
+		n = object.Name, -- instance name
+		p = {}, -- properties
+		ch = {}, -- children (array)
+		at = {}, -- attributes
+		t = {}, -- tags
 	}
 
 	for propname, propvalue in pairs(object._props) do
-		if type(propvalue) == "buffer" then
+		if type(propname) == "buffer" or type(propvalue) == "buffer" then
 			continue
 		end
-		if type(propname) == "buffer" then
-			continue
+		local serialized, ok = serialize_value(propvalue)
+		if ok then
+			result.p[propname] = serialized
 		end
-		if type(propvalue) == "table" then
-			continue
-		end
-		result.p[propname] = serialize_value(propvalue)
 	end
 
-	for propname, propvalue in pairs(object:GetAttributes()) do
-		if type(propvalue) == "table" then
-			continue
+	for attrname, attrvalue in pairs(object:GetAttributes()) do
+		local serialized, ok = serialize_value(attrvalue)
+		if ok then
+			result.at[attrname] = serialized
 		end
-		result.at[propname] = serialize_value(propvalue)
 	end
 
-	for _, tag in pairs(object:GetTags()) do
+	for _, tag in ipairs(object:GetTags()) do
 		table.insert(result.t, tag)
 	end
 
-	for _, child in pairs(object:GetChildren()) do
-		result.ch[child.Name] = serialize_object(child)
+	for _, child in ipairs(object:GetChildren()) do
+		table.insert(result.ch, serialize_object(child))
 	end
 
 	return result
 end
 
-local function fromtble(v)
-	if not v then
-		return
+local function deserialize_value(v)
+	if type(v) ~= "table" then
+		return v
 	end
 	if v.type then
-		if v.type == "Vector3" then
-			return Vector3.FromTable(v)
-		elseif v.type == "CFrame" then
-			return CFrame.FromTable(v)
-		elseif v.type == "Color3" then
-			return Color3.FromTable(v)
-		elseif v.type == "Color4" then
-			return Color4.FromTable(v)
-		elseif v.type == "UDim" then
-			return UDim.FromTable(v)
-		elseif v.type == "UDim2" then
-			return UDim2.FromTable(v)
-		elseif v.type == "Ray" then
-			return Ray.FromTable(v)
-		elseif v.type == "NumberSequence" then
-			return NumberSequence.FromTable(v)
-		elseif v.type == "NumberSequenceKeypoint" then
-			return NumberSequenceKeypoint.FromTable(v)
-		elseif v.type == "ColorSequence" then
-			return ColorSequence.FromTable(v)
-		elseif v.type == "ColorSequenceKeypoint" then
-			return ColorSequenceKeypoint.FromTable(v)
-		elseif v.type == "BrickColorMap" then
-			return BrickColorMap.FromTable(v)
-		elseif v.type == "CustomPhysicalProperties" then
-			return CustomPhysicalProperties.FromTable(v)
-		elseif v.type == "BoundingBox" then
-			return BoundingBox.FromTable(v)
-		elseif v.type == "EnumItem" then
-			return Enum[v.EnumType][v.Name]
+		local deserializer = TYPE_DESERIALIZERS[v.type]
+		if deserializer then
+			return deserializer(v)
+		else
+			warn("Unknown type tag during deserialization: " .. tostring(v.type))
 		end
 	end
+	return v
 end
 
 SerializationService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	local function deserialize_object(tbl)
 		if not Registry.ClassValid(tbl.c) then
-			warn(`Class {tbl.c} not found`)
-			return
+			warn("Class not found: " .. tostring(tbl.c))
+			return nil
 		end
+
 		local obj = Registry.new(tbl.c, renderer, datamodel)
 		obj.Name = tbl.n
 
 		for k, v in pairs(tbl.p) do
-			if type(v) == "table" then
-				obj._props[k] = fromtble(v)
-			else
-				obj._props[k] = v
+			local ok, err = pcall(function()
+				obj._props[k] = deserialize_value(v)
+			end)
+			if not ok then
+				warn(("Failed to set property %q on %s: %s"):format(k, tbl.c, err))
 			end
 		end
 
-		for _, childTbl in pairs(tbl.ch) do
-			local child = deserialize_object(childTbl)
-			child.Parent = obj
+		for k, v in pairs(tbl.at or {}) do
+			local ok, err = pcall(function()
+				obj:SetAttribute(k, deserialize_value(v))
+			end)
+			if not ok then
+				warn(("Failed to set attribute %q on %s: %s"):format(k, tbl.c, err))
+			end
 		end
 
-		-- table of strings, just apply
 		obj.tags = tbl.t or {}
 
-		for k, v in pairs(tbl.at or {}) do
-			-- decode value also
-			obj:SetAttribute(k, fromtble(v))
+		for _, childTbl in ipairs(tbl.ch) do
+			local child = deserialize_object(childTbl)
+			if child then
+				child.Parent = obj
+			end
 		end
 
 		return obj
 	end
 
 	SerializationService:SetProperties({
-		SerializeInstancesAsync = function(m)
+		SerializeInstancesAsync = function(instances)
 			local objects = {}
-
-			for _, v in pairs(m) do
-				local serialized = serialize_object(v)
-				table.insert(objects, serialized)
+			for _, v in ipairs(instances) do
+				table.insert(objects, serialize_object(v))
 			end
-
-			local compressed = compress(objects)
-			return compressed
+			return compress(objects)
 		end,
+
 		Deserialize = function(str)
 			local tbl = decompress(str)
 			local instances = {}
-			for _, objTbl in pairs(tbl) do
-				local success, deserialized = pcall(function()
-					return deserialize_object(objTbl)
-				end)
-				if success then
-					table.insert(instances, deserialized)
+			for _, objTbl in ipairs(tbl) do
+				local ok, result = pcall(deserialize_object, objTbl)
+				if ok and result then
+					table.insert(instances, result)
 				else
-					warn(`Failed to deserialize object {objTbl.class}: {deserialized}`)
+					warn(("Failed to deserialize object of class %q: %s"):format(tostring(objTbl.c), tostring(result)))
 				end
 			end
 			return instances
@@ -197,10 +222,11 @@ SerializationService.InitRenderer = function(renderer, renderer_signal, datamode
 
 		userdata = {
 			Encode = function(value)
-				return serialize_value(value)
+				local serialized, ok = serialize_value(value)
+				return ok and serialized or nil
 			end,
 			Decode = function(value)
-				return fromtble(value)
+				return deserialize_value(value)
 			end,
 		},
 	})

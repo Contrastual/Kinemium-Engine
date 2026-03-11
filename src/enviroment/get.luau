@@ -18,12 +18,26 @@ return function(renderer, Kinemium_camera)
 		getClasses = Registry.getClasses,
 	}
 	data.Enum = EnumMap
+	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
+
 	data.task = {
 		cancel = zune.task.cancel,
-		defer = zune.task.defer,
-		delay = zune.task.delay,
-		spawn = zune.task.spawn,
 		wait = zune.task.wait,
+		spawn = function(fn, ...)
+			local thread = zune.task.spawn(fn, ...)
+			ScriptRunnerService.RegisterUserThread(thread)
+			return thread
+		end,
+		defer = function(fn, ...)
+			local thread = zune.task.defer(fn, ...)
+			ScriptRunnerService.RegisterUserThread(thread)
+			return thread
+		end,
+		delay = function(dt, fn, ...)
+			local thread = zune.task.delay(dt, fn, ...)
+			ScriptRunnerService.RegisterUserThread(thread)
+			return thread
+		end,
 	}
 	data.game = mainDatamodel
 	data.ishared = {}
@@ -61,7 +75,6 @@ return function(renderer, Kinemium_camera)
 
 	terrainObject.Parent = mainDatamodel:GetService("Workspace")
 
-	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
 	ScriptRunnerService.InitEnviroment(data, mainDatamodel)
 
 	local LogService = mainDatamodel:GetService("LogService")

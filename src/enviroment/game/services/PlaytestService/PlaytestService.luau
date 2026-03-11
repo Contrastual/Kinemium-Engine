@@ -11,35 +11,36 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	PlaytestService:SetProperties({
 		CreatePlaytestAsync = function()
 			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
-			local SerializationService = datamodel:GetService("SerializationService")
-			local workspace = datamodel.Workspace
-			PlaytestService.IsPlaytesting = true
 
-			serialized = SerializationService.SerializeInstancesAsync({ datamodel })
+			-- 1. Snapshot BEFORE scripts touch anything
+			serialized = datamodel:Clone(true)
 
+			-- 2. Then run scripts against the live datamodel
 			for _, script in pairs(datamodel:GetDescendants()) do
 				if script.ClassName == "Script" then
+					log("Running script ", script)
 					ScriptRunnerService.RunScript(script)
 				end
 			end
+
+			PlaytestService.IsPlaytesting = true
 		end,
 
 		StopCurrentPlaytest = function()
-			local workspace = datamodel.Workspace
-			local SerializationService = datamodel:GetService("SerializationService")
-
-			local deserialized = SerializationService.Deserialize(serialized)
-
 			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
-			PlaytestService.IsPlaytesting = false
-
-			print("after")
-			print(deserialized)
-			for _, v in pairs(deserialized) do
-				print(v)
-			end
+			local PhysicsService = datamodel:GetService("KinemiumPhysicsService")
 
 			ScriptRunnerService.Clear()
+			PlaytestService.IsPlaytesting = false
+
+			if PhysicsService and PhysicsService.Unload then
+				pcall(PhysicsService.Unload)
+			end
+
+			datamodel:RestoreFrom(serialized)
+
+			serialized:Destroy()
+			serialized = nil
 		end,
 
 		IsPlaytesting = false,

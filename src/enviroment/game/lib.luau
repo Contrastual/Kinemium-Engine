@@ -91,6 +91,7 @@ function DataModel.new(RENDERER, ...)
 		service.Name = name
 		service.Parent = self
 		service.BaseClass = "Singleton"
+		service._props.BaseClass = "Singleton"
 	end
 
 	function self:GetService(v)

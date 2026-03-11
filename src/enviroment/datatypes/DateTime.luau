@@ -45,6 +45,65 @@ function DateTime:FormatUniversalTime(formatString, locale)
 	return os.date("!" .. formatString, self.UnixTimestamp)
 end
 
+function DateTime.fromUnixTimestampMillis(ms)
+	local self = setmetatable({}, DateTime)
+	self.UnixTimestampMillis = ms
+	self.UnixTimestamp = math.floor(ms / 1000)
+	return self
+end
+
+function DateTime:AddSeconds(seconds)
+	return DateTime.fromUnixTimestamp(self.UnixTimestamp + seconds)
+end
+
+function DateTime:AddMinutes(minutes)
+	return self:AddSeconds(minutes * 60)
+end
+
+function DateTime:AddHours(hours)
+	return self:AddSeconds(hours * 3600)
+end
+
+function DateTime:AddDays(days)
+	return self:AddSeconds(days * 86400)
+end
+
+function DateTime:Difference(other)
+	return self.UnixTimestamp - other.UnixTimestamp
+end
+
+function DateTime:IsBefore(other)
+	return self.UnixTimestamp < other.UnixTimestamp
+end
+
+function DateTime:IsAfter(other)
+	return self.UnixTimestamp > other.UnixTimestamp
+end
+
+function DateTime:IsEqual(other)
+	return self.UnixTimestamp == other.UnixTimestamp
+end
+
+function DateTime:ToLocalTable()
+	return os.date("*t", self.UnixTimestamp)
+end
+
+function DateTime:ToUniversalTable()
+	return os.date("!*t", self.UnixTimestamp)
+end
+
+function DateTime:ToUnixTimestampMillis()
+	return self.UnixTimestampMillis
+end
+
+function DateTime.fromLocalDate(tbl)
+	return DateTime.fromUnixTimestamp(os.time(tbl))
+end
+
+function DateTime.nowMillis()
+	return DateTime.fromUnixTimestampMillis(os.time() * 1000)
+end
+
 function DateTime:ToTable()
 	return {
 		type = "DateTime",
@@ -56,6 +115,10 @@ end
 function DateTime.FromTable(tbl)
 	assert(tbl.type == "DateTime", "Table is not a DateTime")
 	return DateTime.fromUnixTimestamp(tbl.UnixTimestamp)
+end
+
+function DateTime:__tostring()
+	return self:ToIsoDate()
 end
 
 return DateTime

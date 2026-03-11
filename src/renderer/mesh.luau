@@ -1,21 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
-local const = raylib.const
 local lib = raylib.lib
 local r3d = require("@r3d").lib
-
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local loadedMaterials = {}
-
 local modelRegistry = {}
 
 local function LoadMesh(meshId: string, filePath: string)
@@ -131,7 +117,7 @@ local function drawModel(model, part, loadedMaterials)
 		axis,
 		angle,
 		vector.create(part.Size.X, part.Size.Y, part.Size.Z),
-		Color3ToRaylib(part.Color, part.Transparency)
+		part.Color:ToRaylib(part.Transparency)
 	)
 end
 

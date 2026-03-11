@@ -10,8 +10,8 @@ local propTable = {}
 return {
 	class = "RemoteEvent",
 	callback = function(instance, renderer, datamodel)
-		local networkService = game.NetworkService
-		local SerializationService = game.SerializationService
+		local networkService = datamodel.NetworkService
+		local SerializationService = datamodel.SerializationService
 		local userdata = SerializationService.userdata
 
 		local KiNet = networkService.KiNet

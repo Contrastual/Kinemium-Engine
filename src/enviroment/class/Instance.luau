@@ -224,20 +224,171 @@ function Instance:IsA(className)
 	return self.ClassName == className or self.BaseClass == className
 end
 
-function Instance:Clone()
-	local copy = Instance.new(self.ClassName)
+function Instance:Clone(keepUniqueId)
+	local root = Instance.new(self.ClassName)
 
-	for k, v in pairs(self._props) do
-		if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
-			copy[k] = v
+	local srcProps = rawget(self, "_props")
+	local dstProps = rawget(root, "_props")
+	for k, v in pairs(srcProps) do
+		if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
+			dstProps[k] = v
+			rawset(root, k, v)
 		end
 	end
 
-	for _, child in ipairs(self.Children) do
-		child:Clone().Parent = copy
+	for k, v in pairs(self.tags) do
+		root.tags[k] = v
+	end
+	for k, v in pairs(self.attributes) do
+		root.attributes[k] = v
 	end
 
-	return copy
+	local queue = { { src = self, dst = root } }
+	local head = 1
+
+	while head <= #queue do
+		local pair = queue[head]
+		head = head + 1
+
+		local srcChildren = rawget(pair.src, "Children")
+		local dstParent = pair.dst
+
+		for _, child in ipairs(srcChildren) do
+			local copy = Instance.new(child.ClassName)
+
+			local cSrcProps = rawget(child, "_props")
+			local cDstProps = rawget(copy, "_props")
+			for k, v in pairs(cSrcProps) do
+				if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
+					cDstProps[k] = v
+					rawset(copy, k, v)
+				end
+			end
+
+			for k, v in pairs(child.tags) do
+				copy.tags[k] = v
+			end
+			for k, v in pairs(child.attributes) do
+				copy.attributes[k] = v
+			end
+
+			cDstProps.Parent = dstParent
+			table.insert(rawget(dstParent, "Children"), copy)
+			table.insert(queue, { src = child, dst = copy })
+		end
+	end
+
+	return root
+end
+
+function Instance:InheritFrom(source, baseline)
+	local function inheritSingle(dst, src, base)
+		local dstProps = rawget(dst, "_props")
+		local srcProps = rawget(src, "_props")
+		local baseProps = rawget(base, "_props")
+
+		if not dstProps or not srcProps or not baseProps then
+			return
+		end
+
+		for k, v in pairs(srcProps) do
+			if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
+				local baseVal = baseProps[k]
+				-- only inherit if the live value differs from baseline (i.e. it was changed)
+				if v ~= baseVal then
+					dstProps[k] = v
+					rawset(dst, k, v)
+				end
+			end
+		end
+
+		for k, v in pairs(src.tags) do
+			if base.tags[k] ~= v then
+				dst.tags[k] = v
+			end
+		end
+
+		for k, v in pairs(src.attributes) do
+			if base.attributes[k] ~= v then
+				dst.attributes[k] = v
+			end
+		end
+	end
+
+	inheritSingle(self, source, baseline)
+
+	local sourceById = {}
+	local baselineById = {}
+
+	for _, desc in ipairs(source:GetDescendants()) do
+		local props = rawget(desc, "_props")
+		if props and props.UniqueId then
+			sourceById[props.UniqueId] = desc
+		end
+	end
+
+	for _, desc in ipairs(baseline:GetDescendants()) do
+		local props = rawget(desc, "_props")
+		if props and props.UniqueId then
+			baselineById[props.UniqueId] = desc
+		end
+	end
+
+	for _, desc in ipairs(self:GetDescendants()) do
+		local dProps = rawget(desc, "_props")
+		if dProps and dProps.UniqueId then
+			local match = sourceById[dProps.UniqueId]
+			local base = baselineById[dProps.UniqueId]
+			if match and base then
+				inheritSingle(desc, match, base)
+			end
+		end
+	end
+end
+
+function Instance:RestoreFrom(source)
+	local function restoreSingle(dst, src)
+		local dstProps = rawget(dst, "_props")
+		local srcProps = rawget(src, "_props")
+
+		if not dstProps or not srcProps then
+			return
+		end
+
+		for k, v in pairs(srcProps) do
+			if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
+				dstProps[k] = v
+				rawset(dst, k, v)
+			end
+		end
+
+		for k, v in pairs(src.tags) do
+			dst.tags[k] = v
+		end
+		for k, v in pairs(src.attributes) do
+			dst.attributes[k] = v
+		end
+	end
+
+	restoreSingle(self, source)
+
+	local sourceById = {}
+	for _, desc in ipairs(source:GetDescendants()) do
+		local props = rawget(desc, "_props")
+		if props and props.UniqueId then
+			sourceById[props.UniqueId] = desc
+		end
+	end
+
+	for _, desc in ipairs(self:GetDescendants()) do
+		local dProps = rawget(desc, "_props")
+		if dProps and dProps.UniqueId then
+			local match = sourceById[dProps.UniqueId]
+			if match then
+				restoreSingle(desc, match)
+			end
+		end
+	end
 end
 
 function Instance:SetProperties(tbl)

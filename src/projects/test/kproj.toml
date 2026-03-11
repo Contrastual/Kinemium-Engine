@@ -1,0 +1,14 @@
+[pointers]
+objects = "game.Workspace"
+assets = "game.ReplicatedStorage"
+client = "game.StarterPlayerScripts"
+gui = "game.StarterGui"
+server = "game.ServerScriptService"
+
+[scripting]
+polyglot = true
+ntvcg = true
+
+[info]
+icon = ""
+name = "test"

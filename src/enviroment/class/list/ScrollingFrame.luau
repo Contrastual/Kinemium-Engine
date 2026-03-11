@@ -127,6 +127,12 @@ return {
 
 			local contentHeight = 0
 			for _, child in pairs(object:GetChildren()) do
+				if not child then
+					continue
+				end
+				if not child.Position then
+					continue
+				end
 				local childOffset = child.Position.Y.Offset
 				local childHeight = child.Size.Y.Offset
 				local childRelativeBottom = childOffset + childHeight
