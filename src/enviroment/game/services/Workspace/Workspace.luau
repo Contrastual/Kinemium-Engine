@@ -298,14 +298,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
 			return nil
 		end
-		
+
 		zune.task.spawn(function()
 			availableMaterials[materialName].loading = true
 			local default = availableMaterials[materialName].material
 
-			local materialLoadStart = os.clock()
 			local path = availableMaterials[materialName].path
-			local data: buffer = zune.fs[sync and "readFileSync" or "readFile"](path, true)
+			iodebug(string.format("Loading custom material %s: %s", materialName, path))
+			local materialLoadStart = os.clock()
+			local data = sync and zune.fs.readFileSync(path, true) or zune.fs.readFile(path, true)
 			iodebug(string.format("Loaded custom material %s in %.3fms", materialName, (os.clock() - materialLoadStart) * 1000))
 
 			local materialProcessStart = os.clock()
