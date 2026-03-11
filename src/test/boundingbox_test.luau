@@ -4,11 +4,6 @@ local Vector3 = require("../enviroment/datatypes/Vector3")
 local testing = zune.testing
 local expect = testing.expect
 
-local function near(a, b, epsilon)
-	epsilon = epsilon or 1e-5
-	return math.abs(a - b) <= epsilon
-end
-
 testing.describe("BoundingBox", function()
 	testing.test("Creation with min and max", function()
 		local bb = BoundingBox.new(Vector3.new(0, 0, 0), Vector3.new(10, 20, 30))

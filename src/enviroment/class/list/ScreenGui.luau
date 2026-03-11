@@ -16,8 +16,6 @@ local proptble = {
 	ResetOnSpawn = true,
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 400, 0, 400),
-	BackgroundColor3 = Color3.new(1, 1, 1),
-	BackgroundTransparency = 1,
 	RenderOffset = Vector2.new(0, 0),
 	OverrideScreenSize = false,
 

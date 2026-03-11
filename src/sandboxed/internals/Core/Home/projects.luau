@@ -14,6 +14,8 @@ local FileDialogService = game:GetService("FileDialogService")
 local DiscordService = game:GetService("DiscordService")
 local ProjectSyncService = game:GetService("ProjectSyncService")
 
+local fs = zune.fs
+
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local arect = require("@Arect")(raylib.lib)
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
@@ -60,6 +62,7 @@ local dimension = gui.dropdown({
 	height = 30,
 
 	options = { "2D", "3D" },
+	font = vend,
 	selectedIndex = 2,
 
 	onSelect = function(index, value)
@@ -135,13 +138,13 @@ group = aereon.create({
 					end
 
 					if projInput == "" then
-						return
+						fs.makeDir("./src/projects/" .. gnInput)
+						projInput = "./src/projects/" .. gnInput
 					end
 
 					ishared.GameName = gnInput
 					ishared.FolderPath = projInput
 					ishared.GameIcon = gameiconPath
-					print("New project: " .. ishared.GameName, ishared.FolderPath)
 					ProjectLoaderService.NewProject(ishared.GameName, ishared.FolderPath, gameiconPath)
 					ProjectSyncService:StartSyncing(ishared.FolderPath)
 					ishared.EnableHomescreen = false
@@ -223,6 +226,10 @@ for _, projectData in pairs(projects) do
 		icon = KinemiumIconLoader.ToTexture(projectData.icon)
 	else
 		icon = logoIcon
+	end
+	local stat = fs.stat(projectData.path)
+	if stat.kind == "none" then
+		continue
 	end
 	local card = gui.projectCard({
 		comp = "projectCard",

@@ -6,9 +6,7 @@ local pool = {}
 local renderablePool = {}
 
 local raylib = require("@raylib")
-local lib = raylib.lib
 local structs = raylib.structs
-local bufferUtils = require("@bufferUtils")
 local r3d = require("@r3d")
 local const = r3d.constants
 local rlib = r3d.lib
@@ -518,6 +516,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local materialName = part.Material and part.Material.Value
 			local meshData = shapeName and preloadedMeshes[shapeName]
 			local matData = materialName and loadedMaterials[materialName]
+			local partMesh = meshData[2]
 
 			if not meshData or not matData then
 				continue

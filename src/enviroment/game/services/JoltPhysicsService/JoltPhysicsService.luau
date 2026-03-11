@@ -437,7 +437,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				bodiesMap[part] = createBody(bodyInterface, part)
 			end,
 
-			Enabled = true,
+			Enabled = false,
 
 			setGravity = function(value, wind)
 				setGravity(physicsSystem, value, wind)
@@ -570,6 +570,10 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			elseif route == "RemovedPartFromRenderPool" then
 				RemoveBody(data)
 			elseif route == "RenderStepped" then
+				KinemiumPhysicsService.Enabled = _PlaytestService.IsPlaytesting
+				if KinemiumPhysicsService.Enabled == false then
+					return
+				end
 				if
 					game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Jolt
 					or game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Default

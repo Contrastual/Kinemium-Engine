@@ -2,9 +2,6 @@ local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
-local Selection = game:GetService("Selection")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local aereon = require("@Aereon")
 local raylib = require("@raylib")
 local rl = raylib.lib
@@ -44,7 +41,7 @@ local aboutPrompt = gui.prompt({
 
 		rl.DrawTextEx(
 			vend,
-			"Kinemium Engine\n  Version 1.9.0 \n  Made by devcell (Qquaded)\nContributions:\n  Lynxmountain\n  Uzixt\n  BrownBakers (sun texture)\n  nicobloxy (Translator)\n  duck (Translator)",
+			"Kinemium Engine\n  Version 1.9.0 \n  Made by devcell (Qquaded)\nContributions:\n  Lynxmountain\n  Uzixt\n  Contrastual\n  nicobloxy (Translator)\n  duck (Translator)",
 			vector.create(x, y + 200),
 			25,
 			2,
@@ -59,7 +56,7 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
-renderer.Pool.new("2d", function(data)
+renderer.Hook.new("After2D", function(data)
 	if game.Context ~= Enum.GameContext.Editor then
 		return
 	end

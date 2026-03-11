@@ -13,12 +13,13 @@ local zembed = require("@zembed")
 
 if zembed.IsEmbedded() then
 	local tomlFile = zembed.GetFilesThatHas("projects.toml")
-	print(tomlFile)
 	projectsFile = "../" .. tomlFile[1]
 end
 
+local absolutePath = fs.realPath("./src/projects.toml")
+
 local settings = {
-	["luau-lsp.types.definitionFiles"] = { "kinemium.d.luau" },
+	["luau-lsp.types.definitionFiles"] = { absolutePath },
 }
 
 ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
@@ -74,7 +75,6 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 				fs.makeDir(path .. "/.vscode", true)
 				fs.makeDir(path .. "/autosave", true)
 
-				fs.writeFile(path .. "/kinemium.d.luau", fs.readFile("./k.d.luau"))
 				fs.writeFile(
 					path .. "/.vscode/settings.json",
 					zune.serde.json.encode(settings, {

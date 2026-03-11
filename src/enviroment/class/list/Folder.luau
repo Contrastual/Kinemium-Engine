@@ -1,10 +1,10 @@
-local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
-local Enum = require("@EnumMap")
 
 local propTable = {
 	Name = "Folder",
+	IconColor = Color3.new(1, 1, 1),
+	IconSize = 21,
+	IconTransparency = 0,
 }
 
 return {

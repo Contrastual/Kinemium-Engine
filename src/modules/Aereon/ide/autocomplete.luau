@@ -675,10 +675,7 @@ local completions = {
 		label = "Color3",
 		type = "class",
 		icon = "Struct.png",
-		members = {
-			{ label = "new", icon = "Method.png", args = { "r", "g", "b" } },
-			{ label = "fromRGB", icon = "Method.png", args = { "r", "g", "b" } },
-		},
+		members = { { label = "new", icon = "Method.png", args = { "r", "g", "b" } } },
 	},
 	{
 		label = "Instance",

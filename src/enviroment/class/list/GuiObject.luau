@@ -1,9 +1,5 @@
-local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
-local Enum = require("@EnumMap")
 local UDim2 = require("@UDim2")
-local UDim = require("@UDim")
 local signal = require("@Kinemium.signal")
 local Vector2 = require("@Vector2")
 

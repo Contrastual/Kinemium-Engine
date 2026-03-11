@@ -1,20 +1,6 @@
 local raylib = require("@raylib")
-local structs = raylib.structs
-
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
 local rect = require("@arect")(raylib.lib)
-local color3 = require("@Color3")
-
-local defaultFont = raylib.lib.GetFontDefault()
+local Color3 = require("@Color3")
 
 return function(objects, data)
 	local config = {
@@ -26,8 +12,8 @@ return function(objects, data)
 		),
 		value = data.value or false,
 		onChanged = data.onChanged,
-		boxColor = data.boxColor or color3.new(0.2, 0.2, 0.2),
-		checkColor = data.checkColor or color3.new(0.02, 0.5, 1),
+		boxColor = data.boxColor or Color3.new(0.2, 0.2, 0.2),
+		checkColor = data.checkColor or Color3.new(1, 1, 1),
 		animProgress = data.value and 1 or 0,
 	}
 
@@ -54,8 +40,8 @@ return function(objects, data)
 		local targetProgress = config.value and 1 or 0
 		config.animProgress = config.animProgress + (targetProgress - config.animProgress) * 0.2
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, config.boxColor:ToRaylib(0))
-		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 1, config.checkColor:ToRaylib(0))
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0, 0, config.boxColor:ToRaylib(0))
+		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0, 0, 1, config.checkColor:ToRaylib(0))
 
 		if config.animProgress > 0.01 then
 			local innerRect = rect.new(r.x, r.y, r.width, r.height)
@@ -68,7 +54,7 @@ return function(objects, data)
 
 			local scaledRect = rect.new(innerRect.x + offsetX, innerRect.y + offsetY, scaledWidth, scaledHeight)
 
-			raylib.lib.DrawRectangleRounded(rect:translate(scaledRect), 0.3, 8, config.checkColor:ToRaylib(0))
+			raylib.lib.DrawRectangleRounded(rect:translate(scaledRect), 0, 0, config.checkColor:ToRaylib(0))
 		end
 
 		if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then

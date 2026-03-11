@@ -27,6 +27,7 @@ local MENU_PADDING = 4
 local TOGGLE_SIZE = 20
 local SCROLL_SPEED = 3
 local SCROLLBAR_WIDTH = 8
+local scrollTarget = 0
 
 local SERVICE_ORDER = {
 	"Workspace",
@@ -77,6 +78,35 @@ local activeAddMenu = nil
 local yOffset = 0
 local windowObject = nil
 local arect = require("@Arect")(rl)
+local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
+
+local searchBox = textbox.new({
+	multiline = false,
+	placeholder = "Search..",
+	fontSize = 16,
+	font = vend,
+	maxLength = 56,
+
+	cornerRadius = 0.5,
+	BorderTransparency = 1,
+	TextColor = theme.text,
+	padding = 5,
+})
+
+local searchQuery = searchBox:getText() or ""
+local isSearching = #searchQuery > 0
+
+local function matchesSearch(instance, query)
+	if instance.Name:lower():find(query:lower(), 1, true) then
+		return true
+	end
+	for _, child in ipairs(instance:GetChildren()) do
+		if matchesSearch(child, query) then
+			return true
+		end
+	end
+	return false
+end
 
 -- Selection menu
 local SelectionMenu = gui.menu({
@@ -228,6 +258,15 @@ local function isMouseInRect(rect, mousePos)
 		and mousePos.y <= rect.y + rect.height
 end
 
+local function hasSelectedDescendant(instance)
+	for _, child in ipairs(instance:GetChildren()) do
+		if Selection.IsSelected(child) or hasSelectedDescendant(child) then
+			return true
+		end
+	end
+	return false
+end
+
 local function isRectVisible(rect, windowRect)
 	return rect.x + rect.width >= windowRect.x
 		and rect.x <= windowRect.x + windowRect.width
@@ -236,7 +275,7 @@ local function isRectVisible(rect, windowRect)
 end
 
 local function DoubleClicked(instance)
-	local isScript = instance:IsA("Script") or instance:IsA("ModuleScript") or instance:IsA("LocalScript")
+	local isScript = instance.BaseClass == "ScriptContainer"
 	EngineSignal:Fire("idestate", isScript, instance)
 end
 
@@ -459,6 +498,9 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	if instance.Destroyed or instance.ExplorerHidden then
 		return
 	end
+	if isSearching and not matchesSearch(instance, searchQuery) then
+		return
+	end
 
 	local children = instance:GetChildren()
 	local hasChildren = #children > 0
@@ -498,14 +540,14 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	-- Draw icon
 	local icon = loadedIcon[instance.ClassName]
 	if icon then
-		local iconSize = NODE_HEIGHT - 4
+		local iconSize = instance.IconSize or NODE_HEIGHT - 4
 		rl.DrawTexturePro(
 			icon.texture,
 			structs.Rectangle:new({ x = 0, y = 0, width = icon.x, height = icon.y }),
 			structs.Rectangle:new({ x = btnX + 2, y = btnY + 2, width = iconSize, height = iconSize }),
 			vector.create(0, 0),
 			0,
-			themeColors.image
+			instance.IconColor and instance.IconColor:ToRaylib(instance.IconTransparency) or themeColors.image
 		)
 	end
 
@@ -574,7 +616,11 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	yOffset = yOffset + NODE_HEIGHT + 2
 
-	if expanded[instance] then
+	local shouldExpand = expanded[instance]
+		or (isSearching and matchesSearch(instance, searchQuery))
+		or hasSelectedDescendant(instance)
+
+	if hasChildren and shouldExpand then
 		for _, child in ipairs(children) do
 			DrawTree(child, indent + 1, winX, winY, winWidth)
 		end
@@ -674,6 +720,9 @@ explorerWindow.stepped = function(windowData)
 		return
 	end
 
+	searchQuery = searchBox:getText() or ""
+	isSearching = #searchQuery > 0
+
 	local dt = rl.GetFrameTime()
 
 	hoverspring:step(dt)
@@ -698,12 +747,20 @@ explorerWindow.stepped = function(windowData)
 		height = windowData.height,
 	}
 
+	local boxWidth = windowRect.width * 0.95
+	local boxX = windowRect.x + (windowRect.width - boxWidth) * 0.5
+
+	searchBox:drawWithExtras(boxX, windowRect.y + 35, boxWidth, 30)
+
 	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
 		local mouseWheel = rl.GetMouseWheelMove()
 		if math.abs(mouseWheel) > 0.01 then
-			scrollOffset = scrollOffset - (mouseWheel * NODE_HEIGHT * SCROLL_SPEED)
+			scrollTarget = math.clamp(scrollTarget - (mouseWheel * NODE_HEIGHT * SCROLL_SPEED), 0, maxScroll)
 		end
 	end
+
+	scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
+	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
 
 	rl.BeginScissorMode(
 		math.floor(windowData.x),
@@ -714,7 +771,7 @@ explorerWindow.stepped = function(windowData)
 
 	local services = getServicesInOrder()
 	for _, child in ipairs(services) do
-		DrawTree(child, 0, windowData.x - 40, windowData.y + 20, windowData.width)
+		DrawTree(child, 0, windowData.x - 50, windowData.y + 60, windowData.width)
 	end
 
 	rl.EndScissorMode()

@@ -206,14 +206,22 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 				rlib.R3D_UpdateProceduralSky(cubemapSky, skyObject)
 			end
-			local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
-
-			if blurEffect then
-				renderer.Blur.blurRadius = blurEffect.Size
-				renderer.Blur:DrawFullBlur(const.WHITE)
-			end
 		end
 	end)
+
+	renderer.Pool.new("3d", function()
+		local highestBlur = 0
+		for i, blur in pairs(Lighting:QueryDescendants(">BlurEffect")) do
+			if blur.Enabled then
+				highestBlur = math.max(highestBlur, blur.Size)
+			end
+		end
+
+		if highestBlur then
+			renderer.Blur.blurRadius = highestBlur
+			renderer.Blur:DrawFullBlur(const.WHITE)
+		end
+	end, -1048576) -- why is this number so big???
 
 	Lighting.ChildAdded:Connect(handleLightingChild)
 end

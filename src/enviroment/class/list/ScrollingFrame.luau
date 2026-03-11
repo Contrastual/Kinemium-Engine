@@ -44,7 +44,6 @@ local propTable = {
 	ScrollBarFadeSpeed = 4, -- fade speed
 	ScrollBarPadding = 2, -- padding from edge
 
-	-- elastic overscroll (Samsung-style)
 	ElasticEnabled = true,
 	ElasticStrength = 0.8, -- how far you can overscroll (0-1, relative to viewport)
 	ElasticSnapSpeed = 12, -- how fast it snaps back

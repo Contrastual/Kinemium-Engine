@@ -2,7 +2,7 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 local Color3 = require("@Color3")
 
-local befProps = {}
+local serialized = nil
 
 local PlaytestService = Instance.new("PlaytestService")
 PlaytestService.ExplorerHidden = true
@@ -11,17 +11,14 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	PlaytestService:SetProperties({
 		CreatePlaytestAsync = function()
 			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
+			local SerializationService = datamodel:GetService("SerializationService")
 			local workspace = datamodel.Workspace
-
-			for _, v in pairs(workspace:GetDescendants()) do
-				befProps[v.UniqueId] = v._props
-			end
-
 			PlaytestService.IsPlaytesting = true
-			ScriptRunnerService.Clear()
+
+			serialized = SerializationService.SerializeInstancesAsync({ datamodel })
 
 			for _, script in pairs(datamodel:GetDescendants()) do
-				if script:IsA("Script") then
+				if script.ClassName == "Script" then
 					ScriptRunnerService.RunScript(script)
 				end
 			end
@@ -29,16 +26,17 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		StopCurrentPlaytest = function()
 			local workspace = datamodel.Workspace
+			local SerializationService = datamodel:GetService("SerializationService")
+
+			local deserialized = SerializationService.Deserialize(serialized)
 
 			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
 			PlaytestService.IsPlaytesting = false
 
-			for _, v in pairs(workspace:GetDescendants()) do
-				if befProps[v.UniqueId] then
-					for propName, propValue in pairs(befProps[v.UniqueId]) do
-						v[propName] = propValue
-					end
-				end
+			print("after")
+			print(deserialized)
+			for _, v in pairs(deserialized) do
+				print(v)
 			end
 
 			ScriptRunnerService.Clear()

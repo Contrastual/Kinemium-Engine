@@ -28,15 +28,11 @@ local Corner = Instance.new("UICorner")
 Corner.CornerRadius = UDim.new(0, 10)
 Corner.Parent = chatFrame
 
-local success, result = pcall(function()
-	local ChatBox = Instance.new("TextBox")
-	ChatBox.Size = UDim2.new(1, 0, 0, 50)
-	ChatBox.AnchorPoint = Vector2.new(0.5, 0)
-	ChatBox.Position = UDim2.new(0.5, 0, 1, 0)
-	ChatBox.Parent = Chat
-end)
-
-print(success, result)
+local ChatBox = Instance.new("TextBox")
+ChatBox.Size = UDim2.new(1, 0, 0, 50)
+ChatBox.AnchorPoint = Vector2.new(0.5, 0)
+ChatBox.Position = UDim2.new(0.5, 0, 1, 0)
+ChatBox.Parent = Chat
 
 local messageHeight = 15
 local numMessages = 10

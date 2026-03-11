@@ -6,9 +6,9 @@
 detailed_error = true
 
 [workspace.scripts]
-game = "src/main.lua"
-engine = "src/main.lua"
-kinemium = "src/main.lua"
+game = "src/main.luau"
+engine = "src/main.luau"
+kinemium = "src/main.luau"
 
 # Compiling settings
 #  This affects all required files and the main file.
@@ -30,6 +30,7 @@ buffer_max_display = 48
 #  You can use `zune luau list-fflags` to list all available FFlags.
 #[runtime.luau.fflags]
 #DebugCodegenOptSize = false
+#LuauSolverV2 = true
 
 # Features settings
 #  This affects the features that are enabled in Zune.

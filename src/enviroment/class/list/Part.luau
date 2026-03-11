@@ -10,7 +10,7 @@ local propTable = {
 	Color = Color3.new(1, 1, 1),
 	Material = Enum.Material.debug,
 	Transparency = 0,
-	Anchored = true,
+	Anchored = false,
 	NeonEnergy = 5.0,
 	CanCollide = true,
 	Velocity = Vector3.new(0, 0, 0),
@@ -49,8 +49,6 @@ return {
 	class = "Part",
 
 	callback = function(instance, renderer, game)
-		propTable.render = function(part, camera, lib) end
-
 		local PhysicsService = game:GetService("PhysicsService")
 
 		propTable.ApplyImpulse = function(self, v)

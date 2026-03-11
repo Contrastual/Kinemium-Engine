@@ -132,7 +132,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.multiline = false
 		self.placeholder = config.placeholder or ""
 		self.fontSize = config.fontSize or 16
-		self.padding = config.padding or 10
+		self.padding = config.padding or 5
 		self.showLineNumbers = config.showLineNumbers and self.multiline
 		self.readOnly = config.readOnly or false
 		self.maxLength = config.maxLength
@@ -604,11 +604,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				if ok then
 					self.autocomplete.items = normalizeAutocompleteItems(self.autocomplete.items)
 					if self.autocomplete.visible and #self.autocomplete.items > 0 then
-						self.autocomplete.selectedIndex = math.clamp(
-							self.autocomplete.selectedIndex,
-							1,
-							#self.autocomplete.items
-						)
+						self.autocomplete.selectedIndex =
+							math.clamp(self.autocomplete.selectedIndex, 1, #self.autocomplete.items)
 					else
 						self.autocomplete.visible = false
 					end

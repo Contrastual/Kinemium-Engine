@@ -25,6 +25,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
 	end
 
+	local TAB_HEIGHT = 28
+	local TAB_PADDING_X = 12
+	local TAB_MIN_WIDTH = 60
+
 	local function getResizeSide(window, mousePos)
 		local sides = {}
 		local wx, wy, ww, wh = window.x, window.y, window.width, window.height
@@ -75,6 +79,46 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			and mousePos.y <= window.y + window.height
 	end
 
+	-- Returns the pixel width of a tab label using raylib text measurement
+	local function measureTabWidth(text, fontSize)
+		local measured = raylib.MeasureTextEx(vend, text, fontSize, 1)
+		return measured.x + TAB_PADDING_X * 2
+	end
+
+	-- Returns the tab bar height for a window (0 if no tabs)
+	local function getTabBarHeight(window)
+		if window.tabs and #window.tabs > 0 then
+			return TAB_HEIGHT
+		end
+		return 0
+	end
+
+	-- Hit-test which tab index was clicked, returns nil if none
+	local function getTabAtPosition(window, mousePos, fontSize)
+		if not window.tabs or #window.tabs == 0 then
+			return nil
+		end
+
+		local titleHeight = (window.headerRender ~= false) and 28 or 0
+		local tabBarY = window.y + titleHeight
+		local tabBarH = TAB_HEIGHT
+
+		if mousePos.y < tabBarY or mousePos.y > tabBarY + tabBarH then
+			return nil
+		end
+
+		local curX = window.x
+		for i, tab in ipairs(window.tabs) do
+			local tabW = math.max(measureTabWidth(tab.name, fontSize), TAB_MIN_WIDTH)
+			if mousePos.x >= curX and mousePos.x <= curX + tabW then
+				return i
+			end
+			curX = curX + tabW
+		end
+
+		return nil
+	end
+
 	module.OutlineColor = Color3.new(0, 0.517647, 1)
 	module.OutlineTransparency = 1
 	module.dragged = function() end
@@ -83,6 +127,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	module.backgroundDrawed = function() end
 	module.focused = function() end
 	module.unfocused = function() end
+	module.tabChanged = function() end
 
 	local anyWindowFocused = false
 
@@ -111,7 +156,24 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		DisableClipping: boolean?,
 		height: number,
 		enabled: boolean?,
+		tabs: { { name: string, render: (window: any) -> () } }?,
+		defaultTab: (number | boolean)?,
 	})
+		-- Resolve initial active tab:
+		--   defaultTab omitted/nil  -> select tab 1
+		--   defaultTab = false      -> no tab selected (nil)
+		--   defaultTab = N          -> select tab N
+		local initialTab
+		if data.tabs and #data.tabs > 0 then
+			if data.defaultTab == false then
+				initialTab = nil
+			elseif data.defaultTab ~= nil then
+				initialTab = data.defaultTab
+			else
+				initialTab = 1
+			end
+		end
+
 		local window = {
 			title = data.title,
 			x = data.x,
@@ -128,6 +190,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			Focused = false,
 			focused = function() end,
 			unfocused = function() end,
+
+			-- Tab state
+			tabs = data.tabs or nil,
+			activeTab = initialTab,
 		}
 		table.insert(windowRegistry, window)
 
@@ -141,6 +207,35 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			window.height = y
 		end
 
+		-- Switch to a tab by index, or pass nil to deselect all tabs
+		function window:SetTab(index)
+			if index == nil then
+				local prev = window.activeTab
+				window.activeTab = nil
+				if prev ~= nil then
+					module.tabChanged(window, nil, nil)
+				end
+			elseif window.tabs and index >= 1 and index <= #window.tabs then
+				local prev = window.activeTab
+				window.activeTab = index
+				if prev ~= index then
+					module.tabChanged(window, index, window.tabs[index])
+				end
+			end
+		end
+
+		-- Switch to a tab by name
+		function window:SetTabByName(name)
+			if window.tabs then
+				for i, tab in ipairs(window.tabs) do
+					if tab.name == name then
+						window:SetTab(i)
+						return
+					end
+				end
+			end
+		end
+
 		return window
 	end
 
@@ -150,6 +245,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		local mouseRightPressed = raylib.IsMouseButtonPressed(1)
 		local mouseDown = raylib.IsMouseButtonDown(0)
 		local mouseReleased = raylib.IsMouseButtonReleased(0)
+
+		local window_theme_config = theme and theme.window
+		local tabFontSize = window_theme_config and window_theme_config.TitleTextSize or 14
 
 		-- Find the topmost window the mouse is over
 		local hoveredWindow = nil
@@ -172,7 +270,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			if isMouseInViewport(mousePos) then
 				game.Stop3DInput = false
 				anyWindowFocused = false
-				-- Unfocus all windows when right-clicking on viewport
 				for _, window in pairs(windowRegistry) do
 					if window.Focused then
 						window.Focused = false
@@ -184,10 +281,23 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		end
 
 		if mousePressed == 1 then
-			-- Focus/unfocus logic: find the topmost window the mouse is over
-			local clickedWindow = hoveredWindow
+			-- Tab click detection (before drag/focus logic so tabs always respond)
+			for i = #windowRegistry, 1, -1 do
+				local window = windowRegistry[i]
+				if not window.Closed and window.enabled then
+					local clickedTab = getTabAtPosition(window, mousePos, tabFontSize)
+					if clickedTab then
+						window:SetTab(clickedTab)
+						-- Bring window to front
+						table.remove(windowRegistry, i)
+						table.insert(windowRegistry, window)
+						break
+					end
+				end
+			end
 
-			-- Track if any window gets focused this click
+			-- Focus/unfocus logic
+			local clickedWindow = hoveredWindow
 			local windowFocusedThisClick = false
 
 			for _, window in pairs(windowRegistry) do
@@ -228,11 +338,13 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				local wx, wy, ww = window.x, window.y, window.width
 				local titleBarHeight = 24
 
+				-- Only drag from the title bar row, not the tab bar row
 				if
 					mousePos.x >= wx
 					and mousePos.x <= wx + ww
 					and mousePos.y >= wy
 					and mousePos.y <= wy + titleBarHeight
+					and not getTabAtPosition(window, mousePos, tabFontSize)
 				then
 					draggedWindow = window
 					dragOffset.x = mousePos.x - wx
@@ -315,6 +427,18 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		local shadowColor = shadowsEnabled and window_theme_config.ShadowColor:ToRaylib(0.9)
 		local whiteOutline = Color3.new(1, 1, 1):ToRaylib(0.9)
 
+		local tabFontSize = window_theme_config.TitleTextSize or 14
+
+		-- Tab theme colors with sensible fallbacks derived from the window theme
+		local tabActiveColor = window_theme_config.TabActiveColor or window_theme_config.SecondaryBackgroundColor
+		local tabInactiveColor = window_theme_config.TabInactiveColor or window_theme_config.BackgroundColor
+		local tabActiveTextColor = window_theme_config.TabActiveTextColor or window_theme_config.TitleColor
+		local tabInactiveTextColor = window_theme_config.TabInactiveTextColor or window_theme_config.TitleColor
+		local tabActiveTransparency = window_theme_config.TabActiveTransparency or 0
+		local tabInactiveTransparency = window_theme_config.TabInactiveTransparency or 0.4
+		local tabBorderColor = window_theme_config.TabBorderColor or Color3.new(1, 1, 1)
+		local tabBorderTransparency = window_theme_config.TabBorderTransparency or 0.85
+
 		for _, windowData in pairs(windowRegistry) do
 			if windowData.Closed or not windowData.enabled then
 				continue
@@ -354,12 +478,16 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 			raylib.DrawRectangleRoundedLinesEx(mainRect, windowData.rounded, 30, 1, whiteOutline)
 
+			-- Title bar
+			local titleBarHeight = 0
 			if windowData.headerRender ~= false then
+				titleBarHeight = 28
+
 				local titleColor = windowData.IsDragging and window_theme_config.DragColor
 					or window_theme_config.SecondaryBackgroundColor
 
 				raylib.DrawRectangleRec(
-					structs.Rectangle:new({ x = wx, y = wy, width = ww, height = 28 }),
+					structs.Rectangle:new({ x = wx, y = wy, width = ww, height = titleBarHeight }),
 					titleColor:ToRaylib(window_theme_config.TitleBackgroundTransparency)
 				)
 
@@ -367,14 +495,83 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					vend,
 					windowData.title,
 					vector.create(wx + 8, wy + 6),
-					window_theme_config.TitleTextSize,
+					tabFontSize,
 					1,
 					window_theme_config.TitleColor:ToRaylib(0)
 				)
 
-				windowData.titleRect = { height = 28, width = ww, x = wx, y = wy }
+				windowData.titleRect = { height = titleBarHeight, width = ww, x = wx, y = wy }
 			end
 
+			-- Tab bar
+			local hasTabs = windowData.tabs and #windowData.tabs > 0
+			local tabBarHeight = getTabBarHeight(windowData)
+
+			if hasTabs then
+				local tabBarY = wy + titleBarHeight
+
+				-- Tab bar background strip
+				raylib.DrawRectangleRec(
+					structs.Rectangle:new({ x = wx, y = tabBarY, width = ww, height = tabBarHeight }),
+					tabInactiveColor:ToRaylib(tabInactiveTransparency)
+				)
+
+				local curX = wx
+				for i, tab in ipairs(windowData.tabs) do
+					local tabW = math.max(measureTabWidth(tab.name, tabFontSize), TAB_MIN_WIDTH)
+					local isActive = windowData.activeTab == i
+
+					-- Tab background
+					local bgColor = isActive and tabActiveColor or tabInactiveColor
+					local bgTransparency = isActive and tabActiveTransparency or tabInactiveTransparency
+					raylib.DrawRectangleRec(
+						structs.Rectangle:new({ x = curX, y = tabBarY, width = tabW, height = tabBarHeight }),
+						bgColor:ToRaylib(bgTransparency)
+					)
+
+					-- Active tab top accent line
+					if isActive then
+						raylib.DrawRectangleRec(
+							structs.Rectangle:new({ x = curX, y = tabBarY, width = tabW, height = 2 }),
+							module.OutlineColor:ToRaylib(0)
+						)
+					end
+
+					-- Tab label
+					local textColor = isActive and tabActiveTextColor or tabInactiveTextColor
+					local textY = tabBarY + (tabBarHeight - tabFontSize) / 2
+					raylib.DrawTextEx(
+						vend,
+						tab.name,
+						vector.create(curX + TAB_PADDING_X, textY),
+						tabFontSize,
+						1,
+						textColor:ToRaylib(isActive and 0 or 0.4)
+					)
+
+					-- Separator between tabs
+					if i < #windowData.tabs then
+						raylib.DrawLineEx(
+							vector.create(curX + tabW, tabBarY + 4),
+							vector.create(curX + tabW, tabBarY + tabBarHeight - 4),
+							1,
+							tabBorderColor:ToRaylib(tabBorderTransparency)
+						)
+					end
+
+					curX = curX + tabW
+				end
+
+				-- Bottom border under tab bar
+				raylib.DrawLineEx(
+					vector.create(wx, tabBarY + tabBarHeight),
+					vector.create(wx + ww, tabBarY + tabBarHeight),
+					1,
+					tabBorderColor:ToRaylib(tabBorderTransparency)
+				)
+			end
+
+			-- Drag outline
 			if windowData.IsDragging then
 				raylib.DrawRectangleLines(
 					wx,
@@ -385,8 +582,19 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				)
 			end
 
+			-- Content area: offset below title bar + tab bar
+			local contentOffsetY = titleBarHeight + tabBarHeight
+
 			if not windowData.DisableClipping then
-				raylib.BeginScissorMode(wx, wy, ww, wh)
+				raylib.BeginScissorMode(wx, wy + contentOffsetY, ww, wh - contentOffsetY)
+			end
+
+			-- Render active tab's render function if tabs are present
+			if hasTabs and windowData.activeTab then
+				local activeTabData = windowData.tabs[windowData.activeTab]
+				if activeTabData and activeTabData.render then
+					activeTabData.render(windowData)
+				end
 			end
 
 			module.stepped(windowData, dt)

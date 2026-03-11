@@ -43,6 +43,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	local vend = KinemiumFontService.GetMonoFontDefault()
 
 	local function measureTextWidth(text, fontSize, spacing)
+		if text == nil then
+			return 0
+		end
 		if #text == 0 then
 			return 0
 		end

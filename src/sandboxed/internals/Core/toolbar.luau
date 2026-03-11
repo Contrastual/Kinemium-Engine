@@ -74,180 +74,6 @@ local window = aereon.window(game, nil, 1)
 local aRect = aereon.rect()
 local gui = aereon.gui
 
-local function create_window(title, frame)
-	repeat
-		task.wait()
-	until frame.AbsolutePosition and frame.AbsoluteSize
-	local dpiScale = rl.GetWindowScaleDPI().x
-	local myWindow = window.create({
-		title = title,
-		x = frame.AbsolutePosition.X * dpiScale,
-		y = frame.AbsolutePosition.Y * dpiScale,
-		width = frame.AbsoluteSize.X * dpiScale,
-		DisableClipping = true,
-		height = frame.AbsoluteSize.Y * dpiScale,
-	})
-	return myWindow
-end
-
-local function create_window_back(screenGui, title, AnchorPoint, size)
-	local frame = Instance.new("Frame")
-	frame.Position = UDim2.new(AnchorPoint.X, 0, AnchorPoint.Y, 0)
-	frame.AnchorPoint = AnchorPoint
-	frame.Size = size or UDim2.new(0, 400, 0.5, 0)
-	frame.BackgroundColor3 = Color3.new(1, 1, 1)
-	frame.BackgroundTransparency = 1
-	frame.Parent = screenGui
-
-	return create_window(title, frame), frame
-end
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "Toolbar"
-screenGui.Parent = LocalPlayer.PlayerGui
-
-local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(0.7, 180, 0, 160))
-
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
--- Render button at specific X position and return width consumed
-local function renderButton(xPos, name, element, windowData)
-	local winX, winY = windowData.x, windowData.y + 80
-	local cellWidth = element.width or 50
-	local cellHeight = element.height or 50
-	local rectX = winX + xPos
-	local rectY = winY
-	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
-
-	local transparency = 1
-	local color = Color3.new(0.5, 0.5, 0.5)
-
-	if aRect.MouseIsInRect(rectData) then
-		color = element.hoverColor
-		transparency = element.hoverTransparency
-	end
-
-	aRect.Button(rectData, function()
-		element.callback(element, rectData)
-	end)
-
-	local bgColor = Color3ToRaylib(color, transparency)
-	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
-
-	if element.texture then
-		rl.DrawTexturePro(
-			element.texture.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
-			aRect:translate(rectData),
-			vector.create(0, 0),
-			element.rotation or 0,
-			ImageColor
-		)
-	end
-
-	-- text
-	if name then
-		local textX = rectData.x + cellWidth / 2 - (#name * 9) / 2
-		local textY = rectData.y + cellHeight + 5
-		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
-	end
-
-	if element.render then
-		element.render(aRect)
-	end
-
-	-- Return width consumed (element width + padding)
-	return cellWidth + (element.padding or 20)
-end
-
--- Render separator at specific X position and return width consumed
-local function renderSeperator(xPos, windowData, element)
-	local winX, winY = windowData.x, windowData.y + 80
-	local rectX = winX + xPos
-	local rectY = winY
-
-	local sepColor = Color3ToRaylib(element.color or Color3.new(0.7, 0.7, 0.7), 0)
-	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 70, sepColor)
-
-	-- Return width consumed (separator width + padding)
-	return (element.width or 2) + (element.padding or 20)
-end
-
-game.EngineSignal:Connect(function(route, name, data)
-	if route == "NewToolbarCategory" then
-		categoryRegistry[name] = data
-	end
-end)
-
-local function drawCategories(windowData)
-	local buttonWidth = 100
-	local buttonHeight = 30
-	local padding = 5
-
-	local categoryCount = 0
-	for _ in pairs(categoryRegistry) do
-		categoryCount += 1
-	end
-
-	local extraPadding = 5
-	local totalWidth = categoryCount * buttonWidth + math.max(0, (categoryCount - 1) * padding)
-	local width = totalWidth + extraPadding
-
-	local height = 35
-	local x = windowData.x + (windowData.width - width) / 2 -- center inside window
-	local y = windowData.y + 35
-
-	local Categories = aRect.new(x, y, width, height)
-	rl.DrawRectangleRounded(aRect:translate(Categories), 0.5, 18, backgroundColor)
-
-	local startX = x + extraPadding / 2
-	local i = 0
-	for name, category in pairs(categoryRegistry) do
-		local rect =
-			aRect.new(startX + i * (buttonWidth + padding), y + (height - buttonHeight) / 2, buttonWidth, buttonHeight)
-
-		aRect.Button(rect, function()
-			currentlySelected = name
-		end)
-
-		local bg = Color3ToRaylib(Color3.new(0.12549, 0.12549, 0.12549), 1)
-		if currentlySelected == name then
-			bg = SecondaryBackgroundColor
-		end
-
-		rl.DrawRectangleRounded(aRect:translate(rect), 0.5, 5, bg)
-
-		local textX = rect.x + buttonWidth / 2 - (#name * 9) / 2
-		local textY = rect.y + buttonHeight / 2 - 9
-		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
-
-		i += 1
-	end
-end
-
-local windowObject
-
-RunService.GuiRender:Connect(function()
-	if not windowObject then
-		return
-	end
-	renderer.Blur:DrawBlurredRegion(
-		windowObject.x,
-		windowObject.y,
-		windowObject.width,
-		windowObject.height,
-		Color3ToRaylib(Color3.new(1, 1, 1), 0)
-	)
-end)
-
 local fileMenu = gui.menu({
 	x = 0,
 	y = 0,
@@ -342,60 +168,223 @@ local fileMenu = gui.menu({
 			label = "Exit",
 			shortcut = "Alt+F4",
 			onClick = function()
-				zune.process.exit(0)
+				KinemiumRaylib.lib.CloseWindow()
 			end,
 		},
 	},
 })
 
-fileMenu:hide()
+local function create_window(title, frame)
+	repeat
+		task.wait()
+	until frame.AbsolutePosition and frame.AbsoluteSize
+	local dpiScale = rl.GetWindowScaleDPI().x
+	local myWindow = window.create({
+		title = title,
+		x = frame.AbsolutePosition.X,
+		y = frame.AbsolutePosition.Y,
+		width = frame.AbsoluteSize.X,
+		DisableClipping = true,
+		headerRender = false,
+		height = frame.AbsoluteSize.Y,
 
-local toggle = true
+		tabs = {
+			{
+				name = "File",
+				render = function(windowData)
+					local dt = KinemiumRaylib.lib.GetFrameTime()
+					local menuRect = aRect.new(windowData.x, windowData.y + 30, 200, 300)
 
-local function drawTopbar(windowData, dt)
-	local x, y = windowData.x, windowData.y
-	local xz, yz, xv, yv = x + 100, y, 450, 28
-	rl.DrawRectangle(xz, yz, xv, yv, backgroundColor)
+					fileMenu:show()
+					fileMenu.set("backgroundColor", StudioThemeService.SelectedTheme.aereon.window.BackgroundColor)
+					fileMenu.set("textColor", StudioThemeService.SelectedTheme.TextColor)
+					fileMenu.set("obj_rect", menuRect)
+					fileMenu.render(dt)
+				end,
+			},
+			{
+				name = "Plugins",
+				render = function(windowData) end,
+			},
+		},
+	})
+	myWindow:SetTab(nil)
+	return myWindow
+end
 
-	local rect = aRect.new(xz, yz, xv, yv)
+local function create_window_back(screenGui, title, AnchorPoint, size)
+	local frame = Instance.new("Frame")
+	frame.Position = UDim2.new(AnchorPoint.X, 0, AnchorPoint.Y, 0)
+	frame.AnchorPoint = AnchorPoint
+	frame.Size = size or UDim2.new(0, 400, 0.5, 0)
+	frame.BackgroundColor3 = Color3.new(1, 1, 1)
+	frame.BackgroundTransparency = 1
+	frame.Parent = screenGui
 
-	aRect.Button(rect, function()
-		if toggle then
-			fileMenu:show()
-		else
-			fileMenu:hide()
-		end
-		toggle = not toggle
+	return create_window(title, frame), frame
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "Toolbar"
+screenGui.Parent = LocalPlayer.PlayerGui
+
+local propback, frame = create_window_back(
+	screenGui,
+	"Toolbar",
+	Vector2.new(0, 0),
+	UDim2.new(0, KinemiumRaylib.lib.GetRenderWidth() - 400, 0, 160)
+)
+
+local function Color3ToRaylib(c, transparency)
+	local r, g, b = c:ToRGB()
+	return structs.Color:new({
+		r = r,
+		g = g,
+		b = b,
+		a = math.floor(255 * (1 - transparency)),
+	})
+end
+
+local function renderButton(xPos, name, element, windowData)
+	local winX, winY = windowData.x, windowData.y + 80
+	local cellWidth = element.width or 50
+	local cellHeight = element.height or 50
+	local rectX = winX + xPos
+	local rectY = winY
+	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
+
+	local transparency = 1
+	local color = Color3.new(0.5, 0.5, 0.5)
+
+	if aRect.MouseIsInRect(rectData) then
+		color = element.hoverColor
+		transparency = element.hoverTransparency
+	end
+
+	aRect.Button(rectData, function()
+		element.callback(element, rectData)
 	end)
 
-	local buttonPos = vector.create(xz + 5, yz + 5)
-	rl.DrawTextEx(vend, "File", buttonPos, 18, 1, TextColor)
+	local bgColor = Color3ToRaylib(color, transparency)
+	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
 
-	local menuRect = aRect.new(buttonPos.x, buttonPos.y + 30, 200, 300)
+	if element.texture then
+		rl.DrawTexturePro(
+			element.texture.texture,
+			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
+			aRect:translate(rectData),
+			vector.create(0, 0),
+			element.rotation or 0,
+			ImageColor
+		)
+	end
 
-	local dt = rl.GetFrameTime()
-	local mainTheme = StudioThemeService.SelectedTheme
+	-- text
+	if name then
+		local textX = rectData.x + cellWidth / 2 - (#name * 9) / 2
+		local textY = rectData.y + cellHeight + 5
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
+	end
 
-	fileMenu.set("backgroundColor", StudioThemeService.SelectedTheme.aereon.window.BackgroundColor)
-	fileMenu.set("textColor", StudioThemeService.SelectedTheme.TextColor)
-	fileMenu.set("obj_rect", menuRect)
-	fileMenu.render(dt)
+	if element.render then
+		element.render(aRect)
+	end
+
+	return cellWidth + (element.padding or 20)
 end
+
+local function renderSeperator(xPos, windowData, element)
+	local winX, winY = windowData.x, windowData.y + 80
+	local rectX = winX + xPos
+	local rectY = winY
+
+	local sepColor = Color3ToRaylib(element.color or Color3.new(0.7, 0.7, 0.7), 0)
+	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 70, sepColor)
+
+	return (element.width or 2) + (element.padding or 20)
+end
+
+game.EngineSignal:Connect(function(route, name, data)
+	if route == "NewToolbarCategory" then
+		categoryRegistry[name] = data
+	end
+end)
+
+local function drawCategories(windowData)
+	local buttonWidth = 100
+	local buttonHeight = 30
+	local padding = 5
+
+	local categoryCount = 0
+	for _ in pairs(categoryRegistry) do
+		categoryCount += 1
+	end
+
+	local extraPadding = 5
+	local totalWidth = categoryCount * buttonWidth + math.max(0, (categoryCount - 1) * padding)
+	local width = totalWidth + extraPadding
+
+	local height = 35
+	local x = windowData.x + (windowData.width - width) / 2 -- center inside window
+	local y = windowData.y + 35
+
+	local Categories = aRect.new(x, y, width, height)
+	rl.DrawRectangleRounded(aRect:translate(Categories), 0.5, 18, backgroundColor)
+
+	local startX = x + extraPadding / 2
+	local i = 0
+	for name, category in pairs(categoryRegistry) do
+		local rect =
+			aRect.new(startX + i * (buttonWidth + padding), y + (height - buttonHeight) / 2, buttonWidth, buttonHeight)
+
+		aRect.Button(rect, function()
+			currentlySelected = name
+		end)
+
+		local bg = Color3ToRaylib(Color3.new(0.12549, 0.12549, 0.12549), 1)
+		if currentlySelected == name then
+			bg = SecondaryBackgroundColor
+		end
+
+		rl.DrawRectangleRounded(aRect:translate(rect), 0.5, 5, bg)
+
+		local textX = rect.x + buttonWidth / 2 - (#name * 9) / 2
+		local textY = rect.y + buttonHeight / 2 - 9
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
+
+		i += 1
+	end
+end
+
+local windowObject
+
+RunService.GuiRender:Connect(function()
+	if not windowObject then
+		return
+	end
+	renderer.Blur:DrawBlurredRegion(
+		windowObject.x,
+		windowObject.y,
+		windowObject.width,
+		windowObject.height,
+		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+	)
+end)
+
+fileMenu:hide()
 
 window.stepped = function(windowData)
 	if windowData.title == "Toolbar" then
 		windowObject = windowData
-		if rl.IsWindowResized() == 1 then
-			local dpiScale = rl.GetWindowScaleDPI().x
-			window.dragspring:target(windowData, {
-				x = frame.AbsolutePosition.X * dpiScale,
-				y = frame.AbsolutePosition.Y * dpiScale,
-				width = frame.AbsoluteSize.X * dpiScale,
-				height = frame.AbsoluteSize.Y * dpiScale,
-			})
-		end
+		window.dragspring:target(windowData, {
+			x = frame.AbsolutePosition.X,
+			y = frame.AbsolutePosition.Y,
+			width = frame.AbsoluteSize.X,
+			height = frame.AbsoluteSize.Y,
+		})
 
-		-- Use cumulative positioning instead of index-based
+		frame.Size = UDim2.new(0, KinemiumRaylib.lib.GetRenderWidth() - 400, 0, 160)
+
 		local currentX = 15 -- Initial left padding
 		local category = categoryRegistry[currentlySelected]
 
@@ -432,6 +421,5 @@ window.stepped = function(windowData)
 		end
 
 		drawCategories(windowData)
-		drawTopbar(windowData, rl.GetFrameTime())
 	end
 end

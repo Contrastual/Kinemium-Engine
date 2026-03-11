@@ -16,7 +16,7 @@ for _, file in pairs(entries) do
 	if zembed.IsEmbedded() then
 		local stem = fs.path.stem(file)
 		moduleName = fs.path.basename(file)
-		moduleName = moduleName:gsub("%.lua$", "")
+		moduleName = moduleName:gsub("%.luau$", "")
 		if moduleName == "getDatatypes" then
 			continue
 		end
@@ -25,10 +25,10 @@ for _, file in pairs(entries) do
 		datatypes[stem] = require("../" .. moduleName)
 		datatypes[stem].__type = moduleName
 	else
-		if file.name == "getDatatypes.lua" then
+		if file.name == "getDatatypes.luau" then
 			continue
 		end
-		moduleName = file.name:gsub("%.lua$", "")
+		moduleName = file.name:gsub("%.luau$", "")
 		datatypes[moduleName] = require("./" .. moduleName)
 		datatypes[moduleName].__type = moduleName
 	end

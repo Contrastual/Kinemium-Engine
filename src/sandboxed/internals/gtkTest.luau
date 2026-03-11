@@ -1,7 +1,7 @@
 local GuiStackService = game:GetService("GuiStackService")
 
 --[[
-local gtk = GuiStackService.GTK
+local gtk = GuiStackService.GTK()
 local app = gtk.App.new("com.devcell.gtkgl")
 
 app.OnActivate(function(appPtr, _)

@@ -1,20 +1,12 @@
 local sandboxer = {}
 
 local luau = zune.luau
-local fs = zune.fs
 local task = zune.task
 local filesystem = require("./filesystem")
 
 sandboxer.enviroment = {}
 sandboxer.native_code_gen = true
 sandboxer.thread = { active = {} }
-
-local function gsub(code)
-	-- transform into kinemium compatible code
-	code = string.gsub(code, "require", "krequire")
-	code = string.gsub(code, "typeof", "ktypeof")
-	return code
-end
 
 function sandboxer.run(code, chunk, env)
 	local options = {

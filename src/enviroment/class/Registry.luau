@@ -25,9 +25,9 @@ task.spawn(function()
 		if zembed.IsEmbedded() then
 			local name = zune.fs.path.basename(entry)
 			local full = "./list/" .. name
-			requirePath = string.gsub(full, ".lua", "")
+			requirePath = string.gsub(full, ".luau", "")
 		else
-			requirePath = "./list/" .. string.gsub(entry.name, ".lua", "")
+			requirePath = "./list/" .. string.gsub(entry.name, ".luau", "")
 		end
 
 		local returned, s, r = require(requirePath)

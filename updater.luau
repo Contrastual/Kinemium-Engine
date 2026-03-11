@@ -1,7 +1,6 @@
 local process = zune.process
 local fs = zune.fs
 local io = zune.io
-local serde = zune.serde
 
 local logo = [[
             @@@@@@@@@@@@@@@@@@            

@@ -139,7 +139,7 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 
 	for _, offset in ipairs(MoveOffsets) do
 		local part = offset.obj
-		if part and part.Parent and part.Anchored == true then
+		if part and part.Parent then
 			local finalCF = snappedPivot * offset.pos
 			part.CFrame = finalCF
 		end
