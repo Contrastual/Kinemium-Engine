@@ -32,6 +32,7 @@ task.spawn(function()
 		end
 
 		local returned, s, r = require(requirePath)
+		local initTime = (os.clock() - createClassStart) * 1000
 		-- returned = { class = "Part", callback = function(Part) ... end }
 
 		if not returned then
@@ -43,9 +44,10 @@ task.spawn(function()
 
 		log(
 			string.format(
-				"CLASS: Successfully created class '%s' in %.3fms from file: %s",
+				"CLASS: Successfully created class '%s' in %.3fms from file (required in %.3fms): %s",
 				returned.class,
 				(os.clock() - createClassStart) * 1000,
+				initTime,
 				requirePath
 			)
 		)

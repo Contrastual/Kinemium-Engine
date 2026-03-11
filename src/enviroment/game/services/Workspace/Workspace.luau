@@ -225,10 +225,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	local preloadedMeshes
 	if not IsHeadless then
+		local materialsLoadStart = os.clock()
 		preloadedMeshes = meshlib.PreloadStandardMeshes()
 
 		local material_index = 0
 		for material_name, material_path in pairs(materialList) do
+			local materialLoadStart = os.clock()
 			local default = rlib.R3D_GetDefaultMaterial()
 
 			local normal = rlib.R3D_LoadNormalMap(material_path, 1)
@@ -249,8 +251,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
 
 			material_index += 1
-			iodebug(`Loaded custom material: {material_name}`)
+			iodebug(string.format("Loaded custom material in %.3fms: %s", (os.clock() - materialLoadStart) * 1000, material_name))
 		end
+		iodebug(string.format("Loaded all custom materials in %.3fms", (os.clock() - materialsLoadStart) * 1000))
 	end
 
 	proptable.materials = loadedMaterials

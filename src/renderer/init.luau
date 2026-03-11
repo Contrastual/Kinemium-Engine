@@ -168,12 +168,14 @@ function KiRend.new(config: KiRendConf)
 				local buf = utils.wrap(lib.LoadFontEx(fontPath, size, nil, 0), structs.Font)
 
 				local texture = buf:getptr("texture", structs.Texture2D)
-				raylib.lib.SetTextureFilter(texture:getraw(), raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-				raylib.lib.SetTextureWrap(texture:getraw(), raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-				raylib.lib.GenTextureMipmaps(texture:getraw())
+				local texture_raw = texture:getraw()
+				raylib.lib.SetTextureFilter(texture_raw, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+				raylib.lib.SetTextureWrap(texture_raw, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+				raylib.lib.GenTextureMipmaps(texture_raw)
 
-				renderer_storage.fonts[name] = buf:getraw()
-				return buf:getraw()
+				local buf_raw = buf:getraw()
+				renderer_storage.fonts[name] = buf_raw
+				return buf_raw
 			end,
 
 			Get = function(name)

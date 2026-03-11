@@ -78,7 +78,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 				fontCount += 1
 				print(string.format("FONTSERVICE | Loaded font %s in %.3fms", transformed, (os.clock() - fontLoadStart) * 1000))
 			end
-			print(string.format("FONTSERVICE | Loaded %i fonts in %.2fs", fontCount, os.clock() - fontsLoadStart))
+			print(string.format("FONTSERVICE | Loaded %i fonts in %.3fms", fontCount,( os.clock() - fontsLoadStart) * 1000))
 		end,
 		FontAdded = FontAdded,
 		FontRemoved = FontRemoved,
