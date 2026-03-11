@@ -35,6 +35,7 @@ or connected to Roblox Corporation. Roblox is a trademark of Roblox Corporation
 - Enum
 - Faces / NormalId
 - Rect / Region3
+- And a whole lot more..
 
 ## Default Services
 - Debris
@@ -137,21 +138,17 @@ Ki-nem-yum!!
 - Jolt Physics
 - Discord RPC
 - Discord Luau (bots)
-- FMOD
 - Steam SDK
 - FFMPEG
 - Webview
 - Native File Dialog (NFD)
 - raylib-gizmo
-- Python
-- QuickJS (maintained)
+- Python (runtime)
+- QuickJS (runtime)
 - Webview
-- jolt
 - Luau
-- moonode- and most importantly.. Zune
-(Some of these libraries are made with the development of Kinemium, such as KI3D, KiNet, Aereon, and more)
-
-v1.9.9
+- and most importantly.. Zune
+kv1.10.4
 
 # Do you like cats?
-<img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
+<img width="444" height="200" alt="Silly Cat.... Hello.... Random Person...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
