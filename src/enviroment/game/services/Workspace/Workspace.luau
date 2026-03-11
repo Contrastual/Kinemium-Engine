@@ -222,6 +222,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local lastUseGpuInstancing = true
 	local lastMinInstancesPerBatch = 1
 
+	local fallbackMaterial = {
+		index = -1,
+		material = rlib.R3D_GetDefaultMaterial()
+	}
+
 	local preloadedMeshes
 	if not IsHeadless then
 		local stdMeshPreloadStart = os.clock()
@@ -331,15 +336,13 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		return loadedMaterials[materialName]
 	end
 
-	loadMaterial("debug", true)
-
 	local function getInstancedMaterial(materialName)
 		local cached = instancedMaterialCache[materialName]
 		if cached then
 			return cached
 		end
 
-		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
+		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 		if not matData then
 			return nil
 		end
@@ -361,7 +364,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		local meshData = preloadedMeshes and preloadedMeshes[shapeName]
-		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
+		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 		if not meshData or not matData then
 			return
 		end
@@ -549,7 +552,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local shapeName = part.Shape and part.Shape.Value
 			local materialName = part.Material and part.Material.Value
 			local meshData = shapeName and preloadedMeshes[shapeName]
-			local matData = materialName and loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
+			local matData = materialName and loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 			local partMesh = meshData[2]
 
 			if not meshData or not matData then
