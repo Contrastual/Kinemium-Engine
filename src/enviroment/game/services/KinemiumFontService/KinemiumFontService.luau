@@ -84,7 +84,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		FontRemoved = FontRemoved,
 	})
 
-	KinemiumFontService.LoadAllEngineFonts()
+	-- KinemiumFontService.LoadAllEngineFonts()
 end
 
 return KinemiumFontService
