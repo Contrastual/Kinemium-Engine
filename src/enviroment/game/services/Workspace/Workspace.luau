@@ -207,6 +207,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local meshlib = renderer.Mesh
 	local materialList = renderer.Texture.GetMaterials()
 	local loadedMaterials = {}
+	local availableMaterials = {}
 	local INSTANCE_POSITION_STRIDE = 12 -- vec3 (f32 x3)
 	local INSTANCE_ROTATION_STRIDE = 16 -- quat (f32 x4)
 	local INSTANCE_SCALE_STRIDE = 12 -- vec3 (f32 x3)
@@ -223,38 +224,29 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	local preloadedMeshes
 	if not IsHeadless then
-		local materialsLoadStart = os.clock()
+		local stdMeshPreloadStart = os.clock()
 		preloadedMeshes = meshlib.PreloadStandardMeshes()
+		iodebug(string.format("Preloaded standard meshes in %.3fms", (os.clock() - stdMeshPreloadStart) * 1000))
 
 		local material_index = 0
 		for material_name, material_path in pairs(materialList) do
-			local materialLoadStart = os.clock()
 			local default = rlib.R3D_GetDefaultMaterial()
 
-			local normal = rlib.R3D_LoadNormalMap(material_path, 1)
-			local albedo = rlib.R3D_LoadAlbedoMap(material_path, raylib.const.WHITE)
-
-			loadedMaterials[material_name] = {
+			availableMaterials[material_name] = {
 				index = material_index,
 				material = default,
-				--shader = mtsh_sh[material_name] and mtsh_sh[material_name].shader or nil,
+				path = material_path
 			}
 
 			if mtsh_sh[material_name] then
 				mtsh_sh[material_name].Apply(default)
 			end
 
-			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
-			buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
-			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
-
 			material_index += 1
-			iodebug(string.format("Loaded custom material in %.3fms: %s", (os.clock() - materialLoadStart) * 1000, material_name))
 		end
-		iodebug(string.format("Loaded all custom materials in %.3fms", (os.clock() - materialsLoadStart) * 1000))
 	end
 
-	proptable.materials = loadedMaterials
+	proptable.materials = availableMaterials
 
 	signal:Connect(function(route, data) end)
 
@@ -302,13 +294,51 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
+	local function loadMaterial(materialName, sync)
+		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
+			return nil
+		end
+		
+		zune.task.spawn(function()
+			availableMaterials[materialName].loading = true
+			local default = availableMaterials[materialName].material
+
+			local materialLoadStart = os.clock()
+			local path = availableMaterials[materialName].path
+			local data: buffer = zune.fs[sync and "readFileSync" or "readFile"](path, true)
+			iodebug(string.format("Loaded custom material %s in %.3fms", materialName, (os.clock() - materialLoadStart) * 1000))
+
+			local materialProcessStart = os.clock()
+			local ext = raylib.lib.GetFileExtension(path)
+			local normal = rlib.R3D_LoadNormalMapFromMemory(ext, data, buffer.len(data), 1)
+			local albedo = rlib.R3D_LoadAlbedoMapFromMemory(ext, data, buffer.len(data), raylib.const.WHITE)
+
+			if mtsh_sh[materialName] then
+				mtsh_sh[materialName].Apply(default)
+			end
+
+			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
+			buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
+			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
+			availableMaterials[materialName].loading = false
+
+			loadedMaterials[materialName] = availableMaterials[materialName]
+
+			iodebug(string.format("Processed custom material %s in %.3fms", materialName, (os.clock() - materialProcessStart) * 1000))
+		end)
+
+		return loadedMaterials[materialName]
+	end
+
+	loadMaterial("debug", true)
+
 	local function getInstancedMaterial(materialName)
 		local cached = instancedMaterialCache[materialName]
 		if cached then
 			return cached
 		end
 
-		local matData = loadedMaterials[materialName]
+		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
 		if not matData then
 			return nil
 		end
@@ -330,7 +360,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		local meshData = preloadedMeshes and preloadedMeshes[shapeName]
-		local matData = loadedMaterials[materialName]
+		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
 		if not meshData or not matData then
 			return
 		end
@@ -518,7 +548,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local shapeName = part.Shape and part.Shape.Value
 			local materialName = part.Material and part.Material.Value
 			local meshData = shapeName and preloadedMeshes[shapeName]
-			local matData = materialName and loadedMaterials[materialName]
+			local matData = materialName and loadedMaterials[materialName] or loadMaterial(materialName) or loadedMaterials.debug
 			local partMesh = meshData[2]
 
 			if not meshData or not matData then
