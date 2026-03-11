@@ -1,6 +1,0 @@
-[projects.test]
-path = "./src/projects/test"
-name = "test"
-engine_version = "1.9.0"
-icon = ""
-last_opened = 1773218241
