@@ -115,6 +115,8 @@ function KiRend.new(config: KiRendConf)
 		call3d_ms = 0,
 		dispatch_ms = 0,
 		render3d_update_ms = 0,
+		gc_ms = 0,
+		gc_last = os.clock()
 	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -168,12 +170,14 @@ function KiRend.new(config: KiRendConf)
 				local buf = utils.wrap(lib.LoadFontEx(fontPath, size, nil, 0), structs.Font)
 
 				local texture = buf:getptr("texture", structs.Texture2D)
-				raylib.lib.SetTextureFilter(texture:getraw(), raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-				raylib.lib.SetTextureWrap(texture:getraw(), raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-				raylib.lib.GenTextureMipmaps(texture:getraw())
+				local texture_raw = texture:getraw()
+				raylib.lib.SetTextureFilter(texture_raw, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+				raylib.lib.SetTextureWrap(texture_raw, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+				raylib.lib.GenTextureMipmaps(texture_raw)
 
-				renderer_storage.fonts[name] = buf:getraw()
-				return buf:getraw()
+				local buf_raw = buf:getraw()
+				renderer_storage.fonts[name] = buf_raw
+				return buf_raw
 			end,
 
 			Get = function(name)
@@ -341,6 +345,30 @@ function KiRend.new(config: KiRendConf)
 			end,
 		},
 	}
+
+	local function profileBegin(name)
+		if ENGINE_PROFILER then
+			ENGINE_PROFILER:Begin(name)
+		end
+	end
+
+	local function profileSetCounter(name, value)
+		if ENGINE_PROFILER then
+			ENGINE_PROFILER:SetCounter(name, value)
+		end
+	end
+
+	local function profileNextFrame()
+		if ENGINE_PROFILER then
+			ENGINE_PROFILER:NextFrame()
+		end
+	end
+
+	local function profileEnd()
+		if ENGINE_PROFILER then
+			ENGINE_PROFILER:End()
+		end
+	end
 
 	function rendererObject.GetViewMatrix()
 		if activeCamera then
@@ -610,7 +638,7 @@ function KiRend.new(config: KiRendConf)
 		end
 
 		if rendererObject.ShowPerfOverlay then
-			local color = structs.Color:new({ r = 255, g = 255, b = 255, a = 63 })
+			local color = structs.Color:new({ r = 255, g = 255, b = 255, a = 127 })
 			local size = 10
 
 			local text = table.concat({
@@ -641,7 +669,7 @@ function KiRend.new(config: KiRendConf)
 					perf_stats.render3d_update_ms
 				),
 				string.format("Input: %.3f ms | Key Process: %.3f ms", perf_stats.input_ms, perf_stats.input_key_ms),
-				string.format("RenderBus Connections: %d", perf_stats.rendereventbus_conns),
+				string.format("GC: %.3f ms | gcinfo: %i | RenderBus Connections: %d", perf_stats.gc_ms, gcinfo(), perf_stats.rendereventbus_conns),
 			}, "\n")
 
 			lib.DrawText(text, 10, lib.GetRenderHeight() - 10 - (#string.split(text, "\n") + 1) * size, size, color)
@@ -656,12 +684,18 @@ function KiRend.new(config: KiRendConf)
 		rendererObject.RuntimeLibrary.dt = lib.GetFrameTime()
 		rendererObject.RuntimeLibrary.time = lib.GetTime()
 
-		if ENGINE_PROFILER then
-			ENGINE_PROFILER:NextFrame()
-			ENGINE_PROFILER:Begin("Update")
-		end
+		profileNextFrame()
+		profileBegin("Update")
 
 		local delta = lib.GetFrameTime()
+
+		profileBegin("GC")
+		if os.clock() - perf_stats.gc_last >= 10 then
+			perf_stats.gc_last = os.clock()
+			zune.luau.garbagecollect()
+			perf_stats.gc_ms = (os.clock() - perf_stats.gc_last) * 1000
+		end
+		profileEnd()
 
 		for _, v in pairs(renderer_hooks.Renderstep) do
 			v(delta)
@@ -713,10 +747,8 @@ function KiRend.new(config: KiRendConf)
 		perf_stats.input_ms = (os.clock() - inputStart) * 1000
 		perf_stats.update_ms = (os.clock() - updateStart) * 1000
 
-		if ENGINE_PROFILER then
-			ENGINE_PROFILER:End()
-			ENGINE_PROFILER:Begin("Render")
-		end
+		profileEnd()
+		profileBegin("Render")
 
 		--lib.BeginTextureMode(viewport)
 		lib.BeginDrawing()
@@ -733,10 +765,8 @@ function KiRend.new(config: KiRendConf)
 		perf_stats.frame_ms = (os.clock() - frameStart) * 1000
 		perf_stats.fps = lib.GetFPS()
 
-		if ENGINE_PROFILER then
-			ENGINE_PROFILER:SetCounter("FPS", lib.GetFPS())
-			ENGINE_PROFILER:End()
-		end
+		profileSetCounter("FPS", lib.GetFPS())
+		profileEnd()
 
 		for _, v in pairs(renderer_hooks.Afterstep) do
 			v(delta)
@@ -805,6 +835,7 @@ function KiRend.new(config: KiRendConf)
 				call3d_ms = perf_stats.call3d_ms,
 				dispatch_ms = perf_stats.dispatch_ms,
 				render3d_update_ms = perf_stats.render3d_update_ms,
+				gc_ms = perf_stats.gc_ms
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),

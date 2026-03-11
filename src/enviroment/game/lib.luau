@@ -29,7 +29,10 @@ function DataModel.new(RENDERER, ...)
 	else
 		services = fs.entries("./src/enviroment/game/services")
 	end
+	
+	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
+		local addServiceStart = os.clock()
 		local name
 		local path
 		if zembed.IsEmbedded() then
@@ -47,6 +50,7 @@ function DataModel.new(RENDERER, ...)
 		end
 
 		local success, returnedData = pcall(require, path)
+		local initTime = (os.clock() - addServiceStart) * 1000
 
 		if success then
 			local success2, returnedData2 = pcall(function()
@@ -60,7 +64,14 @@ function DataModel.new(RENDERER, ...)
 			end)
 
 			if success2 then
-				log("[ServiceRegistry] Added service: " .. name)
+				log(
+					string.format(
+						"[ServiceRegistry] Added service %s in %.3fms (required in %.3fms)",
+						name,
+						(os.clock() - addServiceStart) * 1000,
+						initTime
+					)
+				)
 			else
 				warn(
 					"Error initializing service '"
@@ -86,6 +97,7 @@ function DataModel.new(RENDERER, ...)
 			)
 		end
 	end
+	log(string.format("[ServiceRegistry] Core services initialized in %.2fs", os.clock() - serviceInitStart))
 
 	for name, service in pairs(self.Services) do
 		service.Name = name

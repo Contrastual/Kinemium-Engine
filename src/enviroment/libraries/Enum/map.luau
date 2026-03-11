@@ -650,22 +650,35 @@ enumTable.SecurityCapabilities = {
 	Internals = 2,
 }
 
-for propName, values in pairs(dump) do
-	if not propName then
-		continue
-	end
-	if enumTable[propName] then
-		for name, value in pairs(values) do
-			if enumTable[propName][name] then
-				log(`[ENUM] {propName}.{name} already exists, Skipping..`)
+local enumProcessStart = os.clock()
+local alreadyExisting = {}
+for propName, values in next, dump do
+	-- if not propName then
+	-- 	continue
+	-- end
+
+	local enum = enumTable[propName]
+	if enum then
+		local existing = {}
+		for name, value in next, values do
+			if enum[name] then
+				table.insert(existing, name)
 				continue
 			end
-			enumTable[propName][name] = value
+			enum[name] = value
+		end
+		if #existing > 0 then
+			table.insert(alreadyExisting, `\t{propName} ({table.concat(existing, ", ")})`)
 		end
 	else
 		enumTable[propName] = values
 	end
 	--log("[ENUM] Created platform enum " .. propName)
 end
+if #alreadyExisting > 0 then
+	log("[ENUM] The following enums already exist and are skipped:\n" .. table.concat(alreadyExisting, "\n"))
+end
 
-return enumtransformer.new(enumTable)
+local enum = enumtransformer.new(enumTable)
+log(string.format("[ENUM] Processed enums in %.3fms", (os.clock() - enumProcessStart) * 1000))
+return enum
