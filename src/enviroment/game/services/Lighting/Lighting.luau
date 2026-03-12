@@ -31,9 +31,8 @@ local function getDayAlpha(clockTime)
 	return (clockTime % 24) / 24
 end
 
-function Lighting:GetSunDirection()
-	local time = self.ClockTime
-	local latitude = math.rad(self.GeographicLatitude)
+local function calculateSunDirection(time, latitude)
+	latitude = math.rad(latitude)
 	local declination = math.rad(23.45 * math.sin(math.rad(360 * (284 + time * 15) / 365)))
 	local hourAngle = math.rad(15 * (time - 12))
 
@@ -50,6 +49,10 @@ function Lighting:GetSunDirection()
 		math.sin(elevation),
 		math.sin(azimuth) * math.cos(elevation)
 	)
+end
+
+function Lighting:GetSunDirection()
+	return calculateSunDirection(self.ClockTime, self.GeographicLatitude)
 end
 
 local function setSkyObject(r3d_sky)
@@ -176,7 +179,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	renderer_signal:Connect(function(route, dt)
 		if route == "RenderStepped" then
 			if Lighting.EnableDayCycle == true then
-				Lighting.ClockTime += 0.005
+				Lighting.ClockTime += dt * 1.5
 
 				local sunY = -Lighting:GetSunDirection().Y
 				local daylight = math.clamp((sunY + 0.1) / 0.6, 0, 1)
@@ -204,7 +207,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 					Lighting:GetSunDirection():ToBuffer()
 				)
 
-				rlib.R3D_UpdateProceduralSky(cubemapSky, skyObject)
+				rlib.R3D_UpdateProceduralSky(skyObject, skyObject)
 			end
 		end
 	end)
@@ -221,6 +224,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			renderer.Blur.blurRadius = highestBlur
 			renderer.Blur:DrawFullBlur(const.WHITE)
 		end
+
+		local colorShift_Top = Lighting.ColorShift_Top:ToRaylib()
+		rlib.R3D_SetLightDirection(light, -calculateSunDirection((Lighting.ClockTime % 12) + 6, Lighting.GeographicLatitude):ToZuneVector())
+		rlib.R3D_SetLightColor(light, colorShift_Top)
+		rlib.R3D_SetLightEnergy(light, Lighting.Brightness)
+		rlib.R3D_SetLightActive(light, Lighting.GlobalShadows)
 	end, -1048576) -- why is this number so big???
 
 	Lighting.ChildAdded:Connect(handleLightingChild)

@@ -300,6 +300,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	local function loadMaterial(materialName, sync)
+		if loadedMaterials[materialName] then
+			return loadedMaterials[materialName]
+		end
 		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
 			return nil
 		end
@@ -330,7 +333,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 
 			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
-			buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
+			-- buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
 			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
 			availableMaterials[materialName].loading = false
 
@@ -344,28 +347,28 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				)
 			)
 		end)
-
-		return loadedMaterials[materialName]
+		return nil
 	end
 
 	local function getInstancedMaterial(materialName)
-		local cached = instancedMaterialCache[materialName]
-		if cached then
-			return cached
-		end
+		-- local cached = instancedMaterialCache[materialName]
+		-- if cached then
+		-- 	return cached
+		-- end
 
+		-- local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		-- if not matData then
+		-- 	return nil
+		-- end
+
+		-- local material = buffer.create(r3d.structs.R3D_Material:size())
+		-- buffer.copy(material, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
+
+		-- instancedMaterialCache[materialName] = material
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
-		if not matData then
-			return nil
-		end
-
-		local material = buffer.create(r3d.structs.R3D_Material:size())
-		buffer.copy(material, 0, matData.material, 0, r3d.structs.R3D_Material:size())
-		buffer.writei32(material, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
-		buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
-
-		instancedMaterialCache[materialName] = material
-		return material
+		return matData.material
 	end
 
 	local function queueSinglePartDraw(part, r3dAABB)
@@ -625,22 +628,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			return
 		end
 
+		local forceDirty = false
 		if
 			Workspace.UseGpuInstancing ~= lastUseGpuInstancing
 			or Workspace.MinInstancesPerBatch ~= lastMinInstancesPerBatch
 		then
 			lastUseGpuInstancing = Workspace.UseGpuInstancing
 			lastMinInstancesPerBatch = Workspace.MinInstancesPerBatch
-			for _, chunk in pairs(chunks) do
-				chunk.dirty = true
-			end
+			forceDirty = true
 		end
 
 		local camPos = Kinemium_camera.CFrame.Position
 
 		for _, chunk in pairs(chunks) do
 			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
-				if chunk.dirty then
+				if forceDirty or chunk.dirty then
 					rebuildChunkBatches(chunk)
 				end
 
