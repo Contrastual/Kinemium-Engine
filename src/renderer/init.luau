@@ -46,6 +46,13 @@ function KiRend.new(config: KiRendConf)
 	lib.SetConfigFlags(windowFlags)
 
 	lib.InitWindow(config.width, config.height, config.title)
+	
+	if lib.WindowShouldClose() == 0 then
+		lib.BeginDrawing()
+		lib.ClearBackground(const.BLACK)
+		lib.EndDrawing()
+	end
+
 	if config.maxFps and config.maxFps > 0 then
 		lib.SetTargetFPS(config.maxFps)
 	elseif not useVsync then
