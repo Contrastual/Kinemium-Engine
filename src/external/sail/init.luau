@@ -7,7 +7,7 @@ local zembed = require("@zembed")
 local Packager = require("@Downloader")
 
 local downloadLink =
-	`https://github.com/Qquaded/dlls/releases/download/win-sail/{zune.platform.os == "linux" and "klinux" or zune.platform.os}.zip`
+	`https://github.com/Qquaded/dlls/releases/download/win-sail/{zune.platform.os}.zip`
 print(zune.fs.getExePath())
 if zune.fs.stat("./src/external/sail/bin").kind == "none" then
 	if zune.platform.os == "linux" then

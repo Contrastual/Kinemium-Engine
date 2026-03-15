@@ -302,7 +302,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
-	local function loadMaterial(materialName)
+	local function loadMaterial(materialName, sync)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
@@ -357,11 +357,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				mtsh_sh[materialName].Apply(material)
 			end
 
-			mtl_info.loading = false
-			loadedMaterials[materialName] = {
-				index = mtl_info.index,
-				material = material
-			}
+			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
+			-- buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
+			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
+			availableMaterials[materialName].loading = false
+
+			loadedMaterials[materialName] = availableMaterials[materialName]
 
 			iodebug(
 				string.format(

@@ -33,15 +33,6 @@ export type SwsVector = typeof(SwsVector:new({}))
 
 -- Function definitions
 local funcs = {
-	swscale_version = { returns = ffi.types.pointer, args = {} },
-	sws_free_context = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	sws_test_format = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	sws_test_colorspace = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	sws_test_primaries = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	sws_test_transfer = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	sws_test_frame = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
-	sws_frame_setup = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
-	sws_is_noop = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	sws_scale_frame = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer } },
 	sws_isSupportedInput = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	sws_isSupportedOutput = { returns = ffi.types.i32, args = { ffi.types.pointer } },
