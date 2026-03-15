@@ -35,10 +35,11 @@ end
 
 function Connection:Fire(...)
 	if self.Connected and self._fn then
-		local ok, err = pcall(self._fn, ...)
-		if not ok then
-			print(err)
-		end
+		xpcall(self._fn, function(err)
+			if err then
+				warn(debug.traceback(err), 2)
+			end
+		end, ...)
 	end
 end
 
@@ -141,24 +142,23 @@ function Signal:Fire(...)
 		print(string.format("[Signal Debug] Firing with %d args to %d listeners", #args, #self._connections))
 	end
 
-	for _, conn in ipairs(self._connections) do
-		conn:Fire(table.unpack(args))
+	local function fire(...)
+		for _, conn in ipairs(self._connections) do
+			conn:Fire(...)
+		end
 	end
+	fire(table.unpack(args))
 end
 
 function Signal:FireDeferred(...)
-	local args = { ... }
-	task.defer(function()
-		self:Fire(table.unpack(args))
-	end)
+	task.defer(function(...)
+		self:Fire(...)
+	end, ...)
 end
 
 function Signal:FireParallel(...)
-	local args = { ... }
 	for _, conn in ipairs(self._connections) do
-		task.spawn(function()
-			conn:Fire(table.unpack(args))
-		end)
+		task.spawn(conn.Fire, conn, ...)
 	end
 end
 
@@ -272,14 +272,13 @@ end
 function Signal:ConnectDebounced(fn, delay)
 	local scheduled = nil
 	return self:Connect(function(...)
-		local args = { ... }
 		if scheduled then
 			task.cancel(scheduled)
 		end
-		scheduled = task.delay(delay, function()
-			fn(table.unpack(args))
+		scheduled = task.delay(delay, function(...)
+			fn(...)
 			scheduled = nil
-		end)
+		end, ...)
 	end)
 end
 
@@ -302,12 +301,13 @@ end
 
 function Signal:Merge(otherSignal)
 	local mergedSignal = Signal.new()
-	self:Connect(function(...)
+
+	local function fireSignal(...)
 		mergedSignal:Fire(...)
-	end)
-	otherSignal:Connect(function(...)
-		mergedSignal:Fire(...)
-	end)
+	end
+
+	self:Connect(fireSignal)
+	otherSignal:Connect(fireSignal)
 	return mergedSignal
 end
 
