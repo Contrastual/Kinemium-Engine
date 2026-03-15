@@ -640,44 +640,6 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	av_smpte_436m_coded_anc_validate = { returns = ffi.types.i32, args = { ffi.types.pointer } },
-	av_smpte_436m_anc_encode = {
-		returns = ffi.types.i32,
-		args = { ffi.types.u8, ffi.types.i32, ffi.types.i32, ffi.types.pointer },
-	},
-	av_smpte_436m_anc_append = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
-	},
-	av_smpte_436m_anc_iter_init = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
-	},
-	av_smpte_436m_anc_iter_next = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
-	av_smpte_436m_coded_anc_payload_size = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.u16 } },
-	av_smpte_291m_anc_8bit_decode = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u16, ffi.types.pointer },
-	},
-	av_smpte_291m_anc_8bit_fill_checksum = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	av_smpte_291m_anc_8bit_get_sample_count = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer },
-	},
-	av_smpte_291m_anc_8bit_encode = {
-		returns = ffi.types.i32,
-		args = {
-			ffi.types.pointer,
-			ffi.types.u16,
-			ffi.types.pointer,
-			ffi.types.pointer,
-			ffi.types.pointer,
-		},
-	},
-	av_smpte_291m_anc_8bit_extract_cta_708 = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.u8 },
-	},
 	av_vorbis_parse_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	av_vorbis_parse_frame_flags = {
 		returns = ffi.types.i32,

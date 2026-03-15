@@ -1111,18 +1111,7 @@ local funcs = {
 	},
 	av_log2 = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	av_log2_16bit = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_container_fifo_free = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	av_container_fifo_write = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer },
-	},
-	av_container_fifo_read = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer },
-	},
-	av_container_fifo_peek = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.u64 } },
-	av_container_fifo_drain = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u64 } },
-	av_container_fifo_can_read = { returns = ffi.types.u64, args = { ffi.types.pointer } },
+
 	av_get_cpu_flags = { returns = ffi.types.i32, args = {} },
 	av_force_cpu_flags = { returns = ffi.types.void, args = { ffi.types.i32 } },
 	av_parse_cpu_caps = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
@@ -1133,12 +1122,7 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.u32, ffi.types.i32 },
 	},
-	av_csp_primaries_id_from_desc = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_csp_approximate_trc_gamma = { returns = ffi.types.double, args = { ffi.types.pointer } },
-	av_csp_trc_func_from_id = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_csp_trc_func_inv_from_id = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_csp_itu_eotf = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	av_csp_itu_eotf_inv = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+
 	av_des_init = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
@@ -1239,10 +1223,7 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
-	av_frame_side_data_remove_by_props = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
-	},
+
 	av_hash_alloc = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.pointer } },
 	av_hash_get_size = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_hash_init = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -1799,9 +1780,6 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.u8, ffi.types.pointer, ffi.types.i32, ffi.types.u8, ffi.types.i32 },
 	},
 
-	av_refstruct_unref = { returns = ffi.types.void, args = {} },
-	av_refstruct_replace = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	av_refstruct_exclusive = { returns = ffi.types.i32, args = { ffi.types.pointer } },
 	av_ripemd_init = { returns = ffi.types.i32, args = { ffi.types.pointer, ffi.types.i32 } },
 	av_ripemd_update = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 } },
 	av_ripemd_final = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u8 } },
