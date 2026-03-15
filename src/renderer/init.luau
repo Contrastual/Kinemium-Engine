@@ -135,7 +135,7 @@ function KiRend.new(config: KiRendConf)
 		Freecam = freecam,
 		Shader = shader,
 		Raylib = raylib,
-		Texture = texture(raylib.lib),
+		Texture = texture(lib, structs),
 		Enable3D = true,
 		Blur = newBlurInstance,
 

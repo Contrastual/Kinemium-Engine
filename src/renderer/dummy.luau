@@ -69,7 +69,10 @@ local mockFreecam = {
 local mockTexture = function()
 	return {
 		LoadTextureFromFile = function()
-			return {}
+			return zune.ffi.null
+		end,
+		LoadTextureFromFileAsync = function()
+			return zune.ffi.null
 		end,
 		GetMaterials = function()
 			return {}
