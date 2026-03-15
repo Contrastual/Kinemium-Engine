@@ -233,18 +233,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		preloadedMeshes = meshlib.PreloadStandardMeshes()
 		iodebug(string.format("Preloaded standard meshes in %.3fms", (os.clock() - stdMeshPreloadStart) * 1000))
 
+		local default = rlib.R3D_GetDefaultMaterial()
+
 		local material_index = 0
 		for material_name, material_path in pairs(materialList) do
-			local default = rlib.R3D_GetDefaultMaterial()
+			local material = buffer.create(buffer.len(default))
+			buffer.copy(material, 0, default)
 
 			availableMaterials[material_name] = {
 				index = material_index,
-				material = default,
+				material = material,
 				path = material_path
 			}
 
 			if mtsh_sh[material_name] then
-				mtsh_sh[material_name].Apply(default)
+				mtsh_sh[material_name].Apply(material)
 			end
 
 			material_index += 1
@@ -299,7 +302,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
-	local function loadMaterial(materialName, sync)
+	local function loadMaterial(materialName)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
@@ -308,30 +311,57 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		zune.task.spawn(function()
-			availableMaterials[materialName].loading = true
-			local default = availableMaterials[materialName].material
+			local mtl_info = availableMaterials[materialName]
+			local material = mtl_info.material
 
-			local path = availableMaterials[materialName].path
-			iodebug(string.format("Loading custom material %s: %s", materialName, path))
+			mtl_info.loading = true
+
+			local function read(path): (buffer?, string?)
+				if not path then
+					return nil, nil
+				end
+				local success, result = pcall(zune.fs.readFileSync, path, true)
+				if success then
+					return result, raylib.lib.GetFileExtension(path)
+				else
+					return nil, nil
+				end
+			end
+
+			iodebug(string.format("Loading custom material %s", materialName))
 			local materialLoadStart = os.clock()
-			local data = sync and zune.fs.readFileSync(path, true) or zune.fs.readFile(path, true)
+			print(mtl_info.path)
+			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
+			local data_normal, data_normal_ext = read(mtl_info.path.normal)
+			local data_orm, data_orm_ext = read(mtl_info.path.orm)
+			-- local data_emission, data_emission_ext = read(path.emission)
 			iodebug(string.format("Loaded custom material %s in %.3fms", materialName, (os.clock() - materialLoadStart) * 1000))
 
 			local materialProcessStart = os.clock()
-			local ext = raylib.lib.GetFileExtension(path)
-			local normal = rlib.R3D_LoadNormalMapFromMemory(ext, data, buffer.len(data), 1)
-			local albedo = rlib.R3D_LoadAlbedoMapFromMemory(ext, data, buffer.len(data), raylib.const.WHITE)
-
+			if data_albedo then
+				iodebug(string.format("Found albedo map, processing"))
+				local map = rlib.R3D_LoadAlbedoMapFromMemory(data_albedo_ext, data_albedo, buffer.len(data_albedo), raylib.const.WHITE)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("albedo"), map, 0, r3d.structs.R3D_AlbedoMap:size())
+			end
+			if data_normal then
+				iodebug(string.format("Found normal map, processing"))
+				local map = rlib.R3D_LoadNormalMapFromMemory(data_normal_ext, data_normal, buffer.len(data_normal), 1)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("normal"), map, 0, r3d.structs.R3D_NormalMap:size())
+			end
+			if data_orm then
+				iodebug(string.format("Found ORM map, processing"))
+				local map = rlib.R3D_LoadOrmMapFromMemory(data_orm_ext, data_orm, buffer.len(data_orm), 1, 1, 0)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("orm"), map, 0, r3d.structs.R3D_OrmMap:size())
+			end
 			if mtsh_sh[materialName] then
-				mtsh_sh[materialName].Apply(default)
+				mtsh_sh[materialName].Apply(material)
 			end
 
-			buffer.copy(albedo, r3d.structs.R3D_AlbedoMap:offset("color"), raylib.const.WHITE)
-			-- buffer.copy(default, r3d.structs.R3D_Material:offset("normal"), normal, 0, r3d.structs.R3D_NormalMap:size())
-			buffer.copy(default, r3d.structs.R3D_Material:offset("albedo"), albedo, 0, r3d.structs.R3D_AlbedoMap:size())
-			availableMaterials[materialName].loading = false
-
-			loadedMaterials[materialName] = availableMaterials[materialName]
+			mtl_info.loading = false
+			loadedMaterials[materialName] = {
+				index = mtl_info.index,
+				material = material
+			}
 
 			iodebug(string.format("Processed custom material %s in %.3fms", materialName, (os.clock() - materialProcessStart) * 1000))
 		end)
