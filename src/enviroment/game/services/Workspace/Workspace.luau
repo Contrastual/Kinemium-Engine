@@ -306,11 +306,33 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
+	local function loadMaterial(materialName)
+		if loadedMaterials[materialName] then
+			return loadedMaterials[materialName]
+		end
 		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
 			return nil
 		end
 
 		zune.task.spawn(function()
+			local mtl_info = availableMaterials[materialName]
+			local material = mtl_info.material
+
+			mtl_info.loading = true
+
+			local function read(path): (buffer?, string?)
+				if not path then
+					return nil, nil
+				end
+				local success, result = pcall(zune.fs.readFileSync, path, true)
+				if success then
+					return result, raylib.lib.GetFileExtension(path)
+				else
+					return nil, nil
+				end
+			end
+
+			iodebug(string.format("Loading custom material %s", materialName))
 			local mtl_info = availableMaterials[materialName]
 			local material = mtl_info.material
 
@@ -335,6 +357,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local data_normal, data_normal_ext = read(mtl_info.path.normal)
 			local data_orm, data_orm_ext = read(mtl_info.path.orm)
 			-- local data_emission, data_emission_ext = read(path.emission)
+			print(mtl_info.path)
+			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
+			local data_normal, data_normal_ext = read(mtl_info.path.normal)
+			local data_orm, data_orm_ext = read(mtl_info.path.orm)
+			-- local data_emission, data_emission_ext = read(path.emission)
 			iodebug(string.format("Loaded custom material %s in %.3fms", materialName, (os.clock() - materialLoadStart) * 1000))
 
 			local materialProcessStart = os.clock()
@@ -353,7 +380,23 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				local map = rlib.R3D_LoadOrmMapFromMemory(data_orm_ext, data_orm, buffer.len(data_orm), 1, 1, 0)
 				buffer.copy(material, r3d.structs.R3D_Material:offset("orm"), map, 0, r3d.structs.R3D_OrmMap:size())
 			end
+			if data_albedo then
+				iodebug(string.format("Found albedo map, processing"))
+				local map = rlib.R3D_LoadAlbedoMapFromMemory(data_albedo_ext, data_albedo, buffer.len(data_albedo), raylib.const.WHITE)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("albedo"), map, 0, r3d.structs.R3D_AlbedoMap:size())
+			end
+			if data_normal then
+				iodebug(string.format("Found normal map, processing"))
+				local map = rlib.R3D_LoadNormalMapFromMemory(data_normal_ext, data_normal, buffer.len(data_normal), 1)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("normal"), map, 0, r3d.structs.R3D_NormalMap:size())
+			end
+			if data_orm then
+				iodebug(string.format("Found ORM map, processing"))
+				local map = rlib.R3D_LoadOrmMapFromMemory(data_orm_ext, data_orm, buffer.len(data_orm), 1, 1, 0)
+				buffer.copy(material, r3d.structs.R3D_Material:offset("orm"), map, 0, r3d.structs.R3D_OrmMap:size())
+			end
 			if mtsh_sh[materialName] then
+				mtsh_sh[materialName].Apply(material)
 				mtsh_sh[materialName].Apply(material)
 			end
 
@@ -372,13 +415,14 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			)
 		end)
 		return nil
+		return nil
 	end
 
 	local function getInstancedMaterial(materialName)
-		-- local cached = instancedMaterialCache[materialName]
-		-- if cached then
-		-- 	return cached
-		-- end
+		-- -- local cached = instancedMaterialCache[materialName]
+		-- -- if cached then
+		-- -- 	return cached
+		-- -- end
 
 		-- local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 		-- if not matData then
@@ -391,7 +435,19 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
 
 		-- instancedMaterialCache[materialName] = material
+		-- local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		-- if not matData then
+		-- 	return nil
+		-- end
+
+		-- local material = buffer.create(r3d.structs.R3D_Material:size())
+		-- buffer.copy(material, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
+
+		-- instancedMaterialCache[materialName] = material
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		return matData.material
 		return matData.material
 	end
 
@@ -653,6 +709,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		local forceDirty = false
+		local forceDirty = false
 		if
 			Workspace.UseGpuInstancing ~= lastUseGpuInstancing
 			or Workspace.MinInstancesPerBatch ~= lastMinInstancesPerBatch
@@ -660,13 +717,14 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			lastUseGpuInstancing = Workspace.UseGpuInstancing
 			lastMinInstancesPerBatch = Workspace.MinInstancesPerBatch
 			forceDirty = true
+			forceDirty = true
 		end
 
 		local camPos = Kinemium_camera.CFrame.Position
 
 		for _, chunk in pairs(chunks) do
 			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
-				if forceDirty or chunk.dirty then
+				if forceDirty or forceDirty or chunk.dirty then
 					rebuildChunkBatches(chunk)
 				end
 
