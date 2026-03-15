@@ -366,10 +366,13 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	addMenuScroll[instance] = addMenuScroll[instance] or 0
 
 	local instanceTypes = Instance.getClasses()
-	local totalItems = 0
-	for _ in pairs(instanceTypes) do
-		totalItems = totalItems + 1
+	local sortedInstances = {}
+
+	for class in pairs(instanceTypes) do
+		table.insert(sortedInstances, class)
 	end
+
+	local totalItems = #sortedInstances
 
 	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2
 	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT
@@ -393,6 +396,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 			local maxScroll = math.max(0, contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT))
 			addMenuScroll[instance] = math.max(0, math.min(addMenuScroll[instance], maxScroll))
 		end
+	elseif rl.IsMouseButtonPressed(0) == 1 then
+		activeAddMenu = nil
 	end
 
 	-- Draw items with scissor
@@ -404,9 +409,9 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		math.floor(menuHeight - MENU_PADDING * 2)
 	)
 
-	local i = 0
-	for class, _ in pairs(instanceTypes) do
-		i = i + 1
+	table.sort(sortedInstances)
+
+	for i, class in ipairs(sortedInstances) do
 		local itemY = menuY + MENU_PADDING + ((i - 1) * ADD_MENU_ITEM_HEIGHT) - addMenuScroll[instance]
 
 		-- Skip items outside visible area

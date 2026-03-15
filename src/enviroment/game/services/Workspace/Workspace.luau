@@ -306,10 +306,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
-	local function loadMaterial(materialName)
-		if loadedMaterials[materialName] then
-			return loadedMaterials[materialName]
-		end
 		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
 			return nil
 		end
@@ -415,7 +411,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			)
 		end)
 		return nil
-		return nil
 	end
 
 	local function getInstancedMaterial(materialName)
@@ -447,7 +442,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 		-- instancedMaterialCache[materialName] = material
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
-		return matData.material
 		return matData.material
 	end
 

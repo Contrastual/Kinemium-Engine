@@ -456,26 +456,28 @@ function Instance:FindFirstAncestorWhichIsA(className)
 end
 
 function Instance:GetPropertyChangedSignal(property)
-	if not self._propertySignals then
-		self._propertySignals = {}
+	local propertySignals = rawget(self, "_propertySignals")
+	if not propertySignals then
+		propertySignals = {}
+		rawset(self, "_propertySignals", propertySignals)
 	end
 
-	if not self._propertySignals[property] then
-		self._propertySignals[property] = Signal.new()
+	if not propertySignals then
+		propertySignals[property] = Signal.new()
 
 		self.Changed:Connect(function(changedProp, value)
 			if changedProp == property then
-				self._propertySignals[property]:Fire(value)
+				propertySignals[property]:Fire(value)
 			end
 		end)
 	end
 
-	return self._propertySignals[property]
+	return propertySignals[property]
 end
 
 function Instance:GetAttributes()
 	local copy = {}
-	for k, v in pairs(self.attributes) do
+	for k, v in pairs(rawget(self, "attributes")) do
 		copy[k] = v
 	end
 	return copy
