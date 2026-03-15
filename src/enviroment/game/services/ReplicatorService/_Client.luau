@@ -21,17 +21,17 @@ function Client.init(context)
 
 	for _, v in pairs(game:GetDescendants()) do
 		lookup[v.UniqueId] = v
-		log("[ClientReplicator] Created lookup pointer: " .. v.UniqueId)
+		log("[ClientReplicator] Created lookup pointer: " .. v.UniqueId .. " for ", v)
 	end
 
 	game.DescendantAdded:Connect(function(object)
 		lookup[object.UniqueId] = object
-		log("[ClientReplicator] Created lookup pointer: " .. object.UniqueId)
+		log("[ClientReplicator] Created lookup pointer: " .. object.UniqueId .. " for ", object)
 	end)
 
 	game.DescendantRemoving:Connect(function(object)
 		lookup[object.UniqueId] = nil
-		log("[ClientReplicator] Removed lookup pointer: " .. object.UniqueId)
+		log("[ClientReplicator] Removed lookup pointer: " .. object.UniqueId .. " for ", object)
 	end)
 
 	kinet_client:OnRecieve(function(addr, data)
@@ -39,17 +39,24 @@ function Client.init(context)
 			local objects = data.objects
 			local deserialized = serializationService.Deserialize(objects)
 			if deserialized then
-				print("Got data")
-				print(deserialized)
+				print("Got data!")
 				for _, object in pairs(deserialized) do
+					print("Parenting", object)
+					print("Id", object.UniqueId)
+					print("Parent ID", object._parentID)
 					if lookup[object.UniqueId] then
+						print("Theres an already existing object with the same unique id!")
+						print(object)
 						continue
 					end
+					print("Object is very unique!")
 
 					object.NetworkOwnerType = Enum.MachineNetworkOwner.Server.Value
-					lookup[object.UniqueId] = object
 
 					local parent = lookup[object._parentID]
+
+					print("Found parent! ", parent)
+
 					if parent then
 						object.Parent = parent
 						object._parentID = nil

@@ -50,6 +50,9 @@ function Downloader.extract(archive: buffer, outDir: string, filter: ExtractFilt
 
 	if zip.is(archive) then
 		for path, data in zip.read(archive) do
+			if path == [[bin\]] then
+				continue
+			end
 			if filter and not filter(path) then
 				continue
 			end
@@ -61,11 +64,19 @@ function Downloader.extract(archive: buffer, outDir: string, filter: ExtractFilt
 
 			local out = fs.path.resolve(outDir, name)
 			local dir = fs.path.dirname(out)
+
 			if dir and fs.stat(dir).kind ~= "directory" then
 				fs.makeDir(dir, true)
 			end
+
+			local success, result = pcall(function(...)
+				fs.writeFile("./" .. string.gsub(out, [[\]], "/"), data)
+			end)
+			if not success then
+				print("Failed to write " .. path .. "; Result: ", result)
+			end
 		end
-		return
+		return true
 	end
 
 	-- tar.gz
@@ -89,8 +100,6 @@ function Downloader.extract(archive: buffer, outDir: string, filter: ExtractFilt
 end
 
 function Downloader.downloadAndExtract(url: string, outDir: string, filter: ExtractFilter?, rename: RenameRule?)
-	print("Downloading..")
-
 	local res = request(url, {
 		method = "GET",
 		headers = {
@@ -104,9 +113,12 @@ function Downloader.downloadAndExtract(url: string, outDir: string, filter: Extr
 		error(`Download failed ({res.status_code})`)
 	end
 
-	print("Successfully downloaded! http result: ", res)
+	print("Successfully downloaded zip! http result: ", res.ok)
 
-	Downloader.extract(res.body :: buffer, outDir, filter, rename)
+	repeat
+		task.wait()
+	until Downloader.extract(res.body :: buffer, outDir, filter, rename)
+	return true
 end
 
 return Downloader

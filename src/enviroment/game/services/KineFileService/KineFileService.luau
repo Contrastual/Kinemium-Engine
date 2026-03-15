@@ -15,7 +15,7 @@ export type KinemiumPlaceFile = {
 
 local sArgs = {
 	"-s",
-	"src/main.lua",
+	"src/main.luau",
 	"src/enviroment/*",
 	"src/enviroment/class/**",
 	"src/enviroment/classlibs/**",
@@ -27,15 +27,15 @@ local sArgs = {
 	"src/enviroment/game/*",
 	"src/enviroment/game/runtime/*",
 
-	"src/modules/**/*.lua*",
-	"src/renderer/**/*.lua*",
+	"src/modules/**/*.luau*",
+	"src/renderer/**/*.luau*",
 	"src/sandboxed/**",
-	"src/runtime/**/*.lua*",
-	"src/external/**/*.lua*",
+	"src/runtime/**/*.luau*",
+	"src/external/**/*.luau*",
 	"src/objects/**",
 	"src/libs/**",
 	"src/**",
-	"src/external/signal.lua",
+	"src/external/signal.luau",
 }
 
 local function build(placeFile)
@@ -43,7 +43,7 @@ local function build(placeFile)
 		"bundle",
 		"--compression=zstd",
 		"-f",
-		"./**/.luaurc",
+		"./**/.luauurc",
 		"src/assets/**",
 		"src/assets/images/**",
 		"src/assets/icon/**",

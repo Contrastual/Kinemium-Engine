@@ -141,7 +141,8 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 		local part = offset.obj
 		if part and part.Parent then
 			local finalCF = snappedPivot * offset.pos
-			part.CFrame = finalCF
+			local o = part.Orientation
+			part.CFrame = finalCF * CFrame.Angles(math.rad(o.X), math.rad(o.Y), math.rad(o.Z))
 		end
 	end
 end)

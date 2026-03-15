@@ -32,6 +32,7 @@ function Downloader.download(url: string, parentFolder: string, filename: string
 	if zip.is(data) then
 		local files = zip.read(data)
 		for name, content in files do
+			print("Making file " .. name)
 			local path = fs.path.join(parentFolder, filename or name)
 			fs.writeFile(path, content)
 		end

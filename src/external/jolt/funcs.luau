@@ -1379,7 +1379,7 @@ local funcs = {
 	},
 	JPH_BodyInterface_SetMotionQuality = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u8 },
 	},
 	JPH_BodyInterface_GetMotionQuality = {
 		returns = ffi.types.pointer,

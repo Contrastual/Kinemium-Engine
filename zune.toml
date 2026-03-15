@@ -30,7 +30,6 @@ buffer_max_display = 48
 #  You can use `zune luau list-fflags` to list all available FFlags.
 #[runtime.luau.fflags]
 #DebugCodegenOptSize = false
-#LuauSolverV2 = true
 
 # Features settings
 #  This affects the features that are enabled in Zune.

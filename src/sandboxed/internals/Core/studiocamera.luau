@@ -8,9 +8,6 @@ local playtestService = game:GetService("PlaytestService")
 RunService.RenderStepped:Connect(function(a0: number)
 	local camera = workspace.Camera
 	if camera then
-		if playtestService.IsPlaytesting then
-			return
-		end
 		if game.Stop3DInput == true then
 			return
 		end

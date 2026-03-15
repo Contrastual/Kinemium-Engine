@@ -8,6 +8,7 @@ local zstd = serde.zstd
 
 local Vector3 = require("@Vector3")
 local CFrame = require("@CFrame")
+local Enum = require("@EnumMap")
 local Color3 = require("@Color3")
 local Color4 = require("@Color4")
 local UDim = require("@UDim")
@@ -96,7 +97,7 @@ local function serialize_value(value)
 		return nil, false
 	end
 	if type(value) == "table" then
-		if value.ToTable then
+		if value.ToTable and type(value.ToTable) == "function" then
 			return value:ToTable(), true
 		end
 		return nil, false

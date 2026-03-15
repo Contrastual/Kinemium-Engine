@@ -1,6 +1,5 @@
 --!optimize 2
 --!native
-
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
 	_G.IsExecutable = true
@@ -14,7 +13,6 @@ end
 if zune.platform.os == "windows" then
 	require("@vcredistInstaller")
 end
-
 local httpServerViewer = require("@httpServerViewer")
 
 _G.ENGINE_PROFILER = require("@profiler")
@@ -222,9 +220,13 @@ local function loadInternals()
 		return
 	end
 
-	local Folder = Instance.new("Folder")
-	Folder.Name = "Studio"
-	Folder.Parent = kilang.env.game.CoreGui
+	local Folder
+
+	if not _G.IsClient then
+		Folder = Instance.new("Folder")
+		Folder.Name = "Studio"
+		Folder.Parent = kilang.env.game.CoreGui
+	end
 
 	loop("src/sandboxed/internals", function(path, entry)
 		if kilang.threads[path] then
@@ -260,10 +262,12 @@ local function loadInternals()
 		local luauCleaned = string.gsub(entry.name, ".luau", "")
 		local luaCleaned = string.gsub(luauCleaned, ".lua", "")
 
-		local object = Instance.new("LocalScript")
-		object.Source = code
-		object.Name = luaCleaned
-		object.Parent = Folder
+		if Folder then
+			local object = Instance.new("LocalScript")
+			object.Source = code
+			object.Name = luaCleaned
+			object.Parent = Folder
+		end
 	end)
 end
 

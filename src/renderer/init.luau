@@ -116,7 +116,7 @@ function KiRend.new(config: KiRendConf)
 		dispatch_ms = 0,
 		render3d_update_ms = 0,
 		gc_ms = 0,
-		gc_last = os.clock()
+		gc_last = os.clock(),
 	}
 
 	local newBlurInstance = blur.Init(config.width, config.height)
@@ -669,7 +669,12 @@ function KiRend.new(config: KiRendConf)
 					perf_stats.render3d_update_ms
 				),
 				string.format("Input: %.3f ms | Key Process: %.3f ms", perf_stats.input_ms, perf_stats.input_key_ms),
-				string.format("GC: %.3f ms | gcinfo: %i | RenderBus Connections: %d", perf_stats.gc_ms, gcinfo(), perf_stats.rendereventbus_conns),
+				string.format(
+					"GC: %.3f ms | gcinfo: %i | RenderBus Connections: %d",
+					perf_stats.gc_ms,
+					gcinfo(),
+					perf_stats.rendereventbus_conns
+				),
 			}, "\n")
 
 			lib.DrawText(text, 10, lib.GetRenderHeight() - 10 - (#string.split(text, "\n") + 1) * size, size, color)
@@ -691,9 +696,10 @@ function KiRend.new(config: KiRendConf)
 
 		profileBegin("GC")
 		if os.clock() - perf_stats.gc_last >= 10 then
-			perf_stats.gc_last = os.clock()
+			local gcStart = os.clock()
 			zune.luau.garbagecollect()
-			perf_stats.gc_ms = (os.clock() - perf_stats.gc_last) * 1000
+			perf_stats.gc_ms = (os.clock() - gcStart) * 1000
+			perf_stats.gc_last = os.clock()
 		end
 		profileEnd()
 
@@ -716,7 +722,7 @@ function KiRend.new(config: KiRendConf)
 				and (renderWidth ~= lastRenderWidth or renderHeight ~= lastRenderHeight)
 			then
 				lastRenderWidth, lastRenderHeight = renderWidth, renderHeight
-				rlib.R3D_UpdateResolution(renderWidth, renderHeight)
+				rlib.R3D_SetResolution(renderWidth, renderHeight)
 			end
 		end
 
@@ -835,7 +841,7 @@ function KiRend.new(config: KiRendConf)
 				call3d_ms = perf_stats.call3d_ms,
 				dispatch_ms = perf_stats.dispatch_ms,
 				render3d_update_ms = perf_stats.render3d_update_ms,
-				gc_ms = perf_stats.gc_ms
+				gc_ms = perf_stats.gc_ms,
 			},
 			windowSize = {
 				width = lib.GetRenderWidth(),

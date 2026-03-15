@@ -2,6 +2,8 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
 local fs = zune.fs
+local ffi = zune.ffi
+local mem = zune.mem
 
 local KinemiumIconLoader = Instance.new("KinemiumIconLoader")
 KinemiumIconLoader.ExplorerHidden = true
@@ -9,16 +11,14 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 
 local zembed = require("@zembed")
-local general = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\general]])
-	or "./src/assets/images/icons/vanilla3/general/32x/200"
-local objects = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\instance]])
-	or "./src/assets/images/icons/vanilla3/instance/16x/200"
-local kinemiumIcons = zembed.IsEmbedded() and zembed.GetFilesThatHas([[vanilla3\kinemium]])
-	or "./src/assets/images/icons/vanilla3/kinemium"
+local general = zembed.IsEmbedded() and zembed.GetFilesThatHas([[images\icons]]) or "./src/assets/images/icons"
 
 KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	local registry = {}
 	local textures = {}
+	local sail = require("@Sail")
+	local structs = sail.common.structs
+	local raylib = require("@raylib")
 
 	local function reload()
 		table.clear(registry)
@@ -30,27 +30,51 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			end
 			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
 				or general .. "/" .. file.name
-		end
-
-		for _, file in pairs(type(objects) == "string" and fs.entries(objects) or objects) do
-			if zembed.IsEmbedded() then
-				file = "../" .. string.gsub(file, [[\]], "/")
-			end
-			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
-				or objects .. "/" .. file.name
-		end
-
-		for _, file in pairs(type(kinemiumIcons) == "string" and fs.entries(kinemiumIcons) or kinemiumIcons) do
-			if zembed.IsEmbedded() then
-				file = "../" .. string.gsub(file, [[\]], "/")
-			end
-			registry[zembed.IsEmbedded() and zune.fs.path.basename(file) or file.name] = zembed.IsEmbedded() and file
-				or kinemiumIcons .. "/" .. file.name
+			print("Loading " .. file.name)
 		end
 	end
 
 	KinemiumIconLoader:SetProperties({
 		Reload = reload,
+		LoadSVG = function(svgPath: string)
+			local image_holder = ffi.alloc(8)
+			local result = sail.lib.sail_load_from_file(svgPath, image_holder)
+
+			if result == 0 then
+				local addr_buf = buffer.create(8)
+				mem.copy(addr_buf, 0, image_holder, 0, 8)
+
+				local image_ptr = ffi.ptrFromAddress(addr_buf)
+				local width = image_ptr:readu32(structs.sail_image:offset("width"))
+				local height = image_ptr:readu32(structs.sail_image:offset("height"))
+				local pixels = image_ptr:readptr(structs.sail_image:offset("pixels"))
+				local pixel_format = image_ptr:readi32(structs.sail_image:offset("pixel_format"))
+
+				local rl_image = raylib.structs.Image:new({
+					width = width,
+					height = height,
+					mipmaps = 1,
+					format = 7,
+				})
+
+				local pixels_lo = image_ptr:readu32(structs.sail_image:offset("pixels"))
+				local pixels_hi = image_ptr:readu32(structs.sail_image:offset("pixels") + 4)
+				buffer.writeu32(rl_image, 0, pixels_lo)
+				buffer.writeu32(rl_image, 4, pixels_hi)
+
+				result = nil
+
+				return {
+					texture = raylib.lib.LoadTextureFromImage(rl_image),
+					width = width,
+					height = height,
+					pixels = pixels,
+					pixel_format = pixel_format,
+					image = rl_image,
+				}
+			end
+			return
+		end,
 		ToTexture = function(path: string)
 			if textures[path] then
 				return textures[path]
@@ -67,7 +91,14 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 				end
 			end
 
-			local texture = lib.LoadTexture(path)
+			local texture
+
+			if not string.find(path, ".svg") then
+				texture = lib.LoadTexture(path)
+			else
+				texture = KinemiumIconLoader.LoadSVG(path).texture
+			end
+
 			local size = vector.create(buffer.readi32(texture, 4), buffer.readi32(texture, 8))
 
 			local data = {
@@ -75,6 +106,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 				x = size.x,
 				y = size.y,
 			}
+
 			lib.SetTextureFilter(texture, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 			lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
 			lib.GenTextureMipmaps(texture)
@@ -101,8 +133,14 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			if textures[path] then
 				return textures[path].texture
 			end
+			warn(`Loading {name} and {path}`)
+			local texture
 
-			local texture = lib.LoadTexture(path)
+			if not string.find(path, ".svg") then
+				texture = lib.LoadTexture(path)
+			else
+				texture = KinemiumIconLoader.LoadSVG(path).texture
+			end
 			registry[name] = path
 
 			textures[path] = {

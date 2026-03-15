@@ -137,9 +137,8 @@ Ki-nem-yum!!
 - Box2D
 - Jolt Physics
 - Discord RPC
-- Discord Luau (bots)
 - Steam SDK
-- FFMPEG
+- Sail
 - Webview
 - Native File Dialog (NFD)
 - raylib-gizmo

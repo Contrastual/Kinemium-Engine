@@ -87,7 +87,7 @@ else
 			for name, data in files do
 				local location = string.sub(name, #file + 1, -1)
 				if table.find(LIB_PATHS, location) then
-					fs.writeFile(`{BIN_LOCATION}/{file}.{ffi.suffix}`, data)
+					fs.writeFile(`{BIN_LOCATION}/raylib.{ffi.suffix}`, data)
 					break
 				end
 			end
@@ -97,7 +97,7 @@ else
 			for name, data in files do
 				local location = string.sub(name, #file + 1, -1)
 				if table.find(LIB_PATHS, location) then
-					fs.writeFile(`{BIN_LOCATION}/{file}.{ffi.suffix}`, data)
+					fs.writeFile(`{BIN_LOCATION}/raylib.{ffi.suffix}`, data)
 					break
 				end
 			end

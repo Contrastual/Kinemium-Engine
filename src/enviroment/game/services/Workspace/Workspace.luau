@@ -224,7 +224,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	local fallbackMaterial = {
 		index = -1,
-		material = rlib.R3D_GetDefaultMaterial()
+		material = rlib.R3D_GetDefaultMaterial(),
 	}
 
 	local preloadedMeshes
@@ -240,7 +240,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			availableMaterials[material_name] = {
 				index = material_index,
 				material = default,
-				path = material_path
+				path = material_path,
 			}
 
 			if mtsh_sh[material_name] then
@@ -312,7 +312,13 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			iodebug(string.format("Loading custom material %s: %s", materialName, path))
 			local materialLoadStart = os.clock()
 			local data = sync and zune.fs.readFileSync(path, true) or zune.fs.readFile(path, true)
-			iodebug(string.format("Loaded custom material %s in %.3fms", materialName, (os.clock() - materialLoadStart) * 1000))
+			iodebug(
+				string.format(
+					"Loaded custom material %s in %.3fms",
+					materialName,
+					(os.clock() - materialLoadStart) * 1000
+				)
+			)
 
 			local materialProcessStart = os.clock()
 			local ext = raylib.lib.GetFileExtension(path)
@@ -330,7 +336,13 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 			loadedMaterials[materialName] = availableMaterials[materialName]
 
-			iodebug(string.format("Processed custom material %s in %.3fms", materialName, (os.clock() - materialProcessStart) * 1000))
+			iodebug(
+				string.format(
+					"Processed custom material %s in %.3fms",
+					materialName,
+					(os.clock() - materialProcessStart) * 1000
+				)
+			)
 		end)
 
 		return loadedMaterials[materialName]
@@ -552,7 +564,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local shapeName = part.Shape and part.Shape.Value
 			local materialName = part.Material and part.Material.Value
 			local meshData = shapeName and preloadedMeshes[shapeName]
-			local matData = materialName and loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+			local matData = materialName and loadedMaterials[materialName]
+				or loadMaterial(materialName)
+				or fallbackMaterial
 			local partMesh = meshData[2]
 
 			if not meshData or not matData then

@@ -2,15 +2,15 @@ local Color3 = require("@Color3")
 
 local propTable = {
 	Name = "Folder",
-	IconColor = Color3.new(1, 1, 1),
-	IconSize = 21,
-	IconTransparency = 0,
 }
 
 return {
 	class = "Folder",
 	callback = function(instance)
 		instance:SetProperties(propTable)
+		instance:SetMetadata("ExplorerIconColor", Color3.new(1, 0, 0))
+		instance:SetMetadata("ExplorerIconTransparency", 0.3)
+
 		return instance
 	end,
 	inherit = function(tble)

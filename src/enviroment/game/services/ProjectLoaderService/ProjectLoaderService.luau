@@ -55,7 +55,7 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 				icon = iconPath,
 				path = path,
 				name = name,
-				engine_version = "1.9.0",
+				engine_version = "1.10.4",
 				last_opened = os.time(),
 			}
 

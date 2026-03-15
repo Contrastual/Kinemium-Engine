@@ -17,7 +17,10 @@ local function log(...)
 end
 
 local function roundVec3(v)
-	return Vector3.new(math.round(v.X * 1e4) / 1e4, math.round(v.Y * 1e4) / 1e4, math.round(v.Z * 1e4) / 1e4)
+	local x = math.abs(v.X) < 1e-4 and 0 or v.X
+	local y = math.abs(v.Y) < 1e-4 and 0 or v.Y
+	local z = math.abs(v.Z) < 1e-4 and 0 or v.Z
+	return Vector3.new(x, y, z)
 end
 
 local bodiesMap = {} -- Part -> BodyID (uint32)
@@ -120,7 +123,7 @@ local function createBody(bodyInterface, part, motionType)
 	local layer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
 
 	local bodySettings = lib.JPH_BodyCreationSettings_Create3(shape, position, rotation, motionType, layer)
-	lib.JPH_BodyCreationSettings_SetAllowSleeping(bodySettings, 0)
+	lib.JPH_BodyCreationSettings_SetAllowSleeping(bodySettings, 1)
 
 	local bodyPtr = lib.JPH_BodyInterface_CreateBody(bodyInterface, bodySettings)
 	if bodyPtr == ffi.null then
@@ -372,7 +375,8 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 						local newShape
 						if part.Shape == Enum.PartType.Block then
-							newShape = lib.JPH_BoxShape_Create(halfSize, 0.05)
+							local convexRadius = math.min(0.05, math.min(part.Size.X, part.Size.Y, part.Size.Z) * 0.1)
+							newShape = lib.JPH_BoxShape_Create(halfSize, convexRadius)
 						elseif part.Shape == Enum.PartType.Ball then
 							local radius = part.Size.X * 0.5
 							newShape = lib.JPH_SphereShape_Create(radius)
@@ -561,94 +565,78 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			},
 		}
 
-		renderer_signal:Connect(function(route, data)
-			if route == "UpdatePart" or route == "AddedPartToRenderPool" then
-				local pList = bodiesMap[data]
-				if not pList then
-					CreateBodyForPart(data)
-				end
-			elseif route == "RemovedPartFromRenderPool" then
-				RemoveBody(data)
-			elseif route == "RenderStepped" then
-				KinemiumPhysicsService.Enabled = _PlaytestService.IsPlaytesting
-				if KinemiumPhysicsService.Enabled == false then
-					return
-				end
-				if
-					game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Jolt
-					or game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Default
-				then
-					setGravity(physicsSystem, game.Workspace.Gravity, game.Workspace.GlobalWind)
+		renderer.Hook.new("Renderstep", function(dt)
+			KinemiumPhysicsService.Enabled = _PlaytestService.IsPlaytesting
+			if KinemiumPhysicsService.Enabled == false then
+				return
+			end
+			if
+				game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Jolt
+				or game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Default
+			then
+				setGravity(physicsSystem, game.Workspace.Gravity, game.Workspace.GlobalWind)
 
-					local dt = data
-					--	local startTime = os.clock()
-					local bodyCount = 0
-					for _ in pairs(bodiesMap) do
-						bodyCount += 1
+				--	local startTime = os.clock()
+				local bodyCount = 0
+				for _ in pairs(bodiesMap) do
+					bodyCount += 1
+				end
+
+				renderer_signal:Fire("PrePhysics")
+				lib.JPH_PhysicsSystem_Update(
+					physicsSystem,
+					dt,
+					4 * KinemiumPhysicsService.DeltatimeMultiplier,
+					jobSystem
+				)
+				renderer_signal:Fire("PhysicsF")
+
+				local _loopStart = os.clock()
+				for part, bodyID in pairs(bodiesMap) do
+					if part.Anchored == true then
+						-- set part cframe
+						local pos_rvec = RVec3(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+
+						local rot_quat = structs.JPH_Quat:new({})
+						local x, y, z, w = part.CFrame:ToQuaternion()
+						buffer.writef32(rot_quat, 0, x)
+						buffer.writef32(rot_quat, 4, y)
+						buffer.writef32(rot_quat, 8, z)
+						buffer.writef32(rot_quat, 12, w)
+
+						if lib.JPH_BodyInterface_SetPositionAndRotation then
+							lib.JPH_BodyInterface_SetPositionAndRotation(bodyInterface, bodyID, pos_rvec, rot_quat, 1)
+						else
+							lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
+							lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
+						end
+						continue
 					end
 
-					renderer_signal:Fire("PrePhysics")
-					lib.JPH_PhysicsSystem_Update(
-						physicsSystem,
-						dt,
-						2 * KinemiumPhysicsService.DeltatimeMultiplier,
-						jobSystem
-					)
-					renderer_signal:Fire("PhysicsF")
+					local cf, linear, angular = CalculateBodyPhysics(part, bodyInterface, bodyID)
 
-					local _loopStart = os.clock()
-					for part, bodyID in pairs(bodiesMap) do
-						if part.Anchored == true then
-							-- set part cframe
-							local pos_rvec =
-								RVec3(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
-
-							local rot_quat = structs.JPH_Quat:new({})
-							local x, y, z, w = part.CFrame:ToQuaternion()
-							buffer.writef32(rot_quat, 0, x)
-							buffer.writef32(rot_quat, 4, y)
-							buffer.writef32(rot_quat, 8, z)
-							buffer.writef32(rot_quat, 12, w)
-
-							if lib.JPH_BodyInterface_SetPositionAndRotation then
-								lib.JPH_BodyInterface_SetPositionAndRotation(
-									bodyInterface,
-									bodyID,
-									pos_rvec,
-									rot_quat,
-									1
-								)
-							else
-								lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
-								lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
-							end
-							continue
-						end
-
-						local cf, linear, angular = CalculateBodyPhysics(part, bodyInterface, bodyID)
-
-						if not cf then
-							continue
-						end
-
-						if not part.Parent then
-							log("Cannot calculate position without 3D renderer")
-							continue
-						end
-
-						if not isZero(linear.X) or not isZero(linear.Y) or not isZero(linear.Z) then
-							part.AssemblyLinearVelocity = linear
-						end
-
-						if not isZero(angular.X) or not isZero(angular.Y) or not isZero(angular.Z) then
-							part.AssemblyAngularVelocity = angular
-						end
-
-						if cf ~= CFrame.new(0, 0, 0) then
-							part.CFrame = cf
-						end
+					if not cf then
+						continue
 					end
-					--[[
+
+					if not part.Parent then
+						log("Cannot calculate position without 3D renderer")
+						continue
+					end
+
+					if not isZero(linear.X) or not isZero(linear.Y) or not isZero(linear.Z) then
+						part.AssemblyLinearVelocity = linear
+					end
+
+					if not isZero(angular.X) or not isZero(angular.Y) or not isZero(angular.Z) then
+						part.AssemblyAngularVelocity = angular
+					end
+
+					if cf ~= CFrame.new(0, 0, 0) then
+						part.CFrame = cf
+					end
+				end
+				--[[
 			local loopEnd = os.clock()
 			local totalEnd = os.clock()
 			log(
@@ -660,7 +648,17 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				)
 			)
 				--]]
+			end
+		end)
+
+		renderer_signal:Connect(function(route, data)
+			if route == "UpdatePart" or route == "AddedPartToRenderPool" then
+				local pList = bodiesMap[data]
+				if not pList then
+					CreateBodyForPart(data)
 				end
+			elseif route == "RemovedPartFromRenderPool" then
+				RemoveBody(data)
 			end
 		end)
 

@@ -7,8 +7,10 @@ local Server = require("./_Server")
 local Client = require("./_Client")
 
 ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
-	--[[
 	task.spawn(function()
+		-- wait a bit until the game loads
+		task.wait(4)
+
 		repeat
 			log("[Replicator] Waiting for SerializationService and NetworkService")
 			task.wait()
@@ -31,7 +33,6 @@ ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 			Client.init(ctx)
 		end
 	end)
-	--]]
 end
 
 return ReplicatorService

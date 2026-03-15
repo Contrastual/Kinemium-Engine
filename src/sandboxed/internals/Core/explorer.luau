@@ -57,6 +57,8 @@ local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
 local hoverspring = spring.new(2, 5)
 
+local notfound_tex = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("NotFound.svg"))
+
 local theme = StudioThemeService.SelectedTheme
 local themeColors = {
 	background = theme.BackgroundColor:ToRaylib(theme.BackgroundTransparency),
@@ -243,9 +245,9 @@ local scrollOffset = 0
 local contentHeight = 0
 local maxScroll = 0
 
-KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
-KinemiumIconLoader.new("ArrowRight", "./src/assets/images/icons/vanilla3/ui/16x/200/ArrowRight.png")
-KinemiumIconLoader.new("ArrowDown", "./src/assets/images/icons/vanilla3/ui/16x/200/ArrowDown.png")
+KinemiumIconLoader.new("Add", "./src/assets/images/icons/Add.svg")
+KinemiumIconLoader.new("ArrowRight", "./src/assets/images/icons/ArrowRight.svg")
+KinemiumIconLoader.new("ArrowDown", "./src/assets/images/icons/ArrowDown.svg")
 
 local addIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Add"))
 local ArrowRight = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("ArrowRight"))
@@ -508,9 +510,9 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	-- Load icon if needed
 	if not loadedIcon[instance.ClassName] then
-		local png = KinemiumIconLoader.Get(instance.ClassName .. ".png")
-		if png then
-			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(png)
+		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".svg")
+		if svg then
+			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
 		end
 	end
 
@@ -538,18 +540,18 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	rl.DrawRectangleRounded(structs.Rectangle:new(rectData), 0.5, 8, color:ToRaylib(transparency))
 
 	-- Draw icon
-	local icon = loadedIcon[instance.ClassName]
-	if icon then
-		local iconSize = instance.IconSize or NODE_HEIGHT - 4
-		rl.DrawTexturePro(
-			icon.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = icon.x, height = icon.y }),
-			structs.Rectangle:new({ x = btnX + 2, y = btnY + 2, width = iconSize, height = iconSize }),
-			vector.create(0, 0),
-			0,
-			instance.IconColor and instance.IconColor:ToRaylib(instance.IconTransparency) or themeColors.image
-		)
-	end
+	local icon = loadedIcon[instance.ClassName] or notfound_tex
+	local iconSize = instance.IconSize or NODE_HEIGHT - 4
+	rl.DrawTexturePro(
+		icon.texture,
+		structs.Rectangle:new({ x = 0, y = 0, width = icon.x, height = icon.y }),
+		structs.Rectangle:new({ x = btnX + 2, y = btnY + 2, width = iconSize, height = iconSize }),
+		vector.create(0, 0),
+		0,
+		instance:GetMetadata("ExplorerIconColor")
+				and instance:GetMetadata("ExplorerIconColor"):ToRaylib(instance:GetMetadata("ExplorerIconTransparency"))
+			or themeColors.image
+	)
 
 	-- Draw text
 	rl.DrawTextEx(vend, instance.Name, vector.create(btnX + 28, btnY + 5), 18, 1, themeColors.text)
@@ -628,10 +630,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 end
 
 local function drawScrollbar(windowData)
-	if contentHeight <= windowData.height - 40 then
-		return
-	end
-
 	local scrollbarX = windowData.x + windowData.width - SCROLLBAR_WIDTH - 4
 	local scrollbarY = windowData.y + 30
 	local scrollbarHeight = windowData.height - 40
@@ -755,12 +753,9 @@ explorerWindow.stepped = function(windowData)
 	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
 		local mouseWheel = rl.GetMouseWheelMove()
 		if math.abs(mouseWheel) > 0.01 then
-			scrollTarget = math.clamp(scrollTarget - (mouseWheel * NODE_HEIGHT * SCROLL_SPEED), 0, maxScroll)
+			scrollTarget -= mouseWheel * NODE_HEIGHT * SCROLL_SPEED
 		end
 	end
-
-	scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
-	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
 
 	rl.BeginScissorMode(
 		math.floor(windowData.x),
@@ -778,6 +773,9 @@ explorerWindow.stepped = function(windowData)
 
 	contentHeight = yOffset
 	maxScroll = math.max(0, contentHeight - (windowData.height - 40))
+
+	scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
+	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
 
 	drawScrollbar(windowData)
 
