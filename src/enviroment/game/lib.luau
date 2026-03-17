@@ -53,7 +53,7 @@ function DataModel.new(RENDERER, ...)
 		local initTime = (os.clock() - addServiceStart) * 1000
 
 		if success then
-			local success2, returnedData2 = pcall(function()
+			local success2 = xpcall(function()
 				self.Services[name] = returnedData
 				if returnedData.InitRenderer then
 					returnedData.InitRenderer(RENDERER, RENDERER.EventBus, self)
@@ -61,6 +61,17 @@ function DataModel.new(RENDERER, ...)
 						aliases[name] = returnedData.aliases
 					end
 				end
+			end, function(err)
+				warn(
+					"Error initializing service '"
+						.. name
+						.. "' at path '"
+						.. path
+						.. "':\n"
+						.. tostring(err)
+						.. "\n"
+						.. debug.traceback("", 2)
+				)
 			end)
 
 			if success2 then
@@ -71,17 +82,6 @@ function DataModel.new(RENDERER, ...)
 						(os.clock() - addServiceStart) * 1000,
 						initTime
 					)
-				)
-			else
-				warn(
-					"Error initializing service '"
-						.. name
-						.. "' at path '"
-						.. path
-						.. "':\n"
-						.. tostring(returnedData2)
-						.. "\n"
-						.. debug.traceback("", 2)
 				)
 			end
 		else
@@ -97,7 +97,7 @@ function DataModel.new(RENDERER, ...)
 			)
 		end
 	end
-	log(string.format("[ServiceRegistry] Core services initialized in %.2fs", os.clock() - serviceInitStart))
+	log(string.format("[ServiceRegistry] Core services initialized in %.3fms", (os.clock() - serviceInitStart) * 1000))
 
 	for name, service in pairs(self.Services) do
 		service.Name = name

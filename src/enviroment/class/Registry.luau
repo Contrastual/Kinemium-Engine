@@ -20,6 +20,8 @@ end
 
 task.spawn(function()
 	local createClassesStart = os.clock()
+	local createdClassesLog = {}
+
 	for _, entry in pairs(entries) do
 		local createClassStart = os.clock()
 		local requirePath
@@ -32,7 +34,6 @@ task.spawn(function()
 		end
 
 		local returned, s, r = require(requirePath)
-		local initTime = (os.clock() - createClassStart) * 1000
 		-- returned = { class = "Part", callback = function(Part) ... end }
 
 		if not returned then
@@ -42,17 +43,14 @@ task.spawn(function()
 		end
 		listOfClasses[returned.class] = returned
 
+		table.insert(createdClassesLog, string.format("\t%s (%.3fms): %s", returned.class, (os.clock() - createClassStart) * 1000, requirePath))
+	end
 		log(
 			string.format(
-				"CLASS: Successfully created class '%s' in %.3fms from file (required in %.3fms): %s",
-				returned.class,
-				(os.clock() - createClassStart) * 1000,
-				initTime,
-				requirePath
-			)
-		)
-	end
-	log(string.format("CLASS: Created all classes in %.3fms", (os.clock() - createClassesStart) * 1000))
+			"CLASS: Successfully created the following classes in %.3fms:\n",
+			(os.clock() - createClassesStart) * 1000
+		) .. table.concat(createdClassesLog, "\n")
+	)
 end)
 
 function registry.createclass(data)

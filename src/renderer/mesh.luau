@@ -32,7 +32,7 @@ end
 local function GenerateMesh(meshId: string, meshType: string, params: any)
 	local mesh
 
-	print(meshType)
+	-- print(meshType)
 	if meshType == "Cube" then
 		mesh = r3d.R3D_GenMeshCube(params.width or 1, params.height or 1, params.length or 1)
 		--mesh = lib.GenMeshCube(params.width or 1, params.height or 1, params.length or 1)

@@ -1,5 +1,8 @@
 --!optimize 2
 --!native
+
+local launchStart = os.clock()
+
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
 	_G.IsExecutable = true
@@ -162,6 +165,7 @@ local renderer
 local KiRend
 
 if _G.IsHeadless then
+	local loadRendererStart = os.clock()
 	KiRend = require("./renderer/dummy")
 	renderer = KiRend.new({
 		width = 800,
@@ -169,8 +173,9 @@ if _G.IsHeadless then
 		maxFps = 120,
 		title = "Kinemium Headless",
 	})
-	log("Loaded headless renderer")
+	log(string.format("Loaded headless renderer in %.3fms", (os.clock() - loadRendererStart) * 1000))
 else
+	local loadRendererStart = os.clock()
 	KiRend = require("@Kinemium.3d")
 	renderer = KiRend.new({
 		width = 1000,
@@ -178,7 +183,7 @@ else
 		maxFps = 0,
 		title = "Kinemium Engine",
 	})
-	log("Loaded GPU renderer")
+	log(string.format("Loaded GPU renderer in %.3fms", (os.clock() - loadRendererStart) * 1000))
 end
 
 -- SETUP CAMERA
@@ -331,4 +336,5 @@ httpServerViewer:Init()
 Kinemium:playtest()
 
 -- RUN RENDERER
+log(string.format("Kinemium launched in %.3fms", (os.clock() - launchStart) * 1000))
 renderer:Run()
