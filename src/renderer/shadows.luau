@@ -43,6 +43,8 @@ local function chooseShadowSize()
 	return 2048
 end
 
+local zembed = require("@zembed")
+
 local function ensureResources()
 	if shadowRT then
 		return
@@ -50,7 +52,7 @@ local function ensureResources()
 
 	shadowSize = chooseShadowSize()
 
-	depthShader = lib.LoadShader("./src/assets/shaders/depth.vs", "./src/assets/shaders/depth.fs")
+	depthShader = lib.LoadShader(zembed.AssetPath("shaders/depth.vs"), zembed.AssetPath("shaders/depth.fs"))
 	if lib.IsShaderValid(depthShader) == 0 then
 		warn("depth shader invalid")
 	end

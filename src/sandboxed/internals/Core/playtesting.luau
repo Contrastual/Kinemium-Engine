@@ -10,6 +10,8 @@ repeat
 until ishared.NewCategoryToolbar
 local NewCategoryToolbar = ishared.NewCategoryToolbar
 
+local zembed = import("@zembed")
+
 NewCategoryToolbar:Fire("Playtest", {
 	elements = {
 		{
@@ -27,7 +29,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Play.png"),
+			texture = KinemiumIconLoader.ToTexture(zembed.AssetPath("images/icons/vanilla3/general/32x/200/Play.png")),
 		},
 		{
 			type = "ImageButton",
@@ -47,7 +49,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			text = "Stop",
 			hoverColor = Color3.new(1, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Stop.png"),
+			texture = KinemiumIconLoader.ToTexture(zembed.AssetPath("images/icons/vanilla3/general/32x/200/Stop.png")),
 		},
 		{
 			type = "ImageButton",
@@ -68,7 +70,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/100/Client.png"),
+			texture = KinemiumIconLoader.ToTexture(zembed.AssetPath("images/icons/vanilla3/general/32x/100/Client.png")),
 		},
 		{
 			type = "ImageButton",
@@ -83,7 +85,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
 			texture = KinemiumIconLoader.ToTexture(
-				"src/assets/images/icons/vanilla3/general/32x/150/DeleteSelectedBreakpoints.png"
+				zembed.AssetPath("images/icons/vanilla3/general/32x/150/DeleteSelectedBreakpoints.png")
 			),
 		},
 	},

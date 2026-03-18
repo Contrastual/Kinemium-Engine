@@ -6,11 +6,14 @@ local Enum = require("@EnumMap")
 local raylib = require("@raylib")
 local utils = require("@bufferutils")
 
+local zembed = require("@zembed")
+local defaultTexture = zembed.AssetPath("images/icons/vanilla3/kinemium/KinemiumRaylib.png")
+
 local propTable = {
 	Transparency = 0,
 	Color3 = Color3.new(1, 1, 1),
-	Texture = "./src/assets/images/icons/vanilla3/kinemium/KinemiumRaylib.png",
-	ColorMapContent = "./src/assets/images/icons/vanilla3/kinemium/KinemiumRaylib.png",
+	Texture = defaultTexture,
+	ColorMapContent = defaultTexture,
 	Face = Enum.NormalId.Top,
 	Adornee = nil,
 }

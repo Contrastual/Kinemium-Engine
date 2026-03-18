@@ -1,9 +1,10 @@
 if FlagExists("client") then
+	print("client")
 	return
 end
 
 local rlservice = game:GetService("KinemiumRaylib")
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 local lib = raylib.lib
 local renderer = rlservice.renderer
 local aereon = import("@Aereon")
@@ -13,8 +14,10 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
+local zembed = import("@zembed")
+
 local vend = KinemiumFontService.GetDefaultFont()
-local arect = require("@Arect")(raylib.lib)
+local arect = import("@Arect")(raylib.lib)
 
 local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
 local TextColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(StudioThemeService.SelectedTheme.TextTransparency)
@@ -57,12 +60,12 @@ local nav = gui.navigation({
 	end,
 })
 
-nav.addItem("home", "icon", "Projects", KinemiumIconLoader.ToTexture("./src/assets/images/home.png"))
-nav.addItem("compass", "icon", "Explore", KinemiumIconLoader.ToTexture("./src/assets/images/compass.png"))
-nav.addItem("settings", "icon", "Settings", KinemiumIconLoader.ToTexture("./src/assets/images/settings.png"))
-nav.addItem("credits", "icon", "Credits", KinemiumIconLoader.ToTexture("./src/assets/images/info.png"))
-nav.addItem("marketplace", "icon", "Marketplace", KinemiumIconLoader.ToTexture("./src/assets/images/marketplace.png"))
-nav.addItem("marketplace", "icon", "API", KinemiumIconLoader.ToTexture("./src/assets/images/api.png"))
+nav.addItem("home", "icon", "Projects", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/home.png")))
+nav.addItem("compass", "icon", "Explore", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/compass.png")))
+nav.addItem("settings", "icon", "Settings", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/settings.png")))
+nav.addItem("credits", "icon", "Credits", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/info.png")))
+nav.addItem("marketplace", "icon", "Marketplace", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/marketplace.png")))
+nav.addItem("marketplace", "icon", "API", KinemiumIconLoader.ToTexture(zembed.AssetPath("images/api.png")))
 
 ishared.EnableHomescreen = true
 

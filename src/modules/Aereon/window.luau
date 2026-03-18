@@ -16,12 +16,14 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local dragSpring = spring.new(1, 5)
 	local vend = KinemiumFontService.GetDefaultFont()
 
+	local zembed = require("@zembed")
+
 	local shadowTexture, shadowSize
 	if _G.IsHeadless then
 		shadowTexture = buffer.create(16)
 		shadowSize = vector.create(0, 0)
 	else
-		shadowTexture = raylib.LoadTexture("./src/assets/images/shadow.png")
+		shadowTexture = raylib.LoadTexture(zembed.AssetPath("images/shadow.png"))
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
 	end
 

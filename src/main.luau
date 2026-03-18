@@ -171,6 +171,7 @@ if _G.IsHeadless then
 		width = 800,
 		height = 600,
 		maxFps = 120,
+		vsync = not FlagExists("no-vsync"),
 		title = "Kinemium Headless",
 	})
 	log(string.format("Loaded headless renderer in %.3fms", (os.clock() - loadRendererStart) * 1000))
@@ -181,6 +182,7 @@ else
 		width = 1000,
 		height = 800,
 		maxFps = 0,
+		vsync = not FlagExists("no-vsync"),
 		title = "Kinemium Engine",
 	})
 	log(string.format("Loaded GPU renderer in %.3fms", (os.clock() - loadRendererStart) * 1000))

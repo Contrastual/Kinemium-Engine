@@ -13,7 +13,7 @@ local GuiRender = signal.new()
 local raylib = require("@raylib")
 local lib = raylib.lib
 
-local renderBindings = {}
+local renderStepBindings = {}
 
 function RunService:BindToRenderStep(name, priority, callback)
 	renderBindings[name] = { priority = priority, callback = callback }
@@ -25,7 +25,7 @@ end
 
 local function runRenderBindings(dt)
 	local sorted = {}
-	for name, data in pairs(renderBindings) do
+	for name, data in pairs(renderStepBindings) do
 		table.insert(sorted, data)
 	end
 	table.sort(sorted, function(a, b)
@@ -58,10 +58,10 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 		PreGuiRender = PreGuiRender,
 
 		IsClient = function()
-			return IsClient
+			return status.IsClient
 		end,
 		IsServer = function()
-			return IsServer
+			return status.IsServer
 		end,
 		IsStudio = function()
 			return status.IsStudio
@@ -82,9 +82,10 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 	})
 
 	renderer_signal:Connect(function(route, dt)
-		if route == "RenderStepped" then
-			RenderStepped:Fire(dt)
+		if route == "BoundRenderStep" then
 			runRenderBindings(dt)
+		elseif route == "RenderStepped" then
+			RenderStepped:Fire(dt)
 		elseif route == "PreRender" then
 			PreRender:Fire(dt)
 		elseif route == "Heartbeat" then

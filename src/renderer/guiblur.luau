@@ -15,12 +15,14 @@ local function f32(value)
 	return buf
 end
 
+local zembed = require("@zembed")
+
 function blurmod.Init(width, height)
 	local wrapper = {}
 	width = width or lib.GetRenderWidth()
 	height = height or lib.GetRenderHeight()
 
-	local blurShader = lib.LoadShader(nil, "./src/assets/shaders/blur3d.frag")
+	local blurShader = lib.LoadShader(nil, zembed.AssetPath("shaders/blur3d.frag"))
 	local resolutionLoc = lib.GetShaderLocation(blurShader, "resolution")
 	local directionLoc = lib.GetShaderLocation(blurShader, "direction")
 	local radiusLoc = lib.GetShaderLocation(blurShader, "blurRadius")

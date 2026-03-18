@@ -3,8 +3,9 @@ local Part = require("./Part")
 local raylib = require("@raylib")
 local Enum = require("@EnumMap")
 
+local zembed = require("@zembed")
 local propTable = {
-	MeshId = "./src/assets/meshes/bee.glb",
+	MeshId = zembed.AssetPath("meshes/bee.glb"),
 	_showhitbox = false,
 	CollisionFidelity = Enum.CollisionFidelity.Default,
 	RenderFidelity = Enum.RenderFidelity.Automatic,

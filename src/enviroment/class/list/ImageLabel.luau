@@ -6,13 +6,16 @@ local GuiObject = require("@classes/GuiObject")
 local raylib = require("@raylib")
 local lib = raylib.lib
 
+local zembed = require("@zembed")
+local placeholder = zembed.AssetPath("images/placeholder.png")
+
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 100, 0, 100),
 	AnchorPoint = Vector2.new(0, 0),
 	BackgroundColor3 = Color3.new(1, 1, 1),
 	BackgroundTransparency = 0,
-	Image = "./src/assets/images/placeholder.png",
+	Image = placeholder,
 	ImageColor3 = Color3.new(1, 1, 1),
 	ImageTransparency = 0.5,
 	--ScaleType = Enum.ScaleType.Stretch,

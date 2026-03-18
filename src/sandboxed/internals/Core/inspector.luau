@@ -11,7 +11,7 @@ local rl = KinemiumRaylib.lib
 local Selection = game:GetService("Selection")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
-local PropertyCategories = require("@PropertyCategories")
+local PropertyCategories = import("@PropertyCategories")
 
 local StudioThemeService = game:GetService("StudioThemeService")
 local theme = StudioThemeService.SelectedTheme
@@ -32,7 +32,7 @@ if FlagExists("headless") then
 	return
 end
 
-local aereon = require("@Aereon")
+local aereon = import("@Aereon")
 local gui = aereon.gui
 local window = aereon.window(game)
 local arect = aereon.rect()

@@ -8,6 +8,8 @@ local Color3 = require("@datatypes/Color3")
 local r3d = require("@r3d")
 local rlib = r3d.lib
 
+local zembed = require("@zembed")
+
 local DAY_TOP = Color3.new(0.090196, 0.6, 0.839216)
 local NIGHT_TOP = Color3.fromRGB(10, 15, 35)
 
@@ -131,7 +133,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	})
 
 	if zune.platform.os == "linux" then
-		loadSky("./src/assets/sky/test/images/sky.png")
+		loadSky(zembed.AssetPath("sky/test/images/sky.png"))
 	else
 		local cubemapSky = rlib.R3D_GenProceduralSky(1024, skyObject)
 		setSkyObject(cubemapSky)

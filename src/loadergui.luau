@@ -2,7 +2,9 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local const = raylib.const
 local aereon = require("@Aereon")
-local color3 = require("@Color3")
+local color3 = require("@datatypes/Color3")
+
+local zembed = require("@zembed")
 
 local gui = aereon.gui
 
@@ -52,7 +54,7 @@ function module.Run()
 	active = task.spawn(function()
 		lib.InitWindow(800, 335, "Kinemium Loader")
 
-		local texture = lib.LoadTexture("./src/assets/images/loader.png")
+		local texture = lib.LoadTexture(zembed.AssetPath("images/loader.png"))
 
 		lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 		lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)

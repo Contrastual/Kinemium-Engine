@@ -2,15 +2,16 @@ local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
-local aereon = require("@Aereon")
-local raylib = require("@raylib")
+local aereon = import("@Aereon")
+local raylib = import("@raylib")
 local rl = raylib.lib
 local gui = aereon.gui
-local rect = require("@arect")(rl)
+local rect = import("@arect")(rl)
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local renderer = KinemiumRaylib.renderer
 
-local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
+local zembed = import("@zembed")
+local logoPath = zembed.AssetPath("images/icons/vanilla3/kinemium/KinemiumWhite.png")
 local logoIcon = KinemiumIconLoader.ToTexture(logoPath)
 
 local SecondaryBackgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor

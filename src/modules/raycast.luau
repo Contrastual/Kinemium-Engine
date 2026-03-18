@@ -2,7 +2,7 @@ local raylib = require("@raylib")
 local raycast = {}
 
 local lib, const, structs = raylib.lib, raylib.const, raylib.structs
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 
 local mem = zune.mem
 

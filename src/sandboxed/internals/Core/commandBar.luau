@@ -9,16 +9,16 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local syntax_highlighter = require("@syntax_highlighter")
 local syntax_autocomplete = require("@syntax_autocomplete")
-local aereon = require("@Aereon")
+local aereon = import("@Aereon")
 
 local renderer = KinemiumRaylib.renderer
 local vend = KinemiumFontService.GetDefaultFont()
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 
 local theme = StudioThemeService.SelectedTheme
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
 
-local kilang = require("@Kilang")
+local kilang = import("@Kilang")
 
 local box = textbox.new({
 	multiline = false,

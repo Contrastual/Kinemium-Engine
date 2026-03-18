@@ -1,5 +1,5 @@
 local rlservice = game:GetService("KinemiumRaylib")
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 local lib = raylib.lib
 local renderer = rlservice.renderer
 local aereon = import("@Aereon")
@@ -9,7 +9,7 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 
 local vend = KinemiumFontService.GetDefaultFont()
-local arect = require("@Arect")(raylib.lib)
+local arect = import("@Arect")(raylib.lib)
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
 local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
@@ -31,7 +31,7 @@ local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
 local kilLogo = KinemiumIconLoader.ToTexture(logoPath)
 
-local categories = require("@apidumpbrowser")
+local categories = import("@apidumpbrowser")
 
 local browser = gui.apibrowser({
 	x = 50,

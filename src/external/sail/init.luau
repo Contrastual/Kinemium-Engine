@@ -6,24 +6,24 @@ local dll = "./src/external/sail/bin/"
 local zembed = require("@zembed")
 local Packager = require("@Downloader")
 
-local downloadLink =
-	`https://github.com/Qquaded/dlls/releases/download/win-sail/{zune.platform.os == "linux" and "klinux" or zune.platform.os}.zip`
-print(zune.fs.getExePath())
-if zune.fs.stat("./src/external/sail/bin").kind == "none" then
-	if zune.platform.os == "linux" then
-		print(
-			"SAIL Binaries might not work on Linux, if you see an error after the installation, Please report it in the Kinemium Engine Discord Server, Thank you!"
-		)
-	end
-	print("Downloading SAIL...")
-	print("Downloading from link " .. downloadLink)
-	Packager.downloadAndExtract(downloadLink, "./src/external/sail")
-	print("Please run the engine again")
-	zune.process.exit(0)
-end
-
 if zembed.IsEmbedded() then
 	dll = "./"
+else
+	local downloadLink =
+		`https://github.com/Qquaded/dlls/releases/download/win-sail/{zune.platform.os == "linux" and "klinux" or zune.platform.os}.zip`
+	print(zune.fs.getExePath())
+	if zune.fs.stat("./src/external/sail/bin").kind == "none" then
+		if zune.platform.os == "linux" then
+			print(
+				"SAIL Binaries might not work on Linux, if you see an error after the installation, Please report it in the Kinemium Engine Discord Server, Thank you!"
+			)
+		end
+		print("Downloading SAIL...")
+		print("Downloading from link " .. downloadLink)
+		Packager.downloadAndExtract(downloadLink, "./src/external/sail")
+		print("Please run the engine again")
+		zune.process.exit(0)
+	end
 end
 local ffi = zune.ffi
 
@@ -60,6 +60,7 @@ local sail_common_funcs = require("./sail/sail-common/funcs")
 local sail_manip_funcs = require("./sail/sail-manip/funcs")
 
 local sail_common = ffi.dlopen(dll .. "sail-common." .. ffi.suffix, sail_common_funcs)
+print(dll .. "sail-codecs." .. ffi.suffix)
 local sail_codecs = ffi.dlopen(dll .. "sail-codecs." .. ffi.suffix, {})
 local sail_manip = ffi.dlopen(dll .. "sail-manip." .. ffi.suffix, sail_manip_funcs)
 

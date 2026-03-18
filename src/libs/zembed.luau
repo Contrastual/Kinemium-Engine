@@ -1,36 +1,38 @@
-local fs = zune.fs
 local lib = {}
 
+local embeddedScripts = table.freeze(zune.fs.embeddedScripts())
+local embeddedFiles = table.freeze(zune.fs.embeddedFiles())
+
+print(embeddedScripts)
+print(embeddedFiles)
+
+local isEmbedded = embeddedScripts[1] ~= nil
+
 function lib.IsEmbedded()
-	local result = fs.embeddedScripts()
-	if result[1] then
-		return true
-	else
-		return false
-	end
+	return isEmbedded
 end
 
 function lib.Path(path)
-	if lib.IsEmbedded() then
-		return "." .. path -- assuming "./"
-	else
-		return path
-	end
+	-- assuming "./" if embedded
+	return isEmbedded and ("./" .. path) or path
+end
+
+function lib.AssetPath(...)
+	return zune.fs.path.resolve(isEmbedded and "assets" or "src/assets", ...)
 end
 
 function lib.GetEmbeddedScripts()
-	return fs.embeddedScripts()
+	return embeddedScripts
 end
 
 function lib.GetEmbeddedFiles()
-	return fs.embeddedFiles()
+	return embeddedFiles
 end
 
 function lib.GetScriptsThatHas(str)
-	local scripts = lib.GetEmbeddedScripts()
 	local results = {}
 
-	for _, script in scripts do
+	for _, script in embeddedScripts do
 		if string.find(script, str) then
 			table.insert(results, script)
 		end
@@ -40,10 +42,9 @@ function lib.GetScriptsThatHas(str)
 end
 
 function lib.GetFilesThatHas(str)
-	local scripts = fs.embeddedFiles()
 	local results = {}
 
-	for _, script in scripts do
+	for _, script in embeddedFiles do
 		if string.find(script, str) then
 			table.insert(results, script)
 		end
@@ -52,8 +53,6 @@ function lib.GetFilesThatHas(str)
 	return results
 end
 
-function lib.readFile(script)
-	return fs.embedFile(script)
-end
+lib.readFile = zune.fs.embedFile
 
 return lib

@@ -15,8 +15,10 @@ local RunService = game:GetService("RunService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 local StudioThemeService = game:GetService("StudioThemeService")
-local arectlib = require("@Arect")(rl)
+local arectlib = import("@Arect")(rl)
 local scrollOffset = 0
+
+local zembed = import("@zembed")
 
 local backgroundColor =
 	StudioThemeService.SelectedTheme.BackgroundColor:ToRaylib(StudioThemeService.SelectedTheme.BackgroundTransparency)
@@ -51,7 +53,7 @@ end
 
 print("This is output.")
 
-KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
+KinemiumIconLoader.new("Add", zembed.AssetPath("images/icons/vanilla3/ui/16x/200/Add.png"))
 
 local png = KinemiumIconLoader.Get("Add")
 local addIcon = KinemiumIconLoader.ToTexture(png)

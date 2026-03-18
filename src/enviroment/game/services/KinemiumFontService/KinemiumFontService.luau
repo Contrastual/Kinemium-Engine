@@ -15,23 +15,12 @@ local function transformFontName(v: string)
 end
 
 local zembed = require("@zembed")
-local engine_fonts
+local engine_fonts = zembed.AssetPath("fonts")
 local fontCount = 0
 
-if zembed.IsEmbedded() then
-	engine_fonts = zembed.GetFilesThatHas([[.ttf]])
-else
-	engine_fonts = "./src/assets/fonts"
-end
-
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
-	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
-	local code_font = "./src/assets/fonts/JetBrainsMono-Light.ttf"
-
-	if zembed.IsEmbedded() then
-		default_font = "." .. default_font
-		code_font = "." .. code_font
-	end
+	local default_font = engine_fonts .. "/Montserrat-Medium.ttf"
+	local code_font = engine_fonts .. "/JetBrainsMono-Light.ttf"
 
 	local font = renderer.Font.new("DefaultEngineFont", default_font, 32)
 	local loaded_cf = renderer.Font.new("DefaultCodeEngineFont", code_font, 32)
@@ -68,7 +57,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
 				local fontLoadStart = os.clock()
-				local path = zembed.IsEmbedded() and "../" .. font or engine_fonts .. "/" .. font.name
+				local path = engine_fonts .. "/" .. font.name
 				local transformed = transformFontName(zembed.IsEmbedded() and zune.fs.path.basename(path) or font.name)
 				if cache[transformed] then
 					continue

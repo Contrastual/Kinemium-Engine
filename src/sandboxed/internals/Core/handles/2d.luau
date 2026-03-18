@@ -1,6 +1,6 @@
 local ffi = game:GetService("KinemiumFFI")
 local rlservice = game:GetService("KinemiumRaylib")
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 local lib = raylib.lib
 local const = raylib.const
 local structs = raylib.structs
@@ -30,7 +30,7 @@ local dragStartMouse = nil
 local dragStartPos = nil
 local dragStartSize = nil
 
-local Arect = require("@Arect")(raylib.lib)
+local Arect = import("@Arect")(raylib.lib)
 
 Selection.SelectionAdded:Connect(function(selected) end)
 

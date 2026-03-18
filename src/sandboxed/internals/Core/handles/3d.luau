@@ -1,7 +1,7 @@
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 
 if zune.platform.os == "linux" then
 	return
@@ -22,7 +22,7 @@ local vend = KinemiumFontService.GetDefaultFont()
 local focusAlpha = 0
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local grid = 1
-local aereon = require("@Aereon")
+local aereon = import("@Aereon")
 
 local MoveOffsets = {}
 local MoveStartPivot = nil

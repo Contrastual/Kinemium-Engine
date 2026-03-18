@@ -11,12 +11,17 @@ local fs = zune.fs
 local projectsFile = "./src/projects.toml"
 local zembed = require("@zembed")
 
+local absolutePath
 if zembed.IsEmbedded() then
 	local tomlFile = zembed.GetFilesThatHas("projects.toml")
 	projectsFile = "../" .. tomlFile[1]
+	if fs.stat("./projects.toml").kind == "none" then
+		fs.createFile("./projects.toml")
+	end
+	absolutePath = fs.realPath("./projects.toml")
+else
+	absolutePath = fs.realPath("./src/projects.toml")
 end
-
-local absolutePath = fs.realPath("./src/projects.toml")
 
 local settings = {
 	["luau-lsp.types.definitionFiles"] = { absolutePath },

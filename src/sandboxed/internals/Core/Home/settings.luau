@@ -1,13 +1,13 @@
-local raylib = require("@raylib")
+local raylib = import("@raylib")
 local lib = raylib.lib
-local aereon = require("@Aereon")
+local aereon = import("@Aereon")
 local gui = aereon.gui
 
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 
 local vend = KinemiumFontService.GetDefaultFontSmall()
-local arect = require("@Arect")(raylib.lib)
+local arect = import("@Arect")(raylib.lib)
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
 local ThirdBackgroundColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor
@@ -21,7 +21,8 @@ local SecondaryBackgroundColorRaylib = StudioThemeService.SelectedTheme.Secondar
 
 local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
+local zembed = import("@zembed")
+KinemiumIconLoader.new("Add", zembed.AssetPath("icons/vanilla3/ui/16x/200/Add.png"))
 
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
 local group

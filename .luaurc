@@ -33,12 +33,6 @@
         "PlayerGui": "./src/enviroment/game/runtime/PlayerGui",
         "Terrain": "./src/enviroment/game/runtime/Terrain",
 
-        // services
-        "StarterGui": "./src/enviroment/game/services/StarterGui/StarterGui",
-        "Workspace": "./src/enviroment/game/services/Workspace/Workspace",
-        "RunService": "./src/enviroment/game/services/RunService/RunService",
-        "Players": "./src/enviroment/game/services/Players/Players",
-
         // aereon
         "Aereon": "./src/modules/Aereon/main",
         "AWindow": "./src/modules/Aereon/window",
@@ -107,6 +101,6 @@
         "bufferutils": "./src/modules/utils",
         "kinec": "./src/modules/kinec",
         "vcredistInstaller": "./src/vcredistInstaller",
-        "Downloader": "./src/modules/Downloader",
+        "Downloader": "./src/modules/Downloader"
     }
 }

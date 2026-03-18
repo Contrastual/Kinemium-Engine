@@ -3,8 +3,11 @@ local Enum = require("@EnumMap")
 local Vector3 = require("@datatypes/Vector3")
 local raylib = require("@raylib")
 
+local zembed = require("@zembed")
+local defaultSound = zembed.AssetPath("sounds/bqqchickenalert.mp3")
+
 local propTable = {
-	SoundId = "./src/assets/sounds/bqqchickenalert.mp3",
+	SoundId = defaultSound,
 	Volume = 1.0,
 	Pitch = 1.0,
 	Looped = false,

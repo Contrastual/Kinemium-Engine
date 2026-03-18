@@ -15,14 +15,24 @@ function sandboxer.run(code, chunk, env)
 		native_code_gen = sandboxer.native_code_gen,
 	}
 
-	local success, result = pcall(function(...)
+	local success, result = xpcall(function(...)
 		local bytecode = luau.compile(code, {
 			optimization_level = 2,
+			debug_level = 2
 		})
 		local thread = luau.load(bytecode, options)
 
 		setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
 		return thread()
+	end, function(err)
+		if not err then
+			err = "No output from Kilang"
+		end
+		local str = err .. "\n\tStack Begin"
+		for _, s in pairs(debug.traceback(nil, 2)) do
+			str ..= "\n\t\t" .. tostring(s)
+		end
+		str ..= "\n\tStack End"
 	end)
 
 	local thread

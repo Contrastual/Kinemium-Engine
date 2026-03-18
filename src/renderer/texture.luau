@@ -19,23 +19,15 @@ return function(lib, structs)
 	end
 
 	local function GetMaterials()
-		local path = "./src/assets/materials/compressed"
+		local path = zembed.AssetPath("materials/compressed")
 		local fs = zune.fs
 
-		local entries
-		if zembed.IsEmbedded() then
-			entries = zembed.GetFilesThatHas([[assets\materials\compressed]])
-		else
-			entries = fs.entries(path)
-		end
-
+		local entries = fs.entries(path)
+		
 		local result = {}		
 		for i, v in pairs(entries) do
-			if zembed.IsEmbedded() then
-				local basename = fs.path.basename(v)
-				result[basename:gsub("(%.%w+)", "")] = "../" .. v
-			elseif v.kind == "directory" then
-				local directoryPath = "src/assets/materials/compressed/" .. v.name
+			if v.kind == "directory" then
+				local directoryPath = zune.fs.path.resolve(path, v.name)
 				local components = fs.entries(directoryPath)
 
 				local albedo, normal, orm
@@ -57,7 +49,7 @@ return function(lib, structs)
 					orm = orm
 				}
 			else
-				local objectPath = "src/assets/materials/compressed/" .. v.name
+				local objectPath = zune.fs.path.resolve(path, v.name)
 				result[v.name:gsub("(%.%w+)", "")] = {
 					albedo = objectPath,
 					normal = nil,

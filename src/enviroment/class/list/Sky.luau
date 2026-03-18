@@ -3,12 +3,13 @@ local Color3 = require("@datatypes/Color3")
 local CFrame = require("@datatypes/CFrame")
 local Enum = require("@EnumMap")
 
+local zembed = require("@zembed")
 local propTable = {
 	CelestialBodiesShown = true,
 	StarCount = 3000,
 	SunAngularSize = 21,
 	MoonAngularSize = 21,
-	Cubemap = "./src/assets/sky/test/images/sky.hdr",
+	Cubemap = zembed.AssetPath("sky/test/images/sky.hdr"),
 	SkyboxBk = "",
 	SkyboxDn = "",
 	SkyboxFt = "",

@@ -529,6 +529,9 @@ function KiRend.new(config: KiRendConf)
 			return
 		end
 		local render3DStart = os.clock()
+
+		profileBegin("Prepare3D")
+
 		local meshCalls = 0
 		local instancedBatches = 0
 		local instancedInstances = 0
@@ -537,11 +540,13 @@ function KiRend.new(config: KiRendConf)
 
 		lib.BeginMode3D(activeCamera)
 		lib.rlEnableBackfaceCulling()
-		renderer_eventbus:Fire("Begin3D")
+		-- renderer_eventbus:Fire("Begin3D")
 
+		profileBegin("internal/before3d")
 		for _, v in pairs(renderer_hooks.Before3D) do
 			v(rendererObject.RuntimeLibrary)
 		end
+		profileEnd()
 
 		local render3DUpdateStart = os.clock()
 		for _, item in ipairs(sorted3DPool) do
@@ -600,26 +605,38 @@ function KiRend.new(config: KiRendConf)
 			end
 		end
 
+		profileBegin("internal/after3d")
 		for _, v in pairs(renderer_hooks.After3D) do
 			v(rendererObject.RuntimeLibrary)
 		end
+		profileEnd()
 
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
-		renderer_eventbus:Fire("End3D")
+		-- renderer_eventbus:Fire("End3D")
 
 		perf_stats.mesh_calls = meshCalls
 		perf_stats.instanced_batches = instancedBatches
 		perf_stats.instanced_instances = instancedInstances
 		perf_stats.batches_3d = meshCalls + instancedBatches
 		perf_stats.render3d_ms = (os.clock() - render3DStart) * 1000
+
+		profileEnd()
 	end
 
 	function rendererObject:Render2D()
+		-- local delta = lib.GetFrameTime()
 		local uiStart = os.clock()
+
+		profileBegin("Prepare2D")
+
+		profileBegin("internal/before2d")
 		for _, v in pairs(renderer_hooks.Before2D) do
 			v(rendererObject.RuntimeLibrary)
 		end
+		profileEnd()
+
+		-- renderer_eventbus:Fire("GuiRender", delta)
 
 		local sortedGuiPool = getSortedPool(renderer_pool.gui)
 		perf_stats.gui_roots = #sortedGuiPool
@@ -629,10 +646,13 @@ function KiRend.new(config: KiRendConf)
 			gui.render(lib, gui.object and gui.object() or nil, time, structs, rendererObject.RuntimeLibrary)
 		end
 
+		profileBegin("internal/after2d")
 		for _, v in pairs(renderer_hooks.After2D) do
 			v(rendererObject.RuntimeLibrary)
 		end
+		profileEnd()
 
+		profileBegin("internal/overlay2d")
 		if rendererObject.DrawFps then
 			local fpsText = string.format("%2i FPS", lib.GetFPS())
 			local width, height = lib.GetRenderWidth(), lib.GetRenderHeight()
@@ -643,9 +663,8 @@ function KiRend.new(config: KiRendConf)
 			local color = structs.Color:new({ r = 255, g = 255, b = 255, a = 127 })
 			lib.DrawText(fpsText, width - textLength - 10, height - 10 - size, size, color)
 		end
-
 		if rendererObject.ShowPerfOverlay then
-			local color = structs.Color:new({ r = 255, g = 255, b = 255, a = 127 })
+			local color = structs.Color:new({ r = 255, g = 255, b = 255, a = 30 })
 			local size = 10
 
 			local text = table.concat({
@@ -686,8 +705,10 @@ function KiRend.new(config: KiRendConf)
 
 			lib.DrawText(text, 10, lib.GetRenderHeight() - 10 - (#string.split(text, "\n") + 1) * size, size, color)
 		end
+		profileEnd()
 
 		perf_stats.ui_ms = (os.clock() - uiStart) * 1000
+		profileEnd()
 	end
 
 	function rendererObject:step(time)
@@ -696,30 +717,31 @@ function KiRend.new(config: KiRendConf)
 		rendererObject.RuntimeLibrary.dt = lib.GetFrameTime()
 		rendererObject.RuntimeLibrary.time = lib.GetTime()
 
-		profileNextFrame()
-		profileBegin("Update")
-
 		local delta = lib.GetFrameTime()
 
-		profileBegin("GC")
-		if os.clock() - perf_stats.gc_last >= 10 then
-			local gcStart = os.clock()
-			zune.luau.garbagecollect()
-			perf_stats.gc_ms = (os.clock() - gcStart) * 1000
+		profileNextFrame()
+		profileBegin("Update"); do
+			profileBegin("GC"); do
+				if os.clock() - perf_stats.gc_last >= 10 then
+					local gcStart = os.clock()
+					zune.luau.garbagecollect()
+					perf_stats.gc_ms = (os.clock() - gcStart) * 1000
 			perf_stats.gc_last = os.clock()
-		end
-		profileEnd()
+				end
+			end; profileEnd()
 
-		for _, v in pairs(renderer_hooks.Renderstep) do
-			v(delta)
-		end
+			time += delta
 
-		perf_stats.rendereventbus_conns = renderer_eventbus:GetConnectionCount()
+			profileBegin("Simulation"); do
+				renderer_eventbus:Fire("Stepped", delta)
+				renderer_eventbus:Fire("PreSimulation", delta)
+				renderer_eventbus:Fire("Simulation", delta)
+				renderer_eventbus:Fire("PostSimulation", delta)
+			end; profileEnd()
 
-		renderer_eventbus:Fire("PreRender", delta)
-		renderer_eventbus:Fire("RenderStepped", delta)
-
-		time += delta
+			profileBegin("Heartbeat"); do
+				renderer_eventbus:Fire("Heartbeat", delta)
+			end; profileEnd()
 
 		if raylib.lib.IsWindowResized() == 1 then
 			local renderWidth, renderHeight = raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()
@@ -733,65 +755,92 @@ function KiRend.new(config: KiRendConf)
 			end
 		end
 
-		local inputStart = os.clock()
-		local keyboardListenStart = os.clock()
-		for keycode, _ in pairs(renderer_watching_keys) do
-			if lib.IsKeyPressed(keycode) == 1 then
-				renderer_eventbus:Fire("Pressed", keycode)
-			end
-			if lib.IsKeyDown(keycode) == 1 then
-				renderer_eventbus:Fire("IsKeyDown", keycode)
-			end
-			if lib.IsKeyReleased(keycode) == 1 then
-				renderer_eventbus:Fire("IsKeyReleased", keycode)
-			end
-		end
-		perf_stats.input_key_ms = (os.clock() - keyboardListenStart) * 1000
+			profileBegin("Input"); do
+				local inputStart = os.clock()
+				local keyboardListenStart = os.clock()
+				for keycode, _ in pairs(renderer_watching_keys) do
+					if lib.IsKeyPressed(keycode) == 1 then
+						renderer_eventbus:Fire("Pressed", keycode)
+					end
+					if lib.IsKeyDown(keycode) == 1 then
+						renderer_eventbus:Fire("IsKeyDown", keycode)
+					end
+					if lib.IsKeyReleased(keycode) == 1 then
+						renderer_eventbus:Fire("IsKeyReleased", keycode)
+					end
+				end
+				perf_stats.input_key_ms = (os.clock() - keyboardListenStart) * 1000
 
-		local mouseDelta = lib.GetMouseDelta()
-		if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
-			renderer_eventbus:Fire("MouseMoved", mouseDelta)
-		end
+				local mouseDelta = lib.GetMouseDelta()
+				if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
+					renderer_eventbus:Fire("MouseMoved", mouseDelta)
+				end
 
-		local wheel = lib.GetMouseWheelMove()
-		if wheel ~= 0 then
-			renderer_eventbus:Fire("MouseWheel", wheel)
-		end
-		perf_stats.input_ms = (os.clock() - inputStart) * 1000
-		perf_stats.update_ms = (os.clock() - updateStart) * 1000
+				local wheel = lib.GetMouseWheelMove()
+				if wheel ~= 0 then
+					renderer_eventbus:Fire("MouseWheel", wheel)
+				end
+				perf_stats.input_ms = (os.clock() - inputStart) * 1000
+				perf_stats.update_ms = (os.clock() - updateStart) * 1000
+			end; profileEnd()
 
-		profileEnd()
-		profileBegin("Render")
+			profileBegin("PreRender"); do
+				local renderStepStart = os.clock()
 
-		--lib.BeginTextureMode(viewport)
-		lib.BeginDrawing()
-		lib.ClearBackground(const.BLACK)
+				profileBegin("internal/renderstep")
+				for _, v in pairs(renderer_hooks.Renderstep) do
+					v(delta)
+				end
+				profileEnd()
 
-		rendererObject:Render3D()
-		rendererObject:Render2D()
+				renderer_eventbus:Fire("BoundRenderStep", delta)
+				renderer_eventbus:Fire("RenderStepped", delta)
+				renderer_eventbus:Fire("PreRender", delta)
+				renderer_eventbus:Fire("PreGuiRender", delta)
+				perf_stats.renderstep_ms = (os.clock() - renderStepStart) * 1000
+				perf_stats.rendereventbus_conns = renderer_eventbus:GetConnectionCount()
+			end; profileEnd()
+		end; profileEnd()
 
-		local dispatchStart = os.clock()
-		lib.EndDrawing()
-		perf_stats.dispatch_ms = (os.clock() - dispatchStart) * 1000
+		profileBegin("Prepare"); do
+			--lib.BeginTextureMode(viewport)
+			lib.BeginDrawing()
+			lib.ClearBackground(const.BLACK)
+			rendererObject:Render3D()
+			rendererObject:Render2D()
+		end; profileEnd()
+		
+		profileBegin("Render"); do
+			local dispatchStart = os.clock()
+			lib.EndDrawing()
+			perf_stats.dispatch_ms = (os.clock() - dispatchStart) * 1000
+		end; profileEnd()
 
-		renderer_eventbus:Fire("Heartbeat", delta)
 		perf_stats.frame_ms = (os.clock() - frameStart) * 1000
 		perf_stats.fps = lib.GetFPS()
 
 		profileSetCounter("FPS", lib.GetFPS())
-		profileEnd()
 
+		profileBegin("internal/afterstep")
 		for _, v in pairs(renderer_hooks.Afterstep) do
 			v(delta)
 		end
+		profileEnd()
+
 		task.wait(0)
 	end
 
 	function rendererObject:Run()
 		local time = 0.0
 
+		-- local t = 0
+
 		while lib.WindowShouldClose() == 0 do
 			rendererObject:step(time)
+			-- t += 1
+			-- if t == 120 then
+			-- 	print(ENGINE_PROFILER:GetLatestFrame())
+			-- end
 		end
 
 		rendererObject:Shutdown()

@@ -114,6 +114,8 @@ local function setMaterialMapTexture(model: buffer, mapIndex: number, texture: b
 	maps:write(dst, texture, 0, SIZE_TEX)
 end
 
+local zembed = require("@zembed")
+
 function skybox.Load(png)
 	--assert(not skybox._loaded, "attempted to load skybox after already loading it")
 
@@ -121,7 +123,7 @@ function skybox.Load(png)
 	skybox.Model = lib.LoadModelFromMesh(skybox.Mesh)
 
 	skybox.Shader =
-		lib.LoadShader("./src/assets/sky/default/shader/skybox.vs", "./src/assets/sky/default/shader/skybox.fs")
+		lib.LoadShader(zembed.AssetPath("sky/default/shader/skybox.vs"), zembed.AssetPath("sky/default/shader/skybox.fs"))
 
 	local envLoc = lib.GetShaderLocation(skybox.Shader, "environmentMap")
 	assert(envLoc ~= -1, "skybox shader missing uniform: environmentMap")
@@ -129,7 +131,7 @@ function skybox.Load(png)
 	setShaderLoc(skybox.Shader, rl.const.ShaderLocationIndex.SHADER_LOC_MAP_CUBEMAP, envLoc)
 	setMaterialShaderOnModel(skybox.Model, skybox.Shader)
 
-	local img = lib.LoadImage(png or "./src/assets/sky/default/images/cubemap.png")
+	local img = lib.LoadImage(png or zembed.AssetPath("sky/default/images/cubemap.png"))
 	skybox.CubeMap = lib.LoadTextureCubemap(img, const.CubemapLayout.CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE)
 	lib.UnloadImage(img)
 

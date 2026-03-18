@@ -29,6 +29,8 @@ local function sanitizeText(text)
 	return text
 end
 
+local zembed = require("@zembed")
+
 return function(raylib: typeof(rl.lib), theme, aereon, game)
 	local rect = aereon.rect()
 	local editor = {}
@@ -36,8 +38,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 	local IconLoader = game:GetService("KinemiumIconLoader")
 
 	local _icons = {
-		constant = "./src/assets/images/icons/vanilla3/general/32x/200/WireframeRendering.png",
-		functionVar = "./src/assets/images/icons/vanilla3/general/32x/200/Function.png",
+		constant = zembed.AssetPath("images/icons/vanilla3/general/32x/200/WireframeRendering.png"),
+		functionVar = zembed.AssetPath("images/icons/vanilla3/general/32x/200/Function.png"),
 	}
 
 	local vend = KinemiumFontService.GetMonoFontDefault()

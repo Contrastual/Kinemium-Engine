@@ -16,6 +16,8 @@ if not FlagExists("client") then
 	return
 end
 
+local zembed = import("@zembed")
+
 local MainGui = Instance.new("ScreenGui")
 MainGui.Parent = game.Players.LocalPlayer.PlayerGui
 
@@ -28,7 +30,7 @@ local logo = Instance.new("ImageLabel")
 logo.Position = UDim2.new(0, 20, 0, 20)
 logo.BackgroundColor3 = Color3.new(0, 0, 0)
 logo.Size = UDim2.new(0, 200, 0, 200)
-logo.Image = "./src/assets/images/icons/vanilla3/kinemium/KinemiumRaylib.png"
+logo.Image = zembed.AssetPath("images/icons/vanilla3/kinemium/KinemiumRaylib.png")
 logo.BackgroundTransparency = 0.3
 logo.Parent = MainGui
 

@@ -13,8 +13,10 @@ function filesystem.entryloop(path, callback)
 		end
 	else
 		path = string.gsub(path, "/", [[\]])
+		print(path)
 		local entries = zembed.GetScriptsThatHas(path)
 		if entries then
+			print(entries)
 			for _, path in pairs(entries) do
 				local name = zunefs.path.basename(path)
 				local kind = zunefs.stat(path).kind
@@ -29,8 +31,6 @@ function filesystem.entryloop(path, callback)
 	return true
 end
 
-function filesystem.read(file)
-	return zunefs.readFile(file)
-end
+filesystem.read = zunefs.readFile
 
 return filesystem

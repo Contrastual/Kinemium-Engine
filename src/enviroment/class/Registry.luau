@@ -45,8 +45,8 @@ task.spawn(function()
 
 		table.insert(createdClassesLog, string.format("\t%s (%.3fms): %s", returned.class, (os.clock() - createClassStart) * 1000, requirePath))
 	end
-		log(
-			string.format(
+	log(
+		string.format(
 			"CLASS: Successfully created the following classes in %.3fms:\n",
 			(os.clock() - createClassesStart) * 1000
 		) .. table.concat(createdClassesLog, "\n")
@@ -63,12 +63,7 @@ function registry.getClasses()
 end
 
 function registry.ClassValid(class)
-	if listOfClasses[class] then
-		return true
-	else
-		return false
-	end
-	return false
+	return listOfClasses[class] ~= nil
 end
 
 function registry.new(class, renderer, datamodel)
@@ -90,13 +85,11 @@ function registry.new(class, renderer, datamodel)
 	end
 
 	local instance = Instance.new(class)
-	local success, result = pcall(function()
-		found.callback(instance, renderer, datamodel)
-	end)
+	local success, result = pcall(found.callback, instance, renderer, datamodel)
 	if not success then
 		warn(`CLASS: Failed to create {class}: {result}`)
 	end
-	table.insert(created, instance)
+	table.insert(created, instance) -- potential memory leak
 	return instance
 end
 
