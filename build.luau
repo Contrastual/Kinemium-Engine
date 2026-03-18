@@ -46,7 +46,7 @@ end
 
 local b_windows = flagExists("windows")
 local b_macos = flagExists("macos")
-local b_linux = flagExists("linux")
+local b_debian = flagExists("debian")
 local b_freebsd = flagExists("freebsd")
 
 local b_args = {
@@ -115,8 +115,9 @@ if b_macos or zune.platform.os == "macos" then
 	buildExecutable("macos_x86-64", ".app", "dll")
 end
 
-if b_linux or zune.platform.os == "linux" then
-	buildExecutable("linux_x86-64", "", "so")
+-- Zune's Linux release is compiled for Debian.
+if b_debian or zune.platform.os == "linux" then
+	buildExecutable("debian_x86-64", "", "so")
 end
 
 -- There is no progress on proper FreeBSD support despite
