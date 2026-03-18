@@ -1,7 +1,7 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
-local RunService = require("@RunService")
+local RunService = require("@Kinemium.gameservices/RunService")
 
 local DebrisService = Instance.new("Debris")
 DebrisService.ExplorerHidden = true

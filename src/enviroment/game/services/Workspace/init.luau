@@ -11,7 +11,7 @@ local r3d = require("@r3d")
 local const = r3d.constants
 local rlib = r3d.lib
 
-local material_shader_manager = require("./materialShaders/_main")
+local material_shader_manager = require("@self/materialShaders/_main")
 
 local CHUNK_SIZE = 32
 local chunks = {}

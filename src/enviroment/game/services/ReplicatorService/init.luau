@@ -3,8 +3,8 @@ local Instance = require("@Instance")
 local ReplicatorService = Instance.new("ReplicatorService")
 ReplicatorService.ExplorerHidden = true
 
-local Server = require("./_Server")
-local Client = require("./_Client")
+local Server = require("@self/_Server")
+local Client = require("@self/_Client")
 
 ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 	task.spawn(function()

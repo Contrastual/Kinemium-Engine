@@ -1,6 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local encoder = require("./_encoder")
+local encoder = require("@self/_encoder")
 local Registry = require("@Kinemium.registry")
 
 local serde = zune.serde

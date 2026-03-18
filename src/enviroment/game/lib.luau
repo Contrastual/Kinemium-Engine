@@ -33,12 +33,11 @@ function DataModel.new(RENDERER, ...)
 	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
 		local addServiceStart = os.clock()
-		local name
-		local path
+		local name, path
 		if zembed.IsEmbedded() then
 			name = fs.path.basename(service):gsub(".luau", "")
 			name = string.gsub(name, ".luau", "")
-			path = `./services/{name}/{name}`
+			path = `./services/{name}`
 
 			if string.find(path, "_") then
 				print("Skipping " .. path)
@@ -46,7 +45,7 @@ function DataModel.new(RENDERER, ...)
 			end
 		else
 			name = service.name:gsub(".luau", "")
-			path = `./services/{name}/{name}`
+			path = `./services/{name}`
 		end
 
 		local success, returnedData = pcall(require, path)
