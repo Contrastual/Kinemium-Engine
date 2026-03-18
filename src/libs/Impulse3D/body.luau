@@ -5,11 +5,11 @@ local body = {
 	pool = {},
 }
 
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local utility = require("./utility")
 local Vector3Double = utility.Vector3Double
 
-export type Vector3 = typeof(require("@Vector3"))
+export type Vector3 = typeof(require("@datatypes/Vector3"))
 export type Vector3Double = typeof(Vector3Double.new(0, 0, 0))
 
 export type BodyType = "static" | "dynamic" | "kinematic"

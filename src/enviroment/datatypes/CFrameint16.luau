@@ -1,7 +1,7 @@
 local CFrameint16 = {}
 CFrameint16.__index = CFrameint16
 
-local Vector3int16 = require("@Vector3int16")
+local Vector3int16 = require("@datatypes/Vector3int16")
 
 local MIN_INT16 = -32768
 local MAX_INT16 = 32767

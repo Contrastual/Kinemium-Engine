@@ -1,5 +1,5 @@
 local Instance = require("@Instance")
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
 local StudioThemeService = Instance.new("StudioThemeService")
 StudioThemeService.ExplorerHidden = true

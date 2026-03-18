@@ -1,7 +1,7 @@
 local NumberSequence = {}
 NumberSequence.__index = NumberSequence
 
-local NumberSequenceKeypoint = require("@NumberSequenceKeypoint")
+local NumberSequenceKeypoint = require("@datatypes/NumberSequenceKeypoint")
 
 function NumberSequence.new(...)
 	local args = { ... }

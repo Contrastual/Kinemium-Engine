@@ -1,7 +1,7 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
-local NumberRange = require("@NumberSequence")
+local Vector3 = require("@datatypes/Vector3")
+local Color3 = require("@datatypes/Color3")
+local CFrame = require("@datatypes/CFrame")
+local NumberRange = require("@datatypes/NumberSequence")
 local Enum = require("@EnumMap")
 
 local propTable = {}

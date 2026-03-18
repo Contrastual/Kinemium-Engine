@@ -3,7 +3,7 @@
 
 local physics = {}
 
-local Vector3, CFrame, Utility = require("@Vector3"), require("@CFrame"), require("./utility")
+local Vector3, CFrame, Utility = require("@datatypes/Vector3"), require("@datatypes/CFrame"), require("./utility")
 local Vector3Double = Utility.Vector3Double
 local joints = require("./joints")
 local Broadphase = require("./broadphase")

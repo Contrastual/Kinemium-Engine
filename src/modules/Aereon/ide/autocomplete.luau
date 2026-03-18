@@ -1,6 +1,6 @@
 local raylib = require("@raylib")
 local const = raylib.const
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
 local cachedIcons = {}
 local cachedTextures = {}

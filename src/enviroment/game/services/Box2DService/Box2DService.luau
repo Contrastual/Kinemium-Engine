@@ -1,6 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local UDim2 = require("@UDim2")
+local UDim2 = require("@datatypes/UDim2")
 local task = zune.task
 
 local Box2DService = Instance.new("Box2DService")

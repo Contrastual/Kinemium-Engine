@@ -1,5 +1,5 @@
-local Color3 = require("@Color3")
-local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
+local Color3 = require("@datatypes/Color3")
+local ColorSequenceKeypoint = require("@datatypes/ColorSequenceKeypoint")
 
 local ColorSequence = {}
 ColorSequence.__index = ColorSequence

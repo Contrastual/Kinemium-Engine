@@ -1,7 +1,7 @@
-local Color3 = require("@Color3")
-local UDim2 = require("@UDim2")
+local Color3 = require("@datatypes/Color3")
+local UDim2 = require("@datatypes/UDim2")
 local signal = require("@Kinemium.signal")
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 local segments = 16
 local ZERO_VECTOR2 = Vector2.new(0, 0)

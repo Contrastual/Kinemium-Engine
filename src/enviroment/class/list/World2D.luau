@@ -1,6 +1,6 @@
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 local Enum = require("@EnumMap")
-local UDim2 = require("@UDim2")
+local UDim2 = require("@datatypes/UDim2")
 local renderpool = {}
 
 local propTable = {

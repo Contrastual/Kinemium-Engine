@@ -1,10 +1,10 @@
 local Instance = require("@Instance")
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local raylib = require("@raylib")
 local const = raylib.const
 local lib = raylib.lib
 local Lighting = Instance.new("Lighting")
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 local r3d = require("@r3d")
 local rlib = r3d.lib
 

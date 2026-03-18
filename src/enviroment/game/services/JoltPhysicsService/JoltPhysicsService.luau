@@ -1,7 +1,7 @@
 -- devcell
 local Instance = require("@Instance")
-local Vector3 = require("@Vector3")
-local CFrame = require("@CFrame")
+local Vector3 = require("@datatypes/Vector3")
+local CFrame = require("@datatypes/CFrame")
 local ffi = zune.ffi
 local jolt = require("@jolt")
 local lib = jolt.lib

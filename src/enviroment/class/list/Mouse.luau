@@ -1,9 +1,9 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
+local Vector3 = require("@datatypes/Vector3")
+local Color3 = require("@datatypes/Color3")
+local CFrame = require("@datatypes/CFrame")
 local Enum = require("@EnumMap")
 local signal = require("@Kinemium.signal")
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 local Button1Down = signal.new()
 local Button1Up = signal.new()

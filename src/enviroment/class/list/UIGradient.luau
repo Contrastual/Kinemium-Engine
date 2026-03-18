@@ -1,6 +1,6 @@
-local ColorSequence = require("@ColorSequence")
-local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
-local Color3 = require("@Color3")
+local ColorSequence = require("@datatypes/ColorSequence")
+local ColorSequenceKeypoint = require("@datatypes/ColorSequenceKeypoint")
+local Color3 = require("@datatypes/Color3")
 
 local propTable = {
 	Color = ColorSequence.new({

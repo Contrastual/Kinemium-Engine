@@ -1,9 +1,9 @@
-local Vector2 = require("@Vector2")
-local Color3 = require("@Color3")
-local UDim2 = require("@UDim2")
+local Vector2 = require("@datatypes/Vector2")
+local Color3 = require("@datatypes/Color3")
+local UDim2 = require("@datatypes/UDim2")
 local Enum = require("@EnumMap")
-local Frame = require("@Frame")
-local ImageLabel = require("@ImageLabel")
+local Frame = require("@classes/Frame")
+local ImageLabel = require("@classes/ImageLabel")
 local logic = require("@Kinemium.2dbutton")
 
 local propTable = {

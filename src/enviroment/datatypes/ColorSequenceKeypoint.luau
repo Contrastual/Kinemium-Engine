@@ -1,4 +1,4 @@
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
 local ColorSequenceKeypoint = {}
 ColorSequenceKeypoint.__index = ColorSequenceKeypoint

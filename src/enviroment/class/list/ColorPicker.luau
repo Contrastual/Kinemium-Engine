@@ -1,13 +1,13 @@
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 local raylib = require("@Raylib")
 local structs = raylib.structs
 
 local aereon = require("@Aereon")
 local gui = aereon.gui
 local signal = require("@Kinemium.signal")
-local Color4 = require("@Color4")
+local Color4 = require("@datatypes/Color4")
 local arect = aereon.rect()
-local UDim2 = require("@UDim2")
+local UDim2 = require("@datatypes/UDim2")
 
 local propTable = {
 	Name = "ColorPicker",

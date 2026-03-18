@@ -1,14 +1,15 @@
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 
 local raylib = require("@raylib")
-local Vector2 = require("@Vector2")
-local Color3 = require("@Color3")
+local Vector2 = require("@datatypes/Vector2")
+local Color3 = require("@datatypes/Color3")
 
 local fs = zune.fs
 
+local zembed = require("@zembed")
 local propTable = {
 	Name = "Cursor",
-	IconPack = "./src/assets/icon/cursor",
+	IconPack = zembed.AssetPath("icon/cursor"),
 	Size = Vector2.new(42, 42),
 	Color = Color3.new(1, 1, 1),
 	Transparency = 0,

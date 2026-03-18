@@ -1,8 +1,8 @@
 local CFrameQuat16 = {}
 CFrameQuat16.__index = CFrameQuat16
 
-local Vector3int16 = require("@Vector3int16")
-local CFrame = require("@CFrame")
+local Vector3int16 = require("@datatypes/Vector3int16")
+local CFrame = require("@datatypes/CFrame")
 
 local MIN_INT16 = -32768
 local MAX_INT16 = 32767

@@ -1,4 +1,4 @@
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local Enum = require("@EnumMap")
 local jolt = require("@jolt")
 

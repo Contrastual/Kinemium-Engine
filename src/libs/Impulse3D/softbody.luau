@@ -12,7 +12,7 @@ local softbody = {
 local utility = require("./utility")
 local Vector3Double = utility.Vector3Double
 
-export type Vector3 = typeof(require("@Vector3"))
+export type Vector3 = typeof(require("@datatypes/Vector3"))
 export type Vector3Double = typeof(Vector3Double.new(0, 0, 0))
 
 -- ─────────────────────────────────────────────────────────────────────────────

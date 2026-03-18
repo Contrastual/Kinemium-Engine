@@ -1,7 +1,7 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
+local Vector3 = require("@datatypes/Vector3")
+local Color3 = require("@datatypes/Color3")
 local Enum = require("@EnumMap")
-local CFrame = require("@CFrame")
+local CFrame = require("@datatypes/CFrame")
 
 local r3d = require("@r3d")
 local rlib = r3d.lib

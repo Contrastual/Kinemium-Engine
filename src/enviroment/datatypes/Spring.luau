@@ -3,15 +3,15 @@ local Spring = {}
 Spring.__index = Spring
 
 local CFrame, Vector3, Vector2, UDim2, UDim, Color3, Ray, Color4, BoundingBox =
-	require("@CFrame"),
-	require("@Vector3"),
-	require("@Vector2"),
-	require("@UDim2"),
-	require("@UDim"),
-	require("@Color3"),
-	require("@Ray"),
-	require("@Color4"),
-	require("@BoundingBox")
+	require("@datatypes/CFrame"),
+	require("@datatypes/Vector3"),
+	require("@datatypes/Vector2"),
+	require("@datatypes/UDim2"),
+	require("@datatypes/UDim"),
+	require("@datatypes/Color3"),
+	require("@datatypes/Ray"),
+	require("@datatypes/Color4"),
+	require("@datatypes/BoundingBox")
 
 local pi = math.pi
 local exp = math.exp

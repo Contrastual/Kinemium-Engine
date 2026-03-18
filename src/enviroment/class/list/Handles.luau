@@ -1,8 +1,8 @@
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 local signal = require("@kinemium.signal")
 local Enum = require("@EnumMap")
 local ffi = zune.ffi
-local CFrame = require("@CFrame")
+local CFrame = require("@datatypes/CFrame")
 
 local propTable = {
 	Color = Color3.new(0.5, 0.5, 0.5),

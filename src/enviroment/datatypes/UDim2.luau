@@ -1,4 +1,4 @@
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 local UDim2 = {}
 UDim2.__index = UDim2

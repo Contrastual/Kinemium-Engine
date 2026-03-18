@@ -1,5 +1,5 @@
-local UDim2 = require("@UDim2")
-local Color3 = require("@Color3")
+local UDim2 = require("@datatypes/UDim2")
+local Color3 = require("@datatypes/Color3")
 local Aereon = require("@Aereon")
 local gui = Aereon.gui
 local arect = Aereon.rect()

@@ -3,7 +3,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local module = {}
 	local draggedWindow = nil
 	local dragOffset = { x = 0, y = 0 }
-	local Color3 = require("@Color3")
+	local Color3 = require("@datatypes/Color3")
 	local Enum = require("@EnumMap")
 	local spring = require("@kispring")
 	local KinemiumFontService = game:GetService("KinemiumFontService")

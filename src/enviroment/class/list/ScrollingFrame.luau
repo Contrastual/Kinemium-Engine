@@ -1,9 +1,9 @@
-local Color3 = require("@Color3")
-local GuiObject = require("@GuiObject")
+local Color3 = require("@datatypes/Color3")
+local GuiObject = require("@classes/GuiObject")
 local raylib = require("@Raylib")
 local structs = raylib.structs
-local Vector2 = require("@Vector2")
-local UDim = require("@UDim")
+local Vector2 = require("@datatypes/Vector2")
+local UDim = require("@datatypes/UDim")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()

@@ -2,7 +2,7 @@ local raylib = require("@raylib")
 local structs = raylib.structs
 
 local rect = require("@arect")(raylib.lib)
-local color3 = require("@Color3")
+local color3 = require("@datatypes/Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
 
@@ -339,10 +339,12 @@ return function(objects, data)
 				)
 
 				raylib.lib.DrawRectangleRounded(
-					currentX,
-					barY + 2,
-					groupWidth - 1,
-					barHeight,
+					raylib.structs.Rectangle:new({
+						x = currentX,
+						y = barY + 2,
+						width = groupWidth - 1,
+						height = barHeight
+					}),
 					0.04,
 					4,
 					barColor:ToRaylib(0)
@@ -369,10 +371,12 @@ return function(objects, data)
 
 					-- Highlight
 					raylib.lib.DrawRectangleRounded(
-						currentX,
-						barY + 2,
-						groupWidth - 1,
-						barHeight,
+						raylib.structs.Rectangle:new({
+							x = currentX,
+							y = barY + 2,
+							width = groupWidth - 1,
+							height = barHeight
+						}),
 						0.04,
 						4,
 						color3.new(1, 1, 1):ToRaylib(0.7)
@@ -400,10 +404,12 @@ return function(objects, data)
 						)
 
 						raylib.lib.DrawRectangleRounded(
-							childX,
-							childY + 2,
-							childWidth - 1,
-							barHeight - 2,
+							raylib.structs.Rectangle:new({
+								x = childX,
+								y = childY + 2,
+								width = childWidth - 1,
+								height = barHeight - 2
+							}),
 							0.03,
 							3,
 							childColor:ToRaylib(0)
@@ -445,10 +451,12 @@ return function(objects, data)
 
 		-- Sidebar background
 		raylib.lib.DrawRectangleRounded(
-			sidebarX,
-			topBarY,
-			config.sidebarWidth,
-			screenHeight - topBarY,
+			raylib.structs.Rectangle:new({
+				x = sidebarX,
+				y = topBarY,
+				width = config.sidebarWidth,
+				height = screenHeight - topBarY
+			}),
 			0,
 			0,
 			config.headerColor:ToRaylib(0)
@@ -554,22 +562,25 @@ return function(objects, data)
 
 			-- Tooltip background
 			raylib.lib.DrawRectangleRounded(
-				tooltipX,
-				tooltipY,
-				tooltipWidth,
-				tooltipHeight,
+				raylib.structs.Rectangle:new({
+					x = tooltipX,
+					y = tooltipY,
+					width = tooltipWidth,
+					height = tooltipHeight
+				}),
 				0.08,
 				6,
 				color3.new(0.12, 0.12, 0.14):ToRaylib(0)
 			)
 			raylib.lib.DrawRectangleRoundedLines(
-				tooltipX,
-				tooltipY,
-				tooltipWidth,
-				tooltipHeight,
+				raylib.structs.Rectangle:new({
+					x = tooltipX,
+					y = tooltipY,
+					width = tooltipWidth,
+					height = tooltipHeight
+				}),
 				0.08,
 				6,
-				1,
 				color3.new(0.4, 0.4, 0.4):ToRaylib(0)
 			)
 

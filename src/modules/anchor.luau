@@ -1,7 +1,7 @@
 -- AnchorUtils.lua
 local AnchorUtils = {}
 
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 function AnchorUtils.GetAbsolutePosition(position, size, anchor, parentSize)
 	-- Convert position to pixels relative to parent

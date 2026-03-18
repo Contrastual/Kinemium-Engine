@@ -2,8 +2,8 @@ local svgmaker = {}
 local fs = zune.fs
 local net = zune.net
 
-local Color3 = require("@Color3")
-local Vector2 = require("@Vector2")
+local Color3 = require("@datatypes/Color3")
+local Vector2 = require("@datatypes/Vector2")
 
 export type SVGOptions = {
 	Color: Color3,

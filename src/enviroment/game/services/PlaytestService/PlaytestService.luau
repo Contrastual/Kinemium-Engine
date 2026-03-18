@@ -1,6 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
 local serialized = nil
 

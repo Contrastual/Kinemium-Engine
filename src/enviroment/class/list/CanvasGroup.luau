@@ -1,9 +1,9 @@
 local raylib = require("@raylib")
 local lib = raylib.lib
 local utils = require("@bufferutils")
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 
 local propTable = {
 	Name = "CanvasGroup",

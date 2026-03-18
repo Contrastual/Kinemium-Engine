@@ -1,8 +1,8 @@
-local Vector2 = require("@Vector2")
-local Color3 = require("@Color3")
-local UDim2 = require("@UDim2")
+local Vector2 = require("@datatypes/Vector2")
+local Color3 = require("@datatypes/Color3")
+local UDim2 = require("@datatypes/UDim2")
 local Enum = require("@EnumMap")
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 local raylib = require("@raylib")
 local lib = raylib.lib
 

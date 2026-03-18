@@ -1,6 +1,6 @@
-local UDim = require("@UDim")
-local UDim2 = require("@UDim2")
-local Vector2 = require("@Vector2")
+local UDim = require("@datatypes/UDim")
+local UDim2 = require("@datatypes/UDim2")
+local Vector2 = require("@datatypes/Vector2")
 
 local propTable = {
 	CornerRadius = UDim.new(0, 15),

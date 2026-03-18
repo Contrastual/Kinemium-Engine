@@ -1,8 +1,8 @@
 local Enum = require("@EnumMap")
 local logic = require("@Kinemium.2dinput")
 
-local GuiObject = require("@GuiObject")
-local TextLabel = require("@TextLabel")
+local GuiObject = require("@classes/GuiObject")
+local TextLabel = require("@classes/TextLabel")
 
 local propTable = {
 	Name = "TextBox",

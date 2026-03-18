@@ -1,7 +1,7 @@
 local Vector2int16 = {}
 Vector2int16.__index = Vector2int16
 
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 local MIN_INT16 = -32768
 local MAX_INT16 = 32767
 

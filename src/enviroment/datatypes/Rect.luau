@@ -1,4 +1,4 @@
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 local Rect = {}
 Rect.__index = Rect

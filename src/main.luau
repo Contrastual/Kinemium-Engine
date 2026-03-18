@@ -132,7 +132,7 @@ local filesystem = require("./modules/filesystem")
 local Enum = require("@EnumMap")
 local kilang = require("@kilang")
 local task = zune.task
-local cam = require("@camera")
+local cam = require("@classes/Camera")
 
 -- DETERMINE ENGINE MODE
 _G.IsClient = false

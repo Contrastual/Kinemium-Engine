@@ -6,8 +6,8 @@ ImpulsePhysicsService.ExplorerHidden = true
 local Impulse3D = require("@Impulse3D")
 local util = Impulse3D.utility
 local Vector3Double = util.Vector3Double
-local CFrame = require("@CFrame")
-local Vector3 = require("@Vector3")
+local CFrame = require("@datatypes/CFrame")
+local Vector3 = require("@datatypes/Vector3")
 local Enum = require("@EnumMap")
 
 local registered = {}

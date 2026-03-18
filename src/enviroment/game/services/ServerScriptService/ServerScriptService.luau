@@ -1,5 +1,5 @@
 local Instance = require("@Instance")
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local ServerScriptService = Instance.new("ServerScriptService")
 
 local allowed_to_render = {

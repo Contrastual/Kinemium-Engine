@@ -1,7 +1,7 @@
 local BoundingBox = {}
 BoundingBox.__index = BoundingBox
 
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 
 function BoundingBox.new(min, max)
 	assert(min and max, "BoundingBox requires min and max Vector3")

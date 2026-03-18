@@ -3,8 +3,8 @@ local lib = raylib.lib
 local const = raylib.const
 local structs = raylib.structs
 
-local CFrame = require("@CFrame")
-local Vector3 = require("@Vector3")
+local CFrame = require("@datatypes/CFrame")
+local Vector3 = require("@datatypes/Vector3")
 
 local MOUSE_SENSITIVITY = 0.003
 local MOVE_SPEED = 10

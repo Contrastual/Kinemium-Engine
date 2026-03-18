@@ -1,8 +1,8 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
-local Mouse = require("@Mouse")
-local Player = require("@Player")
+local Mouse = require("@classes/Mouse")
+local Player = require("@classes/Player")
 
 local Players = Instance.new("Players")
 

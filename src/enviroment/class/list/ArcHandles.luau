@@ -1,6 +1,6 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
+local Vector3 = require("@datatypes/Vector3")
+local Color3 = require("@datatypes/Color3")
+local CFrame = require("@datatypes/CFrame")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
 local lib, const, structs = raylib.lib, raylib.const, raylib.structs

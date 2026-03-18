@@ -12,7 +12,7 @@ local function c3tr(c, transparency)
 end
 
 local rect = require("@arect")(raylib.lib)
-local color3 = require("@Color3")
+local color3 = require("@datatypes/Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
 

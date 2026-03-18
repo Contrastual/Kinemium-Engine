@@ -1,7 +1,7 @@
 local Region3 = {}
 Region3.__index = Region3
 
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 
 function Region3.new(min, max)
 	assert(min and max)

@@ -1,5 +1,5 @@
-local Vector3 = require("@Vector3")
-local Vector2 = require("@Vector2")
+local Vector3 = require("@datatypes/Vector3")
+local Vector2 = require("@datatypes/Vector2")
 
 export type NavPolygon = {
 	id: number,

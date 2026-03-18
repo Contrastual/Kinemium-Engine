@@ -7,7 +7,7 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 
 -- datatypes
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 
 -- components
 local types = require("./types")

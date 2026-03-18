@@ -1,6 +1,6 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 
 local CoreGui = Instance.new("CoreGui")
 

@@ -1,4 +1,4 @@
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 
 local propTable = {
 	Name = "Frame",

@@ -1,5 +1,5 @@
-local UDim = require("@UDim")
-local Color3 = require("@Color3")
+local UDim = require("@datatypes/UDim")
+local Color3 = require("@datatypes/Color3")
 local signal = require("@kinemium.signal")
 
 export type Server = typeof(require("@KiNet").Server)

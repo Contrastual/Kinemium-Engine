@@ -2,7 +2,7 @@
 -- devcell
 
 local PhysicsUtils = {}
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Vector3Double

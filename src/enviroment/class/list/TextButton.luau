@@ -1,7 +1,7 @@
 local logic = require("@Kinemium.2dbutton")
 
-local Frame = require("@Frame")
-local TextLabel = require("@TextLabel")
+local Frame = require("@classes/Frame")
+local TextLabel = require("@classes/TextLabel")
 
 local propTable = {
 	AutoButtonColor = true,

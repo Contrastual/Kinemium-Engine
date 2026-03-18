@@ -1,4 +1,4 @@
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local Part = require("./Part")
 local raylib = require("@raylib")
 local Enum = require("@EnumMap")

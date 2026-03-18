@@ -1,6 +1,6 @@
 local logic = require("@Kinemium.2dbutton")
 
-local Frame = require("@Frame")
+local Frame = require("@classes/Frame")
 local raylib = require("@raylib")
 local utils = require("@bufferutils")
 

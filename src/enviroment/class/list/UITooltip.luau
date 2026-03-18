@@ -1,5 +1,5 @@
-local Vector2 = require("@Vector2")
-local Color3 = require("@Color3")
+local Vector2 = require("@datatypes/Vector2")
+local Color3 = require("@datatypes/Color3")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
 local RichText = require("@Kinemium.richtext")

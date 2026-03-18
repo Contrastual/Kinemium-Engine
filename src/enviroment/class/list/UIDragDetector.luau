@@ -1,5 +1,5 @@
-local Vector3 = require("@Vector3")
-local UDim2 = require("@UDim2")
+local Vector3 = require("@datatypes/Vector3")
+local UDim2 = require("@datatypes/UDim2")
 local raylib = require("@raylib")
 
 local aereon = require("@Aereon")

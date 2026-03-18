@@ -1,6 +1,6 @@
-local UDim = require("@UDim")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
+local UDim = require("@datatypes/UDim")
+local Color3 = require("@datatypes/Color3")
+local CFrame = require("@datatypes/CFrame")
 
 local propTable = {
 	Value = CFrame.new(0, 0, 0),

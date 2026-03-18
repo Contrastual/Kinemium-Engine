@@ -1,11 +1,11 @@
-local Vector2 = require("@Vector2")
-local UDim2 = require("@UDim2")
-local Frame = require("@Frame")
-local Color3 = require("@Color3")
+local Vector2 = require("@datatypes/Vector2")
+local UDim2 = require("@datatypes/UDim2")
+local Frame = require("@classes/Frame")
+local Color3 = require("@datatypes/Color3")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
 local lib = raylib.lib
-local GuiObject = require("@GuiObject")
+local GuiObject = require("@classes/GuiObject")
 local RichText = require("@Kinemium.richtext")
 
 local propTable = {

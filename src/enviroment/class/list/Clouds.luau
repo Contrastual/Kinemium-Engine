@@ -1,4 +1,4 @@
-local Color3 = require("@Color3")
+local Color3 = require("@datatypes/Color3")
 local propTable = {
 	Speed = 1,
 	Color = Color3.new(1, 1, 1),

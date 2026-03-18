@@ -1,6 +1,6 @@
-local Vector2 = require("@Vector2")
+local Vector2 = require("@datatypes/Vector2")
 local Enum = require("@EnumMap")
-local UDim = require("@UDim")
+local UDim = require("@datatypes/UDim")
 
 local propTable = {
 	Direction = Enum.FillDirection.Vertical, -- "Horizontal" or "Vertical"

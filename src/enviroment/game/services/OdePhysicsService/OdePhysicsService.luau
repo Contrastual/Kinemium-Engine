@@ -5,9 +5,9 @@ local OdePhysicsService = Instance.new("OdePhysicsService")
 OdePhysicsService.ExplorerHidden = true
 
 local ode = require("@ode")
-local CFrame = require("@CFrame")
+local CFrame = require("@datatypes/CFrame")
 local raylib = require("@raylib")
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local zembed = require("@zembed")
 local Enum = require("@EnumMap")
 local lib = ode.lib

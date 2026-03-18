@@ -1,5 +1,5 @@
 local Instance = require("@Instance")
-local Vector3 = require("@Vector3")
+local Vector3 = require("@datatypes/Vector3")
 local Workspace = Instance.new("Workspace")
 local Enum = require("@EnumMap")
 local pool = {}
@@ -311,23 +311,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		zune.task.spawn(function()
-			local mtl_info = availableMaterials[materialName]
-			local material = mtl_info.material
-
-			mtl_info.loading = true
-
-			local function read(path): (buffer?, string?)
-				if not path then
-					return nil, nil
-				end
-				local success, result = pcall(zune.fs.readFileSync, path, true)
-				if success then
-					return result, raylib.lib.GetFileExtension(path)
-				else
-					return nil, nil
-				end
-			end
-
 			iodebug(string.format("Loading custom material %s", materialName))
 			local mtl_info = availableMaterials[materialName]
 			local material = mtl_info.material
@@ -346,13 +329,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				end
 			end
 
-			iodebug(string.format("Loading custom material %s", materialName))
 			local materialLoadStart = os.clock()
-			print(mtl_info.path)
-			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
-			local data_normal, data_normal_ext = read(mtl_info.path.normal)
-			local data_orm, data_orm_ext = read(mtl_info.path.orm)
-			-- local data_emission, data_emission_ext = read(path.emission)
 			print(mtl_info.path)
 			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
 			local data_normal, data_normal_ext = read(mtl_info.path.normal)
