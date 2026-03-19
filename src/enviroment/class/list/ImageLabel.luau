@@ -18,6 +18,8 @@ local propTable = {
 	Image = placeholder,
 	ImageColor3 = Color3.new(1, 1, 1),
 	ImageTransparency = 0.5,
+	ResampleMode = Enum.ResampleMode.Default,
+
 	--ScaleType = Enum.ScaleType.Stretch,
 	--SliceCenter = Rect.new(0, 0, 0, 0),
 	--SliceScale = 1,
@@ -65,25 +67,45 @@ end
 
 GuiObject.inherit(propTable)
 
+local FILTER_MAP = {
+	[Enum.ResampleMode.Pixelated.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_POINT,
+	[Enum.ResampleMode.Default.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_BILINEAR,
+	[Enum.ResampleMode.Trilinear.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR,
+	[Enum.ResampleMode.Anisotropic4x.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_ANISOTROPIC_4X,
+	[Enum.ResampleMode.Anisotropic8x.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_ANISOTROPIC_8X,
+	[Enum.ResampleMode.Anisotropic16x.Value] = raylib.const.TextureFilter.TEXTURE_FILTER_ANISOTROPIC_16X,
+}
+
 return {
 	class = "ImageLabel",
 	render = propTable.render,
 	callback = function(instance, renderer)
-		instance._cached = lib.LoadTexture(instance.Image)
-		lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-		lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-		lib.GenTextureMipmaps(instance._cached)
+		local queuedRegenerate
+
+		local function reload(image)
+			queuedRegenerate = nil
+			if not image then
+				image = lib.LoadTexture(instance.Image)
+			end
+			print(instance.ResampleMode.Value)
+			lib.SetTextureFilter(image, FILTER_MAP[instance.ResampleMode.Value])
+			lib.SetTextureWrap(image, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+			lib.GenTextureMipmaps(image)
+		end
 
 		instance.Changed:Connect(function(property)
 			if property == "Image" then
 				instance._cached = lib.LoadTexture(instance.Image)
-				lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-				lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-				lib.GenTextureMipmaps(instance._cached)
+				if queuedRegenerate then return end
+				queuedRegenerate = task.defer(reload)
+			elseif property == "ResampleMode" then
+				if queuedRegenerate then return end
+				queuedRegenerate = task.defer(reload)
 			end
 		end)
 
 		instance:SetProperties(propTable)
+		reload()
 
 		return instance
 	end,

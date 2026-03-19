@@ -645,6 +645,15 @@ enumTable.CameraType = {
 	ThirdPerson = 4,
 }
 
+enumTable.ResampleMode = {
+	Default = 0,
+	Pixelated = 1,
+	Trilinear = 2,
+	Anisotropic4x = 3,
+	Anisotropic8x = 4,
+	Anisotropic16x = 5,
+}
+
 enumTable.SecurityCapabilities = {
 	UserScript = 1,
 	Internals = 2,
