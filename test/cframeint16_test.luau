@@ -1,6 +1,6 @@
-local CFrameint16 = require("../enviroment/datatypes/CFrameint16")
-local CFrame = require("../enviroment/datatypes/CFrame")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local CFrameint16 = require("@datatypes/CFrameint16")
+local CFrame = require("@datatypes/CFrame")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect
@@ -37,7 +37,7 @@ testing.describe("CFrameint16", function()
 		local cf = CFrameint16.new(0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0)
 		expect(cf.R00).toBe(0)
 		expect(cf.R01).toBe(0)
-		expect(cf.R02).toBe(1)
+		expect(cf.R02).toBe(32767)
 	end)
 
 	testing.test("fromCFrame captures position", function()

@@ -101,6 +101,8 @@
         "bufferutils": "./src/modules/utils",
         "kinec": "./src/modules/kinec",
         "vcredistInstaller": "./src/vcredistInstaller",
-        "Downloader": "./src/modules/Downloader"
+        "Downloader": "./src/modules/Downloader",
+
+        "Kinemium.testing": "./test"
     }
 }

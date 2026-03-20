@@ -1,5 +1,5 @@
-local CFrame2D = require("../enviroment/datatypes/CFrame2D")
-local Vector2 = require("../enviroment/datatypes/Vector2")
+local CFrame2D = require("@datatypes/CFrame2D")
+local Vector2 = require("@datatypes/Vector2")
 
 local testing = zune.testing
 local expect = testing.expect

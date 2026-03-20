@@ -3,6 +3,8 @@
 
 local launchStart = os.clock()
 
+require("@Kinemium.testing")
+
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
 	_G.IsExecutable = true

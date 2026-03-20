@@ -1,6 +1,6 @@
-local CFrameQuat16 = require("../enviroment/datatypes/CFrameQuat16")
-local CFrame = require("../enviroment/datatypes/CFrame")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local CFrameQuat16 = require("@datatypes/CFrameQuat16")
+local CFrame = require("@datatypes/CFrame")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect

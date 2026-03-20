@@ -1,5 +1,5 @@
-local Ray = require("../enviroment/datatypes/Ray")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local Ray = require("@datatypes/Ray")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect

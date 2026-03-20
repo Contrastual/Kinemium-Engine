@@ -1,5 +1,5 @@
-local Region3 = require("../enviroment/datatypes/Region")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local Region3 = require("@datatypes/Region")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect

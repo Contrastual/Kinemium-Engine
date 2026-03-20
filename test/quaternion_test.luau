@@ -1,5 +1,5 @@
-local Quaternion = require("../enviroment/datatypes/Quaternion")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local Quaternion = require("@datatypes/Quaternion")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect

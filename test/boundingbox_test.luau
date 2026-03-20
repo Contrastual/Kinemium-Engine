@@ -1,5 +1,5 @@
-local BoundingBox = require("../enviroment/datatypes/BoundingBox")
-local Vector3 = require("../enviroment/datatypes/Vector3")
+local BoundingBox = require("@datatypes/BoundingBox")
+local Vector3 = require("@datatypes/Vector3")
 
 local testing = zune.testing
 local expect = testing.expect

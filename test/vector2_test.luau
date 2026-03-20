@@ -1,4 +1,4 @@
-local Vector2 = require("../enviroment/datatypes/Vector2")
+local Vector2 = require("@datatypes/Vector2")
 
 local testing = zune.testing
 local expect = testing.expect
