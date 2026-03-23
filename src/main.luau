@@ -330,10 +330,19 @@ if FlagExists("kilang") then
 	end)
 end
 
+local function initEngine()
+	loadInternals()
+	httpServerViewer:Init()
+	Kinemium:playtest()
+end
+
 -- INITIALIZE ENGINE
-loadInternals()
-httpServerViewer:Init()
-Kinemium:playtest()
+xpcall(initEngine, function(err)
+	if err then
+		evalError(debug.traceback("Engine did not properly initialize, please restart the program: " .. tostring(err), 2))
+		zune.process.exit(1)
+	end
+end)
 
 -- RUN RENDERER
 log(string.format("Kinemium launched in %.3fms", (os.clock() - launchStart) * 1000))
