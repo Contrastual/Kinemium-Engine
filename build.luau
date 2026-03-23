@@ -32,6 +32,10 @@ end
 
 local ext = ""
 
+local function copyDirectory(from, to)
+	zune.fs.copy(from, to, true)
+end
+
 local function copyLibraries(ext, bin, path)
 	for _, f in pairs(zune.fs.entries(path)) do
 		if f.kind == "directory" then
@@ -95,6 +99,9 @@ local function buildExecutable(name, exec_ext, lib_ext)
 
 	print("Copying assets")
 	zune.fs.copy(zjoin(root, "assets"), zjoin(dir, "assets"), true)
+
+	print("Copying VC++ redistributables")
+	copyDirectory(zjoin("src", "vcredistInstaller", "bin"), zjoin(bin, "vcredist"))
 	
 	table.insert(l_args, "--out=" .. l_exec)
 
