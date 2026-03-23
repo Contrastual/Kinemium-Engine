@@ -55,4 +55,8 @@ end
 
 lib.readFile = zune.fs.embedFile
 
-return lib
+lib.embedded = isEmbedded
+lib.EmbeddedScripts = embeddedScripts
+lib.EmbeddedFiles = embeddedFiles
+
+return table.freeze(lib)
