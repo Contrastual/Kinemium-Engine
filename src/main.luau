@@ -282,11 +282,7 @@ end
 
 -- LOAD USER SCRIPTS
 function Kinemium:playtest()
-	loop("src/sandboxed", function(path, entry)
-		if string.find(path, "internals") or string.find(path, "Core") then
-			return
-		end
-
+	loop("src/sandboxed/game", function(path, entry)
 		if kilang.threads[path] then
 			return
 		end
