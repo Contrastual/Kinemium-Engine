@@ -1,60 +1,454 @@
---!strict
---!optimize 2
---!native
-
 local ffi = zune.ffi
 
--- Basic type aliases
-local int = ffi.types.i32
-local uint = ffi.types.u32
-local bool = ffi.types.u8
-local float = ffi.types.float
-local double = ffi.types.double
+-- Type aliases for FFI
+type int = number
+type float = number
+type bool = boolean
+type cstring = string
+type FFIPointer = typeof(ffi.types.pointer)
 
--- Struct definitions (ordered by dependencies)
--- NOTE: Some structs may have FIXME comments for array sizes that need manual definition
+-- Import struct types
+local structs = require("./structs")
+type ManifoldIVec3 = structs.ManifoldIVec3
+type ManifoldManifoldPair = structs.ManifoldManifoldPair
+type ManifoldMeshGL64Options = structs.ManifoldMeshGL64Options
+type ManifoldMeshGLOptions = structs.ManifoldMeshGLOptions
+type ManifoldProperties = structs.ManifoldProperties
+type ManifoldVec2 = structs.ManifoldVec2
+type ManifoldVec3 = structs.ManifoldVec3
+type ManifoldVec4 = structs.ManifoldVec4
 
-local ManifoldManifoldPair = ffi.struct({
-	{ first = ffi.types.pointer },
-	{ second = ffi.types.pointer },
-})
-export type ManifoldManifoldPair = typeof(ManifoldManifoldPair:new({}))
+export type Fns = {
+	manifold_alloc_box: () -> FFIPointer,
+	manifold_alloc_cross_section: () -> FFIPointer,
+	manifold_alloc_cross_section_vec: () -> FFIPointer,
+	manifold_alloc_manifold: () -> FFIPointer,
+	manifold_alloc_manifold_vec: () -> FFIPointer,
+	manifold_alloc_meshgl: () -> FFIPointer,
+	manifold_alloc_meshgl64: () -> FFIPointer,
+	manifold_alloc_polygons: () -> FFIPointer,
+	manifold_alloc_rect: () -> FFIPointer,
+	manifold_alloc_simple_polygon: () -> FFIPointer,
+	manifold_alloc_triangulation: () -> FFIPointer,
+	manifold_as_original: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_batch_boolean: (mem: FFIPointer, ms: FFIPointer, op: FFIPointer) -> FFIPointer,
+	manifold_batch_hull: (mem: FFIPointer, ms: FFIPointer) -> FFIPointer,
+	manifold_boolean: (mem: FFIPointer, a: FFIPointer, b: FFIPointer, op: FFIPointer) -> FFIPointer,
+	manifold_bounding_box: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_box: (
+		mem: FFIPointer,
+		x1: number,
+		y1: number,
+		z1: number,
+		x2: number,
+		y2: number,
+		z2: number
+	) -> FFIPointer,
+	manifold_box_center: (b: FFIPointer) -> ManifoldVec3,
+	manifold_box_contains_box: (a: FFIPointer, b: FFIPointer) -> int,
+	manifold_box_contains_pt: (b: FFIPointer, x: number, y: number, z: number) -> int,
+	manifold_box_dimensions: (b: FFIPointer) -> ManifoldVec3,
+	manifold_box_does_overlap_box: (a: FFIPointer, b: FFIPointer) -> int,
+	manifold_box_does_overlap_pt: (b: FFIPointer, x: number, y: number, z: number) -> int,
+	manifold_box_include_pt: (b: FFIPointer, x: number, y: number, z: number) -> (),
+	manifold_box_is_finite: (b: FFIPointer) -> int,
+	manifold_box_max: (b: FFIPointer) -> ManifoldVec3,
+	manifold_box_min: (b: FFIPointer) -> ManifoldVec3,
+	manifold_box_mul: (mem: FFIPointer, b: FFIPointer, x: number, y: number, z: number) -> FFIPointer,
+	manifold_box_scale: (b: FFIPointer) -> number,
+	manifold_box_size: () -> int,
+	manifold_box_transform: (
+		mem: FFIPointer,
+		b: FFIPointer,
+		x1: number,
+		y1: number,
+		z1: number,
+		x2: number,
+		y2: number,
+		z2: number,
+		x3: number,
+		y3: number,
+		z3: number,
+		x4: number,
+		y4: number,
+		z4: number
+	) -> FFIPointer,
+	manifold_box_translate: (mem: FFIPointer, b: FFIPointer, x: number, y: number, z: number) -> FFIPointer,
+	manifold_box_union: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_calculate_curvature: (mem: FFIPointer, m: FFIPointer, gaussian_idx: int, mean_idx: int) -> FFIPointer,
+	manifold_calculate_normals: (
+		mem: FFIPointer,
+		m: FFIPointer,
+		normal_idx: int,
+		min_sharp_angle: number
+	) -> FFIPointer,
+	manifold_compose: (mem: FFIPointer, ms: FFIPointer) -> FFIPointer,
+	manifold_copy: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_cross_section_area: (cs: FFIPointer) -> number,
+	manifold_cross_section_batch_boolean: (mem: FFIPointer, csv: FFIPointer, op: FFIPointer) -> FFIPointer,
+	manifold_cross_section_batch_hull: (mem: FFIPointer, css: FFIPointer) -> FFIPointer,
+	manifold_cross_section_boolean: (mem: FFIPointer, a: FFIPointer, b: FFIPointer, op: FFIPointer) -> FFIPointer,
+	manifold_cross_section_bounds: (mem: FFIPointer, cs: FFIPointer) -> FFIPointer,
+	manifold_cross_section_circle: (mem: FFIPointer, radius: number, circular_segments: int) -> FFIPointer,
+	manifold_cross_section_compose: (mem: FFIPointer, csv: FFIPointer) -> FFIPointer,
+	manifold_cross_section_copy: (mem: FFIPointer, cs: FFIPointer) -> FFIPointer,
+	manifold_cross_section_decompose: (mem: FFIPointer, cs: FFIPointer) -> FFIPointer,
+	manifold_cross_section_difference: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_cross_section_empty: (mem: FFIPointer) -> FFIPointer,
+	manifold_cross_section_empty_vec: (mem: FFIPointer) -> FFIPointer,
+	manifold_cross_section_hull: (mem: FFIPointer, cs: FFIPointer) -> FFIPointer,
+	manifold_cross_section_hull_polygons: (mem: FFIPointer, ps: FFIPointer) -> FFIPointer,
+	manifold_cross_section_hull_simple_polygon: (mem: FFIPointer, ps: FFIPointer) -> FFIPointer,
+	manifold_cross_section_intersection: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_cross_section_is_empty: (cs: FFIPointer) -> int,
+	manifold_cross_section_mirror: (mem: FFIPointer, cs: FFIPointer, ax_x: number, ax_y: number) -> FFIPointer,
+	manifold_cross_section_num_contour: (cs: FFIPointer) -> int,
+	manifold_cross_section_num_vert: (cs: FFIPointer) -> int,
+	manifold_cross_section_of_polygons: (mem: FFIPointer, p: FFIPointer, fr: FFIPointer) -> FFIPointer,
+	manifold_cross_section_of_simple_polygon: (mem: FFIPointer, p: FFIPointer, fr: FFIPointer) -> FFIPointer,
+	manifold_cross_section_offset: (
+		mem: FFIPointer,
+		cs: FFIPointer,
+		delta: number,
+		jt: FFIPointer,
+		miter_limit: number,
+		circular_segments: int
+	) -> FFIPointer,
+	manifold_cross_section_rotate: (mem: FFIPointer, cs: FFIPointer, deg: number) -> FFIPointer,
+	manifold_cross_section_scale: (mem: FFIPointer, cs: FFIPointer, x: number, y: number) -> FFIPointer,
+	manifold_cross_section_simplify: (mem: FFIPointer, cs: FFIPointer, epsilon: number) -> FFIPointer,
+	manifold_cross_section_size: () -> int,
+	manifold_cross_section_square: (mem: FFIPointer, x: number, y: number, center: int) -> FFIPointer,
+	manifold_cross_section_to_polygons: (mem: FFIPointer, cs: FFIPointer) -> FFIPointer,
+	manifold_cross_section_transform: (
+		mem: FFIPointer,
+		cs: FFIPointer,
+		x1: number,
+		y1: number,
+		x2: number,
+		y2: number,
+		x3: number,
+		y3: number
+	) -> FFIPointer,
+	manifold_cross_section_translate: (mem: FFIPointer, cs: FFIPointer, x: number, y: number) -> FFIPointer,
+	manifold_cross_section_union: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_cross_section_vec: (mem: FFIPointer, sz: int) -> FFIPointer,
+	manifold_cross_section_vec_get: (mem: FFIPointer, csv: FFIPointer, idx: int) -> FFIPointer,
+	manifold_cross_section_vec_length: (csv: FFIPointer) -> int,
+	manifold_cross_section_vec_push_back: (csv: FFIPointer, cs: FFIPointer) -> (),
+	manifold_cross_section_vec_reserve: (csv: FFIPointer, sz: int) -> (),
+	manifold_cross_section_vec_set: (csv: FFIPointer, idx: int, cs: FFIPointer) -> (),
+	manifold_cross_section_vec_size: () -> int,
+	manifold_cube: (mem: FFIPointer, x: number, y: number, z: number, center: int) -> FFIPointer,
+	manifold_cylinder: (
+		mem: FFIPointer,
+		height: number,
+		radius_low: number,
+		radius_high: number,
+		circular_segments: int,
+		center: int
+	) -> FFIPointer,
+	manifold_decompose: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_delete_box: (b: FFIPointer) -> (),
+	manifold_delete_cross_section: (cs: FFIPointer) -> (),
+	manifold_delete_cross_section_vec: (csv: FFIPointer) -> (),
+	manifold_delete_manifold: (m: FFIPointer) -> (),
+	manifold_delete_manifold_vec: (ms: FFIPointer) -> (),
+	manifold_delete_meshgl: (m: FFIPointer) -> (),
+	manifold_delete_meshgl64: (m: FFIPointer) -> (),
+	manifold_delete_polygons: (p: FFIPointer) -> (),
+	manifold_delete_rect: (b: FFIPointer) -> (),
+	manifold_delete_simple_polygon: (p: FFIPointer) -> (),
+	manifold_delete_triangulation: (m: FFIPointer) -> (),
+	manifold_destruct_box: (b: FFIPointer) -> (),
+	manifold_destruct_cross_section: (m: FFIPointer) -> (),
+	manifold_destruct_cross_section_vec: (csv: FFIPointer) -> (),
+	manifold_destruct_manifold: (m: FFIPointer) -> (),
+	manifold_destruct_manifold_vec: (ms: FFIPointer) -> (),
+	manifold_destruct_meshgl: (m: FFIPointer) -> (),
+	manifold_destruct_meshgl64: (m: FFIPointer) -> (),
+	manifold_destruct_polygons: (p: FFIPointer) -> (),
+	manifold_destruct_rect: (b: FFIPointer) -> (),
+	manifold_destruct_simple_polygon: (p: FFIPointer) -> (),
+	manifold_destruct_triangulation: (M: FFIPointer) -> (),
+	manifold_difference: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_empty: (mem: FFIPointer) -> FFIPointer,
+	manifold_epsilon: (m: FFIPointer) -> number,
+	manifold_extrude: (
+		mem: FFIPointer,
+		cs: FFIPointer,
+		height: number,
+		slices: int,
+		twist_degrees: number,
+		scale_x: number,
+		scale_y: number
+	) -> FFIPointer,
+	manifold_genus: (m: FFIPointer) -> int,
+	manifold_get_circular_segments: (radius: number) -> int,
+	manifold_get_meshgl: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_get_meshgl64: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_get_meshgl64_w_normals: (mem: FFIPointer, m: FFIPointer, normalIdx: int) -> FFIPointer,
+	manifold_get_meshgl_w_normals: (mem: FFIPointer, m: FFIPointer, normalIdx: int) -> FFIPointer,
+	manifold_hull: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_hull_pts: (mem: FFIPointer, ps: FFIPointer, length: int) -> FFIPointer,
+	manifold_intersection: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_is_empty: (m: FFIPointer) -> int,
+	manifold_level_set: (
+		mem: FFIPointer,
+		sdf: FFIPointer,
+		bounds: FFIPointer,
+		edge_length: number,
+		level: number,
+		tolerance: number,
+		ctx: FFIPointer
+	) -> FFIPointer,
+	manifold_level_set_seq: (
+		mem: FFIPointer,
+		sdf: FFIPointer,
+		bounds: FFIPointer,
+		edge_length: number,
+		level: number,
+		tolerance: number,
+		ctx: FFIPointer
+	) -> FFIPointer,
+	manifold_manifold_empty_vec: (mem: FFIPointer) -> FFIPointer,
+	manifold_manifold_pair_size: () -> int,
+	manifold_manifold_size: () -> int,
+	manifold_manifold_vec: (mem: FFIPointer, sz: int) -> FFIPointer,
+	manifold_manifold_vec_get: (mem: FFIPointer, ms: FFIPointer, idx: int) -> FFIPointer,
+	manifold_manifold_vec_length: (ms: FFIPointer) -> int,
+	manifold_manifold_vec_push_back: (ms: FFIPointer, m: FFIPointer) -> (),
+	manifold_manifold_vec_reserve: (ms: FFIPointer, sz: int) -> (),
+	manifold_manifold_vec_set: (ms: FFIPointer, idx: int, m: FFIPointer) -> (),
+	manifold_manifold_vec_size: () -> int,
+	manifold_meshgl: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int
+	) -> FFIPointer,
+	manifold_meshgl64: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int
+	) -> FFIPointer,
+	manifold_meshgl64_copy: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_face_id: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_face_id_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_halfedge_tangent: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_merge: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_merge_from_vert: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_merge_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_merge_to_vert: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_num_prop: (m: FFIPointer) -> int,
+	manifold_meshgl64_num_tri: (m: FFIPointer) -> int,
+	manifold_meshgl64_num_vert: (m: FFIPointer) -> int,
+	manifold_meshgl64_read_obj: (mem: FFIPointer, obj_file: cstring) -> FFIPointer,
+	manifold_meshgl64_run_index: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_run_index_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_run_original_id: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_run_original_id_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_run_transform: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_run_transform_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_size: () -> int,
+	manifold_meshgl64_tangent_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_tri_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_tri_verts: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_vert_properties: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl64_vert_properties_length: (m: FFIPointer) -> int,
+	manifold_meshgl64_w_options: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int,
+		options: FFIPointer
+	) -> FFIPointer,
+	manifold_meshgl64_w_tangents: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int,
+		halfedge_tangent: FFIPointer
+	) -> FFIPointer,
+	manifold_meshgl_copy: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_face_id: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_face_id_length: (m: FFIPointer) -> int,
+	manifold_meshgl_halfedge_tangent: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_merge: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_merge_from_vert: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_merge_length: (m: FFIPointer) -> int,
+	manifold_meshgl_merge_to_vert: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_num_prop: (m: FFIPointer) -> int,
+	manifold_meshgl_num_tri: (m: FFIPointer) -> int,
+	manifold_meshgl_num_vert: (m: FFIPointer) -> int,
+	manifold_meshgl_run_index: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_run_index_length: (m: FFIPointer) -> int,
+	manifold_meshgl_run_original_id: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_run_original_id_length: (m: FFIPointer) -> int,
+	manifold_meshgl_run_transform: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_run_transform_length: (m: FFIPointer) -> int,
+	manifold_meshgl_size: () -> int,
+	manifold_meshgl_tangent_length: (m: FFIPointer) -> int,
+	manifold_meshgl_tri_length: (m: FFIPointer) -> int,
+	manifold_meshgl_tri_verts: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_vert_properties: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_meshgl_vert_properties_length: (m: FFIPointer) -> int,
+	manifold_meshgl_w_options: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int,
+		options: FFIPointer
+	) -> FFIPointer,
+	manifold_meshgl_w_tangents: (
+		mem: FFIPointer,
+		vert_props: FFIPointer,
+		n_verts: int,
+		n_props: int,
+		tri_verts: FFIPointer,
+		n_tris: int,
+		halfedge_tangent: FFIPointer
+	) -> FFIPointer,
+	manifold_min_gap: (m: FFIPointer, other: FFIPointer, searchLength: number) -> number,
+	manifold_minkowski_difference: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_minkowski_sum: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_mirror: (mem: FFIPointer, m: FFIPointer, nx: number, ny: number, nz: number) -> FFIPointer,
+	manifold_num_edge: (m: FFIPointer) -> int,
+	manifold_num_prop: (m: FFIPointer) -> int,
+	manifold_num_tri: (m: FFIPointer) -> int,
+	manifold_num_vert: (m: FFIPointer) -> int,
+	manifold_of_meshgl: (mem: FFIPointer, mesh: FFIPointer) -> FFIPointer,
+	manifold_of_meshgl64: (mem: FFIPointer, mesh: FFIPointer) -> FFIPointer,
+	manifold_original_id: (m: FFIPointer) -> int,
+	manifold_polygons: (mem: FFIPointer, ps: FFIPointer, length: int) -> FFIPointer,
+	manifold_polygons_get_point: (ps: FFIPointer, simple_idx: int, pt_idx: int) -> ManifoldVec2,
+	manifold_polygons_get_simple: (mem: FFIPointer, ps: FFIPointer, idx: int) -> FFIPointer,
+	manifold_polygons_length: (ps: FFIPointer) -> int,
+	manifold_polygons_simple_length: (ps: FFIPointer, idx: int) -> int,
+	manifold_polygons_size: () -> int,
+	manifold_project: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_read_obj: (mem: FFIPointer, obj_file: cstring) -> FFIPointer,
+	manifold_rect: (mem: FFIPointer, x1: number, y1: number, x2: number, y2: number) -> FFIPointer,
+	manifold_rect_center: (r: FFIPointer) -> ManifoldVec2,
+	manifold_rect_contains_pt: (r: FFIPointer, x: number, y: number) -> int,
+	manifold_rect_contains_rect: (a: FFIPointer, b: FFIPointer) -> int,
+	manifold_rect_dimensions: (r: FFIPointer) -> ManifoldVec2,
+	manifold_rect_does_overlap_rect: (a: FFIPointer, r: FFIPointer) -> int,
+	manifold_rect_include_pt: (r: FFIPointer, x: number, y: number) -> (),
+	manifold_rect_is_empty: (r: FFIPointer) -> int,
+	manifold_rect_is_finite: (r: FFIPointer) -> int,
+	manifold_rect_max: (r: FFIPointer) -> ManifoldVec2,
+	manifold_rect_min: (r: FFIPointer) -> ManifoldVec2,
+	manifold_rect_mul: (mem: FFIPointer, r: FFIPointer, x: number, y: number) -> FFIPointer,
+	manifold_rect_scale: (r: FFIPointer) -> number,
+	manifold_rect_size: () -> int,
+	manifold_rect_transform: (
+		mem: FFIPointer,
+		r: FFIPointer,
+		x1: number,
+		y1: number,
+		x2: number,
+		y2: number,
+		x3: number,
+		y3: number
+	) -> FFIPointer,
+	manifold_rect_translate: (mem: FFIPointer, r: FFIPointer, x: number, y: number) -> FFIPointer,
+	manifold_rect_union: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_refine: (mem: FFIPointer, m: FFIPointer, refine: int) -> FFIPointer,
+	manifold_refine_to_length: (mem: FFIPointer, m: FFIPointer, length: number) -> FFIPointer,
+	manifold_refine_to_tolerance: (mem: FFIPointer, m: FFIPointer, tolerance: number) -> FFIPointer,
+	manifold_reserve_ids: (n: int) -> int,
+	manifold_reset_to_circular_defaults: () -> (),
+	manifold_revolve: (mem: FFIPointer, cs: FFIPointer, circular_segments: int, revolve_degrees: number) -> FFIPointer,
+	manifold_rotate: (mem: FFIPointer, m: FFIPointer, x: number, y: number, z: number) -> FFIPointer,
+	manifold_scale: (mem: FFIPointer, m: FFIPointer, x: number, y: number, z: number) -> FFIPointer,
+	manifold_set_circular_segments: (number: int) -> (),
+	manifold_set_min_circular_angle: (degrees: number) -> (),
+	manifold_set_min_circular_edge_length: (length: number) -> (),
+	manifold_simple_polygon: (mem: FFIPointer, ps: FFIPointer, length: int) -> FFIPointer,
+	manifold_simple_polygon_get_point: (p: FFIPointer, idx: int) -> ManifoldVec2,
+	manifold_simple_polygon_length: (p: FFIPointer) -> int,
+	manifold_simple_polygon_size: () -> int,
+	manifold_slice: (mem: FFIPointer, m: FFIPointer, height: number) -> FFIPointer,
+	manifold_smooth: (
+		mem: FFIPointer,
+		mesh: FFIPointer,
+		half_edges: FFIPointer,
+		smoothness: FFIPointer,
+		n_idxs: int
+	) -> FFIPointer,
+	manifold_smooth64: (
+		mem: FFIPointer,
+		mesh: FFIPointer,
+		half_edges: FFIPointer,
+		smoothness: FFIPointer,
+		n_idxs: int
+	) -> FFIPointer,
+	manifold_smooth_by_normals: (mem: FFIPointer, m: FFIPointer, normalIdx: int) -> FFIPointer,
+	manifold_smooth_out: (mem: FFIPointer, m: FFIPointer, minSharpAngle: number, minSmoothness: number) -> FFIPointer,
+	manifold_sphere: (mem: FFIPointer, radius: number, circular_segments: int) -> FFIPointer,
+	manifold_split: (
+		mem_first: FFIPointer,
+		mem_second: FFIPointer,
+		a: FFIPointer,
+		b: FFIPointer
+	) -> ManifoldManifoldPair,
+	manifold_split_by_plane: (
+		mem_first: FFIPointer,
+		mem_second: FFIPointer,
+		m: FFIPointer,
+		normal_x: number,
+		normal_y: number,
+		normal_z: number,
+		offset: number
+	) -> ManifoldManifoldPair,
+	manifold_status: (m: FFIPointer) -> FFIPointer,
+	manifold_surface_area: (m: FFIPointer) -> number,
+	manifold_tetrahedron: (mem: FFIPointer) -> FFIPointer,
+	manifold_transform: (
+		mem: FFIPointer,
+		m: FFIPointer,
+		x1: number,
+		y1: number,
+		z1: number,
+		x2: number,
+		y2: number,
+		z2: number,
+		x3: number,
+		y3: number,
+		z3: number,
+		x4: number,
+		y4: number,
+		z4: number
+	) -> FFIPointer,
+	manifold_translate: (mem: FFIPointer, m: FFIPointer, x: number, y: number, z: number) -> FFIPointer,
+	manifold_triangulate: (mem: FFIPointer, ps: FFIPointer, epsilon: number) -> FFIPointer,
+	manifold_triangulation_num_tri: (m: FFIPointer) -> int,
+	manifold_triangulation_size: () -> int,
+	manifold_triangulation_tri_verts: (mem: FFIPointer, m: FFIPointer) -> FFIPointer,
+	manifold_trim_by_plane: (
+		mem: FFIPointer,
+		m: FFIPointer,
+		normal_x: number,
+		normal_y: number,
+		normal_z: number,
+		offset: number
+	) -> FFIPointer,
+	manifold_union: (mem: FFIPointer, a: FFIPointer, b: FFIPointer) -> FFIPointer,
+	manifold_volume: (m: FFIPointer) -> number,
+}
 
-local ManifoldVec2 = ffi.struct({
-	{ x = ffi.types.double },
-	{ y = ffi.types.double },
-})
-export type ManifoldVec2 = typeof(ManifoldVec2:new({}))
-
-local ManifoldVec3 = ffi.struct({
-	{ x = ffi.types.double },
-	{ y = ffi.types.double },
-	{ z = ffi.types.double },
-})
-export type ManifoldVec3 = typeof(ManifoldVec3:new({}))
-
-local ManifoldIVec3 = ffi.struct({
-	{ x = ffi.types.i32 },
-	{ y = ffi.types.i32 },
-	{ z = ffi.types.i32 },
-})
-export type ManifoldIVec3 = typeof(ManifoldIVec3:new({}))
-
-local ManifoldVec4 = ffi.struct({
-	{ x = ffi.types.double },
-	{ y = ffi.types.double },
-	{ z = ffi.types.double },
-	{ w = ffi.types.double },
-})
-export type ManifoldVec4 = typeof(ManifoldVec4:new({}))
-
-local ManifoldProperties = ffi.struct({
-	{ surface_area = ffi.types.double },
-	{ volume = ffi.types.double },
-})
-export type ManifoldProperties = typeof(ManifoldProperties:new({}))
-
--- Function definitions
 local funcs = {
 	manifold_simple_polygon = {
 		returns = ffi.types.pointer,
@@ -89,7 +483,23 @@ local funcs = {
 			ffi.types.pointer,
 		},
 	},
+	manifold_meshgl_w_options = {
+		returns = ffi.types.pointer,
+		args = {
+			ffi.types.pointer,
+			ffi.types.pointer,
+			ffi.types.u64,
+			ffi.types.u64,
+			ffi.types.pointer,
+			ffi.types.u64,
+			ffi.types.pointer,
+		},
+	},
 	manifold_get_meshgl = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	manifold_get_meshgl_w_normals = {
+		returns = ffi.types.pointer,
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+	},
 	manifold_meshgl_copy = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	manifold_meshgl_merge = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	manifold_meshgl64 = {
@@ -108,7 +518,23 @@ local funcs = {
 			ffi.types.pointer,
 		},
 	},
+	manifold_meshgl64_w_options = {
+		returns = ffi.types.pointer,
+		args = {
+			ffi.types.pointer,
+			ffi.types.pointer,
+			ffi.types.u64,
+			ffi.types.u64,
+			ffi.types.pointer,
+			ffi.types.u64,
+			ffi.types.pointer,
+		},
+	},
 	manifold_get_meshgl64 = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	manifold_get_meshgl64_w_normals = {
+		returns = ffi.types.pointer,
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.i32 },
+	},
 	manifold_meshgl64_copy = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	manifold_meshgl64_merge = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	manifold_level_set = {
@@ -191,6 +617,14 @@ local funcs = {
 			ffi.types.double,
 			ffi.types.double,
 		},
+	},
+	manifold_minkowski_sum = {
+		returns = ffi.types.pointer,
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+	},
+	manifold_minkowski_difference = {
+		returns = ffi.types.pointer,
+		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	manifold_slice = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer, ffi.types.double } },
 	manifold_project = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
@@ -636,15 +1070,8 @@ local funcs = {
 	manifold_delete_box = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	manifold_delete_rect = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	manifold_delete_triangulation = { returns = ffi.types.void, args = { ffi.types.pointer } },
+	manifold_read_obj = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
+	manifold_meshgl64_read_obj = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 }
 
-local structs = {
-	ManifoldManifoldPair = ManifoldManifoldPair,
-	ManifoldVec2 = ManifoldVec2,
-	ManifoldVec3 = ManifoldVec3,
-	ManifoldIVec3 = ManifoldIVec3,
-	ManifoldVec4 = ManifoldVec4,
-	ManifoldProperties = ManifoldProperties,
-}
-
-return { funcs = funcs, structs = structs }
+return funcs

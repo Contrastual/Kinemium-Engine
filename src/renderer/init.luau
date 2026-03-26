@@ -38,7 +38,7 @@ function KiRend.new(config: KiRendConf)
 
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 
-	local useVsync = if config.vsync == nil then true else config.vsync
+	local useVsync = if config.vsync == nil then false else config.vsync
 	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 	if useVsync then
 		windowFlags = bit32.bor(windowFlags, const.ConfigFlags.FLAG_VSYNC_HINT)
@@ -46,7 +46,7 @@ function KiRend.new(config: KiRendConf)
 	lib.SetConfigFlags(windowFlags)
 
 	lib.InitWindow(config.width, config.height, config.title)
-	
+
 	if lib.WindowShouldClose() == 0 then
 		lib.BeginDrawing()
 		lib.ClearBackground(const.BLACK)
@@ -63,6 +63,7 @@ function KiRend.new(config: KiRendConf)
 	rlib.R3D_Init(config.width, config.height)
 	rlib.R3D_SetUpscaleMode(2)
 	rlib.R3D_SetAntiAliasingMode(1)
+	rlib.R3D_SetTextureWrap(raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
 
 	local lastRenderWidth, lastRenderHeight = config.width, config.height
 
@@ -90,6 +91,7 @@ function KiRend.new(config: KiRendConf)
 		Afterstep = {},
 		Shutdown = {},
 	}
+
 	local renderer_pool = {
 		gui = {},
 		object = {},
@@ -101,6 +103,7 @@ function KiRend.new(config: KiRendConf)
 	local renderer_watching_keys = {}
 	local renderer_draw_calls = {}
 	local renderer_instanced_draw_calls = {}
+	local renderer_decal_draw_calls = {}
 	local renderer_instance_buffers_to_unload = {}
 	local renderer_meshes = {}
 	local ENGINE_PROFILER = {}
@@ -140,7 +143,7 @@ function KiRend.new(config: KiRendConf)
 		Blur = newBlurInstance,
 
 		DrawFps = true,
-		ShowPerfOverlay = true,
+		ShowPerfOverlay = false,
 		PerfStats = perf_stats,
 
 		SetDimension = function(self, dimension: "2D" | "3D")
@@ -276,6 +279,17 @@ function KiRend.new(config: KiRendConf)
 						break
 					end
 				end
+			end,
+		},
+
+		DecalPool = {
+			DrawDecal = function(decal, transform, begin, End)
+				table.insert(renderer_decal_draw_calls, {
+					decal = decal,
+					transform = transform,
+					Begin = begin,
+					End = End,
+				})
 			end,
 		},
 
@@ -557,7 +571,7 @@ function KiRend.new(config: KiRendConf)
 
 		perf_stats.call3d_ms = 0
 		local callStart = os.clock()
-		if #renderer_draw_calls > 0 or #renderer_instanced_draw_calls > 0 then
+		if #renderer_draw_calls > 0 or #renderer_instanced_draw_calls > 0 or #renderer_decal_draw_calls > 0 then
 			if Dimension == "3D" then
 				rlib.R3D_Begin(activeCamera)
 				for _, drawCall in ipairs(renderer_draw_calls) do
@@ -582,6 +596,15 @@ function KiRend.new(config: KiRendConf)
 						table.insert(renderer_instance_buffers_to_unload, drawCall.instances)
 					end
 				end
+				for _, drawCall in ipairs(renderer_decal_draw_calls) do
+					if drawCall.Begin then
+						drawCall.Begin()
+					end
+					rlib.R3D_DrawDecalPro(drawCall.decal, drawCall.transform)
+					if drawCall.End then
+						drawCall.End()
+					end
+				end
 				rlib.R3D_End()
 				for i = 1, #renderer_instance_buffers_to_unload do
 					pcall(rlib.R3D_UnloadInstanceBuffer, renderer_instance_buffers_to_unload[i])
@@ -591,6 +614,7 @@ function KiRend.new(config: KiRendConf)
 		end
 		table.clear(renderer_draw_calls)
 		table.clear(renderer_instanced_draw_calls)
+		table.clear(renderer_decal_draw_calls)
 		perf_stats.call3d_ms = (os.clock() - callStart) * 1000
 
 		for _, item in ipairs(getSortedPool(renderer_pool.gizmos)) do
@@ -730,16 +754,16 @@ function KiRend.new(config: KiRendConf)
 			then
 				lastRenderWidth, lastRenderHeight = renderWidth, renderHeight
 				rlib.R3D_SetResolution(renderWidth, renderHeight)
+				renderer_eventbus:Fire("WindowResized", renderWidth, renderHeight)
 			end
 		end
 
-		local inputStart = os.clock()
 		local keyboardListenStart = os.clock()
 		for keycode, _ in pairs(renderer_watching_keys) do
-			if lib.IsKeyPressed(keycode) == 1 then
-				renderer_eventbus:Fire("Pressed", keycode)
-			end
 			if lib.IsKeyDown(keycode) == 1 then
+				renderer_eventbus:Fire("IsKeyDown", keycode)
+			end
+			if lib.IsKeyPressed(keycode) == 1 then
 				renderer_eventbus:Fire("IsKeyDown", keycode)
 			end
 			if lib.IsKeyReleased(keycode) == 1 then
@@ -757,7 +781,6 @@ function KiRend.new(config: KiRendConf)
 		if wheel ~= 0 then
 			renderer_eventbus:Fire("MouseWheel", wheel)
 		end
-		perf_stats.input_ms = (os.clock() - inputStart) * 1000
 		perf_stats.update_ms = (os.clock() - updateStart) * 1000
 
 		profileEnd()

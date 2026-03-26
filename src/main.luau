@@ -1,5 +1,6 @@
 --!optimize 2
 --!native
+
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
 	_G.IsExecutable = true
@@ -272,7 +273,7 @@ local function loadInternals()
 end
 
 -- LOAD USER SCRIPTS
-function Kinemium:playtest()
+function Kinemium:run()
 	loop("src/sandboxed", function(path, entry)
 		if string.find(path, "internals") or string.find(path, "Core") then
 			return
@@ -296,11 +297,14 @@ function Kinemium:playtest()
 			superset = "typescript"
 		end
 
-		kilang:execute(code, {
+		local id, success, result = kilang:execute(code, {
 			superset = superset,
 			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
 			StackId = path,
 		})
+		if not success then
+			evalError(`{id}: {tostring(result)}`)
+		end
 	end)
 end
 
@@ -312,7 +316,7 @@ game.EngineSignal:Connect(function(route)
 end)
 
 -- KILANG REPL
-if FlagExists("kilang") then
+if FlagExists("kilang") or IsServer then
 	require("./repl"):init(function(line)
 		task.spawn(function()
 			local _, success, result = kilang:execute(line, {
@@ -326,9 +330,16 @@ if FlagExists("kilang") then
 end
 
 -- INITIALIZE ENGINE
+print("son")
+
 loadInternals()
-httpServerViewer:Init()
-Kinemium:playtest()
+print("son")
+
+httpServerViewer:Init(renderer)
+print("son")
+
+Kinemium:run()
+print("son")
 
 -- RUN RENDERER
 renderer:Run()

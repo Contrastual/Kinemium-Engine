@@ -20,6 +20,7 @@ function DataModel.new(RENDERER, ...)
 	self.EngineSignal = signal.new()
 	self.Stop3DInput = false
 	self.ShutdownCallbacks = {}
+	self.Loaded = false
 
 	self.Services = {}
 
@@ -29,7 +30,7 @@ function DataModel.new(RENDERER, ...)
 	else
 		services = fs.entries("./src/enviroment/game/services")
 	end
-	
+
 	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
 		local addServiceStart = os.clock()
@@ -73,7 +74,7 @@ function DataModel.new(RENDERER, ...)
 					)
 				)
 			else
-				warn(
+				error(
 					"Error initializing service '"
 						.. name
 						.. "' at path '"
@@ -85,7 +86,7 @@ function DataModel.new(RENDERER, ...)
 				)
 			end
 		else
-			warn(
+			error(
 				"Failed to require service '"
 					.. name
 					.. "' at path '"
@@ -97,6 +98,8 @@ function DataModel.new(RENDERER, ...)
 			)
 		end
 	end
+	self.Loaded = true
+
 	log(string.format("[ServiceRegistry] Core services initialized in %.2fs", os.clock() - serviceInitStart))
 
 	for name, service in pairs(self.Services) do

@@ -10,14 +10,14 @@ local entry = zjoin(root, "main.luau")
 local bin = zjoin("build")
 
 local include = {
-	zjoin(root, "**", "*.lua*")
+	zjoin(root, "**", "*.luau*"),
 }
 
 local assets = {
 	zjoin("**", ".luaurc"),
 	zjoin(root, "assets", "**"),
 	zjoin(root, "projects.toml"),
-	zjoin(root, "sandboxed", "**")
+	zjoin(root, "sandboxed", "**"),
 }
 
 local function flagExists(flag: string)
@@ -53,7 +53,7 @@ local b_args = {
 	"bundle",
 	entry,
 	"--compression=" .. COMPRESSION,
-	"--scripts"
+	"--scripts",
 }
 
 table.move(include, 1, #include, #b_args + 1, b_args)
@@ -80,7 +80,9 @@ else
 end
 
 local function buildExecutable(name, exec_ext, lib_ext)
-	print(`Creating executable:\n\tPlatform: {name}\n\tExecutable file extension: {exec_ext}\n\tLibrary file extension: {lib_ext}`)
+	print(
+		`Creating executable:\n\tPlatform: {name}\n\tExecutable file extension: {exec_ext}\n\tLibrary file extension: {lib_ext}`
+	)
 
 	local dir = zjoin(bin, name)
 	if zune.fs.stat(dir).kind ~= "directory" then
@@ -95,7 +97,6 @@ local function buildExecutable(name, exec_ext, lib_ext)
 
 	print("Copying assets")
 	zune.fs.copy(zjoin(root, "assets"), zjoin(dir, "assets"), true)
-	
 	table.insert(l_args, "--out=" .. l_exec)
 
 	print("Bundling: zune " .. table.concat(l_args, " "))
