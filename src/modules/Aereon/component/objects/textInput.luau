@@ -21,7 +21,9 @@ return function(objects, data)
 		obj_rect = rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4] or 30),
 		text = data.text or "",
 		placeholder = data.placeholder or "Type here...",
+		font = data.font or defaultFont,
 		fontSize = data.fontSize or 18,
+		spacing = data.spacing or 1,
 		backgroundColor = data.backgroundColor or color3.new(0.15, 0.15, 0.15),
 		textColor = data.textColor or color3.new(1, 1, 1),
 		placeholderColor = data.placeholderColor or color3.new(0.5, 0.5, 0.5),
@@ -49,6 +51,14 @@ return function(objects, data)
 		return config.text
 	end
 
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
+	wrapper.get_rect = function()
+		return config.obj_rect
+	end
+
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 		config.cursorBlink = config.cursorBlink + dt
@@ -69,10 +79,17 @@ return function(objects, data)
 		local textX = r.x + 8
 		local textY = r.y + (r.height - config.fontSize) / 2
 
-		raylib.lib.DrawText(tostring(displayText), textX, textY, config.fontSize, c3tr(textColor, 0))
+		raylib.lib.DrawTextEx(
+			config.font,
+			tostring(displayText),
+			vector.create(textX, textY),
+			config.fontSize,
+			config.spacing,
+			c3tr(textColor, 0)
+		)
 
 		if config.focused and math.floor(config.cursorBlink * 2) % 2 == 0 then
-			local textWidth = raylib.lib.MeasureText(config.text, config.fontSize)
+			local textWidth = raylib.lib.MeasureTextEx(config.font, config.text, config.fontSize, config.spacing).x
 			raylib.lib.DrawRectangle(textX + textWidth + 2, textY, 2, config.fontSize, c3tr(config.textColor, 0))
 		end
 

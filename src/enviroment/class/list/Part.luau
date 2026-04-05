@@ -13,6 +13,7 @@ local propTable = {
 	Anchored = false,
 	NeonEnergy = 5.0,
 	CanCollide = true,
+	CollisionGroup = "Default",
 	Velocity = Vector3.new(0, 0, 0),
 	MeshScale = 1,
 	Mass = 1,
@@ -48,17 +49,66 @@ local propTable = {
 return {
 	class = "Part",
 
-	callback = function(instance, renderer, game)
+callback = function(instance, renderer, game)
 		instance:SetMetadata("IsMovable", true)
 
-		local PhysicsService = game:GetService("PhysicsService")
+		local KinemiumPhysicsService = game:GetService("JoltPhysicsService")
+		local syncingTransform = false
+
+		local function syncFromCFrame(cf)
+			if not cf or not cf.Position then
+				return
+			end
+
+			local rx, ry, rz = cf:ToOrientation()
+			local props = rawget(instance, "_props")
+			if not props then
+				return
+			end
+
+			props.Position = cf.Position
+			props.Orientation = Vector3.new(rx, ry, rz)
+			props.Rotation = props.Orientation
+		end
+
+		local function syncFromPosition(position)
+			if not position then
+				return
+			end
+
+			local props = rawget(instance, "_props")
+			if not props or not props.CFrame then
+				return
+			end
+
+			props.CFrame = props.CFrame:WithPosition(position)
+		end
 
 		propTable.ApplyImpulse = function(self, v)
-			PhysicsService.ApplyImpulse(instance, v)
+			if KinemiumPhysicsService then
+				KinemiumPhysicsService.ApplyImpulse(instance, v)
+			end
 		end
 
 		renderer.EventBus:Fire("UpdatePart", instance)
 		instance:SetProperties(propTable)
+		syncFromCFrame(instance.CFrame)
+
+		instance.Changed:Connect(function(property, value)
+			if syncingTransform then
+				return
+			end
+
+			if property == "CFrame" then
+				syncingTransform = true
+				syncFromCFrame(value)
+				syncingTransform = false
+			elseif property == "Position" then
+				syncingTransform = true
+				syncFromPosition(value)
+				syncingTransform = false
+			end
+		end)
 
 		return instance
 	end,

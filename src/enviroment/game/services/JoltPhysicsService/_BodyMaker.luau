@@ -31,13 +31,14 @@ end
 
 local function allocVec3Array(points)
 	local count = #points
-	-- JPH_Vec3 is 3x f32 = 12 bytes each
-	local bytes = count * 12
-	local ptr = ffi.alloc(bytes, 4)
+	local vec3Size = structs.JPH_Vec3:size()
+	local vec3Align = structs.JPH_Vec3:alignment()
+	local bytes = count * vec3Size
+	local ptr = ffi.alloc(bytes, vec3Align)
 
 	for i, p in ipairs(points) do
 		local x, y, z = vec3(p)
-		local base = (i - 1) * 12
+		local base = (i - 1) * vec3Size
 		ptr:writef32(base + 0, x)
 		ptr:writef32(base + 4, y)
 		ptr:writef32(base + 8, z)
@@ -90,9 +91,42 @@ function vertbody.convexHullShape(points, maxConvexRadius)
 	return shape
 end
 
-function vertbody.meshShape(points, triangles, indices)
-	assert(#points >= 3, "meshShape needs at least 3 points")
+local function allocJPH_TriangleArray(points, triangles)
+	local count = #triangles
+	local triSize = structs.JPH_Triangle:size()
+	local ptr = ffi.alloc(count * triSize, structs.JPH_Triangle:alignment())
 
+	for i, tri in ipairs(triangles) do
+		local base = (i - 1) * triSize
+
+		local idx1 = tri[1] or tri.i0 or 0
+		local idx2 = tri[2] or tri.i1 or 0
+		local idx3 = tri[3] or tri.i2 or 0
+
+		-- Try idx+1 first (assuming 0-based), fallback to idx (assuming 1-based)
+		local p1 = points[idx1 + 1] or points[idx1] or { 0, 0, 0 }
+		local p2 = points[idx2 + 1] or points[idx2] or { 0, 0, 0 }
+		local p3 = points[idx3 + 1] or points[idx3] or { 0, 0, 0 }
+
+		ptr:writef32(base + 0, p1[1])
+		ptr:writef32(base + 4, p1[2])
+		ptr:writef32(base + 8, p1[3])
+
+		ptr:writef32(base + 12, p2[1])
+		ptr:writef32(base + 16, p2[2])
+		ptr:writef32(base + 20, p2[3])
+
+		ptr:writef32(base + 24, p3[1])
+		ptr:writef32(base + 28, p3[2])
+		ptr:writef32(base + 32, p3[3])
+
+		ptr:writeu32(base + 36, tri.material or 0)
+	end
+
+	return ptr, count
+end
+
+function vertbody.meshShape(points, triangles, indices)
 	local tris = triangles
 	if not tris then
 		assert(indices and #indices >= 3, "meshShape: provide either triangles or indices")
@@ -100,21 +134,20 @@ function vertbody.meshShape(points, triangles, indices)
 	end
 	assert(#tris >= 1, "meshShape: no triangles")
 
-	local vertPtr, vertCount = allocVec3Array(points)
-	local triPtr, triCount = allocTriangleArray(tris)
+	local triPtr, triCount = allocJPH_TriangleArray(points, tris)
 
-	local settings = lib.JPH_MeshShapeSettings_Create2(vertPtr, vertCount, triPtr, triCount)
+	local settings = lib.JPH_MeshShapeSettings_Create(triPtr, triCount)
 	if settings == ffi.null then
-		warn("[vertbody] JPH_MeshShapeSettings_Create2 returned null")
+		warn("[vertbody] JPH_MeshShapeSettings_Create returned null")
 		return ffi.null
 	end
 
 	local shape = lib.JPH_MeshShapeSettings_CreateShape(settings)
-	lib.JPH_ShapeSettings_Destroy(settings)
-
 	if shape == ffi.null then
 		warn("[vertbody] Mesh shape creation failed")
 	end
+
+	lib.JPH_ShapeSettings_Destroy(settings)
 	return shape
 end
 

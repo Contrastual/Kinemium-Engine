@@ -14,6 +14,9 @@ export type CreatedComponent = {
 
 local function create(path, data)
 	local styledData = StyleSheet.apply(data)
+	if styledData.font == nil and _defaultFont ~= nil then
+		styledData.font = _defaultFont
+	end
 	return require(path)(objects, styledData) :: CreatedComponent
 end
 
@@ -22,6 +25,9 @@ comps.badge = function(data)
 end
 comps.cellitem = function(data)
 	return create("./objects/cellItem", data)
+end
+comps.UICellList = function(data)
+	return create("./objects/UICellList", data)
 end
 comps.cellparser = function(data)
 	return create("./objects/cellparser", data)
@@ -189,6 +195,9 @@ end
 function comps.register(name, factory)
 	comps[name] = function(data)
 		local styledData = StyleSheet.apply(data)
+		if styledData.font == nil and _defaultFont ~= nil then
+			styledData.font = _defaultFont
+		end
 		return factory(objects, styledData)
 	end
 end

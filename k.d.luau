@@ -137,6 +137,7 @@ type Routes = {
     list: () -> {string},
     has: (path: string) -> boolean,
     use: (fn: Middleware) -> (),
+	deselect: () -> (),
     on: (event: "onAdd" | "onRemove", fn: Hook) -> (),
     handle: (path: string, ...any) -> (any, string?),
     callSafe: (path: string, ...any) -> (any, string?),
@@ -325,6 +326,22 @@ type Color3 = {
 	__tostring: (self: Color3) -> string,
 }
 
+type Color3Module = {
+	new: (r: number?, g: number?, b: number?) -> Color3,
+	fromRGB: (r: number, g: number, b: number) -> Color3,
+	fromHSV: (h: number, s: number, v: number) -> Color3,
+	fromHex: (hex: string) -> Color3,
+	fromColor4: (color4: Color4) -> Color3,
+	FromTable: (tbl: { type: string, R: number, G: number, B: number }) -> Color3,
+
+	__add: (a: Color3, b: Color3) -> Color3,
+	__sub: (a: Color3, b: Color3) -> Color3,
+	__mul: (a: Color3 | number, b: Color3 | number) -> Color3,
+	__div: (a: Color3, b: number) -> Color3,
+	__unm: (a: Color3) -> Color3,
+	__eq: (a: Color3, b: Color3) -> boolean,
+}
+
 type Color4 = {
 	R: number,
 	G: number,
@@ -383,6 +400,63 @@ type Vector2Module = {
 	__tostring: (v: Vector2) -> string,
 }
 
+type Vector3 = {
+	X: number,
+	Y: number,
+	Z: number,
+
+	Clone: (self: Vector3) -> Vector3,
+	Magnitude: (self: Vector3) -> number,
+	Unit: (self: Vector3) -> Vector3,
+	Dot: (self: Vector3, other: Vector3) -> number,
+	Cross: (self: Vector3, other: Vector3) -> Vector3,
+	Lerp: (self: Vector3, target: Vector3, alpha: number) -> Vector3,
+	Distance: (self: Vector3, other: Vector3) -> number,
+	DistanceSquared: (self: Vector3, other: Vector3) -> number,
+	ClampMagnitude: (self: Vector3, maxLength: number) -> Vector3,
+	DirectionTo: (self: Vector3, other: Vector3) -> Vector3,
+	DirectionToLength: (self: Vector3, other: Vector3) -> (Vector3, number),
+	ToEulerAngles: (self: Vector3) -> (number, number, number),
+	Project: (self: Vector3, onto: Vector3) -> Vector3,
+	Angle: (self: Vector3, other: Vector3) -> number,
+	Reflect: (self: Vector3, normal: Vector3) -> Vector3,
+	Round: (self: Vector3) -> Vector3,
+	Abs: (self: Vector3) -> Vector3,
+	Min: (self: Vector3, other: Vector3) -> Vector3,
+	Max: (self: Vector3, other: Vector3) -> Vector3,
+	Equals: (self: Vector3, other: Vector3, epsilon: number?) -> boolean,
+	ToTable: (self: Vector3) -> {
+		type: string,
+		X: number,
+		Y: number,
+		Z: number,
+	},
+
+	__tostring: (self: Vector3) -> string,
+}
+
+type Vector3Module = {
+	new: (x: number?, y: number?, z: number?) -> Vector3,
+	Slerp: (a: Vector3, b: Vector3, t: number) -> Vector3,
+	RotationMatrix: (axis: Vector3, angle: number) -> { { number } },
+	RandomUnit: () -> Vector3,
+	FromTable: (tbl: {
+		type: string,
+		X: number,
+		Y: number,
+		Z: number,
+	}) -> Vector3,
+
+	zero: Vector3,
+	one: Vector3,
+
+	__add: (a: Vector3, b: Vector3) -> Vector3,
+	__sub: (a: Vector3, b: Vector3) -> Vector3,
+	__mul: (a: Vector3 | number, b: Vector3 | number) -> Vector3,
+	__div: (a: Vector3, b: number) -> Vector3,
+	__unm: (a: Vector3) -> Vector3,
+}
+
 type Color4Module = {
 	new: (r: number?, g: number?, b: number?, a: number?) -> Color4,
 	fromRGB: (r: number, g: number, b: number, a: number?) -> Color4,
@@ -400,6 +474,70 @@ type Color4Module = {
 
 type Rotation2x2 = {
 	{ number }
+}
+
+type Rotation3x3 = {
+	{ number }
+}
+
+type CFrame = {
+	Position: Vector3,
+	Rotation: Rotation3x3,
+
+	ToQuaternion: (self: CFrame) -> (number, number, number, number),
+	Inverse: (self: CFrame) -> CFrame,
+	Orthonormalize: (self: CFrame) -> CFrame,
+	ToWorldSpace: (self: CFrame, cf: CFrame) -> CFrame,
+	ToObjectSpace: (self: CFrame, cf: CFrame) -> CFrame,
+	PointToWorldSpace: (self: CFrame, point: Vector3) -> Vector3,
+	PointToObjectSpace: (self: CFrame, point: Vector3) -> Vector3,
+	VectorToWorldSpace: (self: CFrame, vector: Vector3) -> Vector3,
+	VectorToObjectSpace: (self: CFrame, vector: Vector3) -> Vector3,
+	Lerp: (self: CFrame, target: CFrame, alpha: number) -> CFrame,
+	GetComponents: (self: CFrame) -> (number, number, number, number, number, number, number, number, number, number, number, number),
+	components: (self: CFrame) -> (number, number, number, number, number, number, number, number, number, number, number, number),
+	ToOrientation: (self: CFrame) -> (number, number, number),
+	ToEulerAnglesXYZ: (self: CFrame) -> (number, number, number),
+	ToEulerAnglesYXZ: (self: CFrame) -> (number, number, number),
+	WithPosition: (self: CFrame, position: Vector3) -> CFrame,
+	WithRotation: (self: CFrame, rotation: Rotation3x3) -> CFrame,
+	RotateAround: (self: CFrame, point: Vector3, axis: Vector3, angle: number) -> CFrame,
+	RotateByEuler: (self: CFrame, x: number, y: number, z: number) -> CFrame,
+	TranslateBy: (self: CFrame, offset: Vector3) -> CFrame,
+	ToTable: (self: CFrame) -> {
+		type: string,
+		Position: any,
+		Rotation: Rotation3x3,
+	},
+
+	__tostring: (self: CFrame) -> string,
+}
+
+type CFrameModule = {
+	new: (...any) -> CFrame,
+	lookAt: (pos: Vector3, target: Vector3, up: Vector3?) -> CFrame,
+	ProjectPointOntoPlane: (point: Vector3, normal: Vector3) -> Vector3,
+	fromEulerAnglesXYZ: (x: number, y: number, z: number) -> CFrame,
+	fromEulerAnglesYXZ: (y: number, x: number, z: number) -> CFrame,
+	fromAxisAngle: (axis: Vector3, angle: number) -> CFrame,
+	fromMatrix: (pos: Vector3, x: Vector3, y: Vector3, z: Vector3?) -> CFrame,
+	FromRelative: (parent: CFrame, relative: CFrame) -> CFrame,
+	Angles: (x: number, y: number, z: number) -> CFrame,
+	FromTable: (tbl: {
+		type: string,
+		Position: any,
+		Rotation: Rotation3x3,
+	}) -> CFrame,
+	fromQuaternion: (x: number, y: number, z: number, w: number, pos: Vector3?) -> CFrame,
+	fromOrientation: (rx: number, ry: number, rz: number) -> CFrame,
+
+	identity: CFrame,
+
+	__mul: (a: CFrame, b: CFrame | Vector3) -> CFrame | Vector3,
+	__add: (a: CFrame, b: Vector3) -> CFrame,
+	__sub: (a: CFrame, b: CFrame | Vector3) -> CFrame,
+	__eq: (a: CFrame, b: CFrame) -> boolean,
+	__unm: (a: CFrame) -> CFrame,
 }
 
 type CFrame2D = {
@@ -549,8 +687,218 @@ type CFrameint16Module = {
 }
 
 type UDim2 = {
+	X: UDim,
+	Y: UDim,
 
+	Lerp: (self: UDim2, other: UDim2, alpha: number) -> UDim2,
+	Round: (self: UDim2) -> UDim2,
+	Floor: (self: UDim2) -> UDim2,
+	ApplyAnchor: (self: UDim2, anchor: Vector2, parentSize: Vector2, absoluteSize: Vector2) -> UDim2,
+	Min: (self: UDim2, other: UDim2) -> UDim2,
+	Max: (self: UDim2, other: UDim2) -> UDim2,
+	Expand: (self: UDim2, pixels: number) -> UDim2,
+	Shrink: (self: UDim2, pixels: number) -> UDim2,
+	MoveX: (self: UDim2, pixels: number) -> UDim2,
+	MoveY: (self: UDim2, pixels: number) -> UDim2,
+	IsZero: (self: UDim2) -> boolean,
+	MagnitudePixels: (self: UDim2) -> number,
+	ToPixels: (self: UDim2, referenceSize: Vector2) -> Vector2,
+	SetPixels: (self: UDim2, xPixels: number, yPixels: number) -> UDim2,
+	MovePixels: (self: UDim2, vec: Vector2) -> UDim2,
+	PixelDistanceTo: (self: UDim2, other: UDim2) -> Vector2,
+	LerpPixels: (self: UDim2, other: UDim2, alpha: number) -> UDim2,
+	SnapToGrid: (self: UDim2, gridSizeX: number, gridSizeY: number) -> UDim2,
+	ToPixelVector: (self: UDim2) -> Vector2,
+	ToTable: (self: UDim2) -> {
+		type: string,
+		X: {
+			Scale: number,
+			Offset: number,
+		},
+		Y: {
+			Scale: number,
+			Offset: number,
+		},
+	},
+	ScaleOnly: (self: UDim2) -> UDim2,
+	OffsetOnly: (self: UDim2) -> UDim2,
+	Invert: (self: UDim2) -> UDim2,
+	AddOffset: (self: UDim2, vec: Vector2) -> UDim2,
+	SubtractOffset: (self: UDim2, vec: Vector2) -> UDim2,
+	MultiplyScale: (self: UDim2, factor: number) -> UDim2,
+	DivideScale: (self: UDim2, factor: number) -> UDim2,
+	ClampOffset: (self: UDim2, minX: number, maxX: number, minY: number, maxY: number) -> UDim2,
+
+	__tostring: (self: UDim2) -> string,
 }
+
+type UDim = {
+	Scale: number,
+	Offset: number,
+
+	Clone: (self: UDim) -> UDim,
+	ToPixels: (self: UDim, total: number) -> number,
+	ToTable: (self: UDim) -> {
+		type: string,
+		Scale: number,
+		Offset: number,
+	},
+
+	__tostring: (self: UDim) -> string,
+}
+
+type UDimModule = {
+	new: (scale: number?, offset: number?) -> UDim,
+	FromTable: (tbl: {
+		type: string,
+		Scale: number,
+		Offset: number,
+	}) -> UDim,
+
+	__add: (a: UDim, b: UDim) -> UDim,
+	__sub: (a: UDim, b: UDim) -> UDim,
+	__mul: (a: UDim | number, b: UDim | number) -> UDim,
+	__div: (a: UDim, b: number) -> UDim,
+}
+
+type UDim2Module = {
+	new: (xScale: number?, xOffset: number?, yScale: number?, yOffset: number?) -> UDim2,
+	fromScale: (x: number, y: number) -> UDim2,
+	fromOffset: (x: number, y: number) -> UDim2,
+	FromPixels: (pixels: Vector2, referenceSize: Vector2) -> UDim2,
+	FromTable: (tbl: {
+		type: string,
+		X: {
+			Scale: number,
+			Offset: number,
+		},
+		Y: {
+			Scale: number,
+			Offset: number,
+		},
+	}) -> UDim2,
+
+	__eq: (a: UDim2, b: UDim2) -> boolean,
+	__add: (a: UDim2, b: UDim2) -> UDim2,
+	__sub: (a: UDim2, b: UDim2) -> UDim2,
+	__mul: (a: UDim2 | number, b: UDim2 | number) -> UDim2,
+	__div: (a: UDim2, b: number) -> UDim2,
+}
+
+type TweenInfo = {
+	Time: number,
+	EasingStyle: any,
+	EasingDirection: any,
+	RepeatCount: number,
+	Reverses: boolean,
+	DelayTime: number,
+
+	ToTable: (self: TweenInfo) -> {
+		type: string,
+		Time: number,
+		EasingStyle: any,
+		EasingDirection: any,
+		RepeatCount: number,
+		Reverses: boolean,
+		DelayTime: number,
+	},
+}
+
+type TweenInfoModule = {
+	new: (
+		time: number?,
+		easingStyle: any?,
+		easingDirection: any?,
+		repeatCount: number?,
+		reverses: boolean?,
+		delayTime: number?
+	) -> TweenInfo,
+	FromTable: (tbl: {
+		type: string,
+		Time: number,
+		EasingStyle: any,
+		EasingDirection: any,
+		RepeatCount: number,
+		Reverses: boolean,
+		DelayTime: number,
+	}) -> TweenInfo,
+}
+
+type Spring = {
+	d: number,
+	f: number,
+	value: any,
+	velocity: any,
+	target: any,
+	running: boolean,
+	typeName: string,
+	type: any,
+
+	Play: (self: Spring) -> (),
+	Pause: (self: Spring) -> (),
+	Stop: (self: Spring) -> (),
+	set: (self: Spring, value: any) -> (),
+	setValue: (self: Spring, value: any) -> (),
+	shove: (self: Spring, force: any) -> (),
+	step: (self: Spring, dt: number) -> any,
+	ToTable: (self: Spring) -> { [string]: any },
+}
+
+type SpringModule = {
+	new: (damping: number?, frequency: number?, typeName: string?, initialValue: any?) -> Spring,
+	FromTable: (tbl: { [string]: any }) -> Spring,
+	target: (object: Instance, damping: number, frequency: number, props: { [string]: any }) -> (),
+	stepTargets: (dt: number) -> (),
+}
+
+type Axes = any
+type AxesModule = { [string]: any }
+type BoundingBox = any
+type BoundingBoxModule = { [string]: any }
+type BrickColor = any
+type BrickColorModule = { [string]: any }
+type CFrameQuat16 = any
+type CFrameQuat16Module = { [string]: any }
+type ColorSequence = any
+type ColorSequenceModule = { [string]: any }
+type ColorSequenceKeypoint = any
+type ColorSequenceKeypointModule = { [string]: any }
+type CustomPhysicalProperties = any
+type CustomPhysicalPropertiesModule = { [string]: any }
+type DateTime = any
+type DateTimeModule = { [string]: any }
+type NumberRange = any
+type NumberRangeModule = { [string]: any }
+type NumberSequence = any
+type NumberSequenceModule = { [string]: any }
+type NumberSequenceKeypoint = any
+type NumberSequenceKeypointModule = { [string]: any }
+type OverlapParams = any
+type OverlapParamsModule = { [string]: any }
+type PromiseDatatype = any
+type PromiseDatatypeModule = { [string]: any }
+type QuadtreeDatatype = any
+type QuadtreeDatatypeModule = { [string]: any }
+type RandomDatatype = any
+type RandomDatatypeModule = { [string]: any }
+type Ray = any
+type RayModule = { [string]: any }
+type RaycastParams = any
+type RaycastParamsModule = { [string]: any }
+type RaycastResult = any
+type RaycastResultModule = { [string]: any }
+type Rect = any
+type RectModule = { [string]: any }
+type Region = any
+type RegionModule = { [string]: any }
+type Region3int16 = any
+type Region3int16Module = { [string]: any }
+type StateDatatype = any
+type StateDatatypeModule = { [string]: any }
+type ValueCurveKey = any
+type ValueCurveKeyModule = { [string]: any }
+type Vector2int16 = any
+type Vector2int16Module = { [string]: any }
 
 type WindowConfig = {
 	Explorer: {
@@ -779,12 +1127,44 @@ declare nullptr_t: nullptr_t
 declare Signal: Signal
 declare Disposable: DisposableClass
 declare kiclass: ClassGlobal
+declare Axes: AxesModule
+declare BoundingBox: BoundingBoxModule
+declare BrickColor: BrickColorModule
+declare CFrameQuat16: CFrameQuat16Module
+declare ColorSequence: ColorSequenceModule
+declare ColorSequenceKeypoint: ColorSequenceKeypointModule
+declare CustomPhysicalProperties: CustomPhysicalPropertiesModule
+declare DateTime: DateTimeModule
 declare Routes: Routes
 declare Shader: ShaderModule
 declare Quaternion: QuaternionModule
+declare Color3: Color3Module
 declare Color4: Color4Module
+declare NumberRange: NumberRangeModule
+declare NumberSequence: NumberSequenceModule
+declare NumberSequenceKeypoint: NumberSequenceKeypointModule
+declare OverlapParams: OverlapParamsModule
+declare Promise: PromiseDatatypeModule
+declare Quadtree: QuadtreeDatatypeModule
+declare Random: RandomDatatypeModule
+declare Ray: RayModule
+declare RaycastParams: RaycastParamsModule
+declare RaycastResult: RaycastResultModule
+declare Rect: RectModule
+declare Region: RegionModule
+declare Region3int16: Region3int16Module
+declare State: StateDatatypeModule
+declare ValueCurveKey: ValueCurveKeyModule
+declare Vector2: Vector2Module
+declare Vector2int16: Vector2int16Module
+declare Vector3: Vector3Module
+declare CFrame: CFrameModule
 declare CFrame2D: CFrame2DModule
 declare CFrameint16: CFrameint16Module
+declare UDim: UDimModule
+declare UDim2: UDim2Module
+declare TweenInfo: TweenInfoModule
+declare Spring: SpringModule
 declare Schema: SchemaType
 declare Octree: Octree
 declare Theme: ThemeCollection

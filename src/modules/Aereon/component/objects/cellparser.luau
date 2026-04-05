@@ -31,18 +31,15 @@ return function(objects, config)
 			position = position,
 			showSeparator = cellConfig.showSeparator,
 
-			-- Visual customization
 			backgroundColor = cellConfig.backgroundColor,
 			hoverColor = cellConfig.hoverColor,
 			separatorColor = cellConfig.separatorColor,
 			textColor = cellConfig.textColor,
 			descriptionColor = cellConfig.descriptionColor,
 
-			-- Editor
 			editorComponent = cellConfig.editor or cellConfig.editorComponent,
 			editorWidth = cellConfig.editorWidth or 200,
 
-			-- Callbacks
 			onValueChange = cellConfig.onValueChange,
 			onClick = cellConfig.onClick,
 		})
@@ -106,27 +103,22 @@ return function(objects, config)
 		end
 	end
 
-	-- Return wrapper with helper methods
 	local wrapper = {}
 
-	-- Render all cells
 	wrapper.render = function(dt)
 		for _, cell in ipairs(cells) do
 			cell.render(dt)
 		end
 	end
 
-	-- Get a specific cell or group
 	wrapper.get = function(name)
 		return cellRefs[name]
 	end
 
-	-- Get all cells
 	wrapper.getAll = function()
 		return cells
 	end
 
-	-- Update position of entire cell list
 	wrapper.setPosition = function(x, y)
 		local offsetY = 0
 		for _, cell in ipairs(cells) do

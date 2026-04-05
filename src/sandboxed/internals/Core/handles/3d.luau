@@ -4,8 +4,9 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
+local UserInputService = game:GetService("UserInputService")
 
-if zune.platform.os == "linux" then
+if UserInputService:GetOS() == Enum.Platform.Linux then
 	-- linux not supported Yet........................
 	return
 end
@@ -18,18 +19,30 @@ local lib = raylib.lib
 local const = raylib.const
 local renderer = rlservice.renderer
 local Selection = game:GetService("Selection")
-local os = zune.platform.os
 local freecam = renderer.Freecam
-local focusTargetCF = nil
+local _focusTargetCF = nil
 local vend = KinemiumFontService.GetDefaultFont()
-local focusAlpha = 0
+local _focusAlpha = 0
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local grid = 1
+local rotationStep = 15
 local aereon = require("@Aereon")
+local Movement, Resize, Rotation = Instance.new("Handles"), Instance.new("Handles"), Instance.new("Handles")
+Movement.Style = Enum.HandlesStyle.Movement
+Resize.Style = Enum.HandlesStyle.Resize
+Rotation.Style = Enum.HandlesStyle.Rotation
 
 local MoveOffsets = {}
 local MoveStartPivot = nil
 local MoveDragging = false
+
+local RotOffsets = {}
+local RotStartPivot = nil
+local RotDragging = false
+
+local ScaleOffsets = {}
+local ScaleStartPivot = nil
+local ScaleDragging = false
 
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
 
@@ -42,7 +55,7 @@ local function snapVec3(v)
 end
 
 local function isMovable(object)
-	return object:GetMetadata("IsMovable")
+	return object:IsA("BasePart") or object:GetMetadata("IsMovable")
 end
 
 local function getSelectionCenter()
@@ -101,24 +114,21 @@ local rotateGrid = textbox.new({
 	showStepButtons = true,
 	onChange = function(new)
 		if tonumber(new) and tonumber(new) > 0 then
-			grid = tonumber(new)
+			rotationStep = tonumber(new)
 		else
-			grid = 1
+			rotationStep = 15
+		end
+		if Rotation then
+			Rotation.RotationSnap = rotationStep
 		end
 	end,
 })
 
-local StartCFrame
-local StartSize
-
 local gizmo = import("@gizmo")
-local flags = gizmo.Flags
+local _flags = gizmo.Flags
+Rotation.RotationSnap = rotationStep
 
-local Movement, Resize = Instance.new("Handles"), Instance.new("Handles")
-Movement.Style = Enum.HandlesStyle.Movement
-Resize.Style = Enum.HandlesStyle.Resize
-
-connection = Movement.MouseDrag:Connect(function(newCF)
+local _moveConnection = Movement.MouseDrag:Connect(function(newCF)
 	local selection = Selection:Get()
 	if #selection == 0 then
 		return
@@ -148,51 +158,132 @@ connection = Movement.MouseDrag:Connect(function(newCF)
 		local part = offset.obj
 		if part and part.Parent then
 			local finalCF = snappedPivot * offset.pos
-			local o = part.Orientation
-			local res: CFrame = finalCF * CFrame.Angles(math.rad(o.X), math.rad(o.Y), math.rad(o.Z))
-			if part.Position then
-				part.Position = res.Position
-			end
 			if part.CFrame then
-				part.CFrame = res
+				part.CFrame = finalCF
 			end
 		end
 	end
 end)
 
+local _rotationConnection = Rotation.MouseDrag:Connect(function(newCF)
+	local selection = Selection:Get()
+	if #selection == 0 then
+		return
+	end
+
+	if not RotDragging then
+		RotDragging = true
+		RotOffsets = {}
+
+		local center = getSelectionCenter()
+		RotStartPivot = CFrame.new(center)
+
+		for _, obj in ipairs(selection) do
+			if isMovable(obj) then
+				table.insert(RotOffsets, { obj = obj, rel = RotStartPivot:ToObjectSpace(obj.CFrame) })
+			end
+		end
+	end
+
+	-- Rotation is already snapped by Handles/gizmo
+	local snappedCF = newCF
+
+	for _, offset in ipairs(RotOffsets) do
+		local part = offset.obj
+		if part and part.Parent then
+			part.CFrame = snappedCF * offset.rel
+		end
+	end
+end)
+
+local _resizeConnection = Resize.MouseDrag:Connect(function(newCF, newSize)
+	local selection = Selection:Get()
+	if #selection == 0 then
+		return
+	end
+
+	if not ScaleDragging then
+		ScaleDragging = true
+		ScaleOffsets = {}
+
+		local center = getSelectionCenter()
+		ScaleStartPivot = CFrame.new(center)
+
+		for _, obj in ipairs(selection) do
+			if isMovable(obj) then
+				table.insert(ScaleOffsets, {
+					obj = obj,
+					rel = ScaleStartPivot:ToObjectSpace(obj.CFrame),
+					startSize = obj.Size,
+				})
+			end
+		end
+	end
+
+	local snappedSize = snapVec3(newSize)
+
+	for _, offset in ipairs(ScaleOffsets) do
+		local part = offset.obj
+		if part and part.Parent then
+			-- Apply scale to individual part size
+			part.Size = snappedSize
+			-- Update position to keep group relative
+			part.CFrame = newCF * offset.rel
+		end
+	end
+end)
+
 local handlestype = "MOVEMENT"
-local ScaleDragging = true
 
 -- Read Offsets:
 -- 0, 4, 8 = Position (x,y,z) (Vector3)
 -- 12, 16, 20, 24 = Rotation (x,y,z,w) (Quaternion)
 -- 28, 32, 36 = Scale (x,y,z) (Vector3)
 
-local connection
+-- Signal connections
 
 Selection.SelectionAdded:Connect(function(selected)
 	Movement.Adornee = nil
 	Resize.Adornee = nil
-
-	if connection then
-		connection:Disconnect()
-	end
+	Rotation.Adornee = nil
 
 	MoveDragging = false
+	RotDragging = false
+	ScaleDragging = false
 	MoveOffsets = {}
+	RotOffsets = {}
+	ScaleOffsets = {}
 
 	if selected then
 		if not isMovable(selected) then
 			return
 		end
 		if handlestype == "MOVEMENT" then
-			Resize.Adornee = nil
 			Movement.Adornee = selected
 		elseif handlestype == "SCALE" then
 			Resize.Adornee = selected
+		elseif handlestype == "ROTATE" then
+			Rotation.Adornee = selected
 		end
 	end
 end)
+
+local function updateAdornees()
+	local selected = Selection:Get()[1]
+	Movement.Adornee = nil
+	Resize.Adornee = nil
+	Rotation.Adornee = nil
+
+	if selected and isMovable(selected) then
+		if handlestype == "MOVEMENT" then
+			Movement.Adornee = selected
+		elseif handlestype == "SCALE" then
+			Resize.Adornee = selected
+		elseif handlestype == "ROTATE" then
+			Rotation.Adornee = selected
+		end
+	end
+end
 
 local function Focus()
 	local selected = Selection:Get()[1]
@@ -209,15 +300,24 @@ local function Focus()
 	end
 
 	local newCamPos = partPos + dir * padding
-	focusTargetCF = CFrame.lookAt(newCamPos, partPos)
-	focusAlpha = 0
+	_focusTargetCF = CFrame.lookAt(newCamPos, partPos)
+	_focusAlpha = 0
 end
 
 renderer.Pool.new("gizmo", function()
 	Movement.render(Movement, renderer, game)
 	Resize.render(Resize, renderer, game)
+	Rotation.render(Rotation, renderer, game)
 
-	local selected = Selection:Get()[1]
+	local selection = Selection:Get()
+	local selected = selection[1]
+
+	-- Reset dragging states if mouse is up
+	if lib.IsMouseButtonDown(const.MouseButton.MOUSE_BUTTON_LEFT) == 0 then
+		MoveDragging = false
+		RotDragging = false
+		ScaleDragging = false
+	end
 
 	if selected then
 		if not isMovable(selected) then
@@ -229,41 +329,7 @@ renderer.Pool.new("gizmo", function()
 				return
 			end
 		elseif handlestype == "SCALE" then
-			if connection then
-				connection:Disconnect()
-			end
-
-			if not ScaleDragging then
-				StartCFrame = selected.CFrame
-				StartSize = selected.Size
-				ScaleDragging = true
-			end
-
-			connection = Resize.MouseDrag:Connect(function(newCF)
-				local startPos = StartCFrame.Position
-				local t = newCF.Position
-
-				local dx = (t.X - startPos.X)
-				local dy = (t.Y - startPos.Y)
-				local dz = (t.Z - startPos.Z)
-
-				local newSize = snapVec3(
-					Vector3.new(
-						math.max(StartSize.X + dx, grid),
-						math.max(StartSize.Y + dy, grid),
-						math.max(StartSize.Z + dz, grid)
-					)
-				)
-
-				local offset = Vector3.new(
-					(newSize.X - StartSize.X) / 2,
-					(newSize.Y - StartSize.Y) / 2,
-					(newSize.Z - StartSize.Z) / 2
-				)
-
-				--selected.Size = newSize
-				--selected.CFrame = StartCFrame + offset
-			end)
+			-- No per-frame connection needed anymore
 		end
 		if lib.IsKeyDown(const.KeyboardKey.KEY_F) == 1 then
 			Focus()
@@ -281,8 +347,8 @@ renderer.Pool.new("gizmo", function()
 				end
 
 				local newPos = camCF.Position + dir * zoomAmount
-				focusTargetCF = CFrame.lookAt(newPos, center)
-				focusAlpha = 0
+				_focusTargetCF = CFrame.lookAt(newPos, center)
+				_focusAlpha = 0
 			end
 		end
 		if lib.IsKeyPressed(const.KeyboardKey.KEY_HOME) == 1 then
@@ -290,17 +356,18 @@ renderer.Pool.new("gizmo", function()
 		end
 	else
 		MoveDragging = false
+		RotDragging = false
 		MoveOffsets = {}
-		ScaleDragging = false
+		RotOffsets = {}
 	end
-	if focusTargetCF then
-		local camCF = freecam.GetCFrame()
+	if _focusTargetCF then
+		local _camCF = freecam.GetCFrame()
 
-		focusAlpha = math.min(focusAlpha + 0.08, 1) -- speed (0.08 slower, 0.2 faster)
-		freecam.SetCFrame(focusTargetCF)
+		_focusAlpha = math.min(_focusAlpha + 0.08, 1) -- speed (0.08 slower, 0.2 faster)
+		freecam.SetCFrame(_focusTargetCF)
 
-		if focusAlpha >= 1 then
-			focusTargetCF = nil
+		if _focusAlpha >= 1 then
+			_focusTargetCF = nil
 		end
 	end
 end)
@@ -324,6 +391,7 @@ NewCategoryToolbar:Fire("Tools", {
 			text = "Move",
 			callback = function()
 				handlestype = "MOVEMENT"
+				updateAdornees()
 			end,
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
@@ -335,6 +403,7 @@ NewCategoryToolbar:Fire("Tools", {
 
 			callback = function()
 				handlestype = "ROTATE"
+				updateAdornees()
 			end,
 			hoverTransparency = 0.5,
 			text = "Rotate",
@@ -347,6 +416,7 @@ NewCategoryToolbar:Fire("Tools", {
 			text = "Resize",
 			callback = function()
 				handlestype = "SCALE"
+				updateAdornees()
 			end,
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),

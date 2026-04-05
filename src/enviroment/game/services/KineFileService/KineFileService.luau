@@ -153,6 +153,27 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				return wrapper
 			end
 		end,
+
+		ExportObject = function(instance, path, name)
+			local SerializationService = datamodel:GetService("SerializationService")
+			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
+			if serialized then
+				fs.writeFile(path .. "/" .. name .. ".kineobj", serialized)
+			end
+			return serialized, true
+		end,
+
+		DecodeFile = function(filePath)
+			local SerializationService = datamodel:GetService("SerializationService")
+			local read = fs.readFile(filePath, true)
+			if read then
+				local deserialized = SerializationService.Deserialize(read)
+				if deserialized then
+					return deserialized
+				end
+			end
+			return false
+		end,
 	})
 end
 

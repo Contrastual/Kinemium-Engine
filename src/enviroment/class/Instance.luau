@@ -85,11 +85,25 @@ function instance_mt.__newindex(self, key, value)
 
 	if key == "Parent" then
 		local oldParent = props.Parent
+		if oldParent == value then
+			return
+		end
+
 		if self.AncestryChanged then
 			self.AncestryChanged:Fire(oldParent, value)
 		end
 
 		if oldParent then
+			local oldChildren = rawget(oldParent, "Children")
+			if oldChildren then
+				for i = #oldChildren, 1, -1 do
+					if oldChildren[i] == self then
+						table.remove(oldChildren, i)
+						break
+					end
+				end
+			end
+
 			if oldParent.ChildRemoved then
 				oldParent.ChildRemoved:Fire(self)
 			end
@@ -154,6 +168,8 @@ function Instance.new(className)
 	self.attributes = {}
 	self.NetworkId = nil -- nil until server assigns one
 	self.CanReplicate = true
+	self.NetworkOwner = nil -- For physics/property authority
+	self.NetworkOwnerType = 0 -- 0: Server, 1: Client, 2: Shared?
 
 	-- deprecated
 	self.childAdded = self.ChildAdded
@@ -169,6 +185,8 @@ function Instance.new(className)
 		Children = {},
 		NetworkId = nil,
 		UniqueId = generateUniqueId(),
+		NetworkOwner = nil,
+		NetworkOwnerType = 0,
 	}
 
 	return setmetatable(self, instance_mt)

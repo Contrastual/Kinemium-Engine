@@ -14,6 +14,9 @@ local zembed = require("@zembed")
 local general = zembed.IsEmbedded() and "./assets/images/icons" or "./src/assets/images/icons"
 
 KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
+	if IsServer then
+		return
+	end
 	local registry = {}
 	local textures = {}
 	local sail = require("@Sail")
@@ -21,6 +24,12 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	local raylib = require("@raylib")
 
 	local function reload()
+		for _, data in pairs(textures) do
+			if data.texture then
+				lib.UnloadTexture(data.texture)
+			end
+		end
+
 		table.clear(registry)
 		table.clear(textures)
 
@@ -42,9 +51,9 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 
 	KinemiumIconLoader:SetProperties({
 		Reload = reload,
-		LoadSVG = function(svgPath: string)
+		LoadImageCustom = function(path: string)
 			local image_holder = ffi.alloc(8)
-			local result = sail.lib.sail_load_from_file(svgPath, image_holder)
+			local result = sail.lib.sail_load_from_file(path, image_holder)
 
 			if result == 0 then
 				local addr_buf = buffer.create(8)
@@ -69,6 +78,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 				buffer.writeu32(rl_image, 4, pixels_hi)
 
 				result = nil
+				sail.commonlib.sail_destroy_image(image_ptr)
 
 				return {
 					texture = raylib.lib.LoadTextureFromImage(rl_image),
@@ -102,7 +112,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			if not string.find(path, ".svg") then
 				texture = lib.LoadTexture(path)
 			else
-				texture = KinemiumIconLoader.LoadSVG(path).texture
+				texture = KinemiumIconLoader.LoadImageCustom(path).texture
 			end
 
 			local size = vector.create(buffer.readi32(texture, 4), buffer.readi32(texture, 8))
@@ -145,7 +155,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			if not string.find(path, ".svg") then
 				texture = lib.LoadTexture(path)
 			else
-				texture = KinemiumIconLoader.LoadSVG(path).texture
+				texture = KinemiumIconLoader.LoadImageCustom(path).texture
 			end
 			registry[name] = path
 
@@ -163,7 +173,9 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		end,
 		Cleanup = function()
 			for _, data in pairs(textures) do
-				lib.UnloadTexture(data.texture)
+				if data.texture then
+					lib.UnloadTexture(data.texture)
+				end
 			end
 			table.clear(textures)
 		end,

@@ -311,24 +311,14 @@ return {
 				end
 			end
 
-			-- Smooth scroll interpolation
 			object.Scroll = object.Scroll
 				+ (object.ScrollTarget - object.Scroll) * math.clamp(dt * object.ScrollLerpSpeed, 0, 1)
 
-			-- Store last scroll for velocity calculation
 			object._lastScroll = object.Scroll
 
-			-- Calculate canvas position (allow negative for overscroll effect)
 			object.CanvasPosition = object.Scroll * maxScroll
 
-			-- Render children with clipping and offset (without mutating child Position every frame)
-			lib.BeginScissorMode(pos.X, pos.Y, size.X, size.Y)
-			for _, child in pairs(object:GetChildren()) do
-				if child.render then
-					child.render(lib, child, dt, structs, renderer)
-				end
-			end
-			lib.EndScissorMode()
+			GuiObject.renderChildren(lib, object, dt, structs, renderer)
 		end
 
 		instance:SetProperties(propTable)

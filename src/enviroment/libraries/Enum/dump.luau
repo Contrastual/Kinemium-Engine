@@ -1691,6 +1691,7 @@ enums.HandRigDescriptionSide = {
 enums.HandlesStyle = {
 	Resize = 0,
 	Movement = 1,
+	Rotation = 2,
 }
 enums.HapticEffectType = {
 	Custom = 0,

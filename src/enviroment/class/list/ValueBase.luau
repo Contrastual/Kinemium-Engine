@@ -4,7 +4,6 @@ local propTable = {
 
 return {
 	class = "ValueBase",
-	non_creatable = true,
 	callback = function(instance)
 		instance:SetProperties(propTable)
 		return instance

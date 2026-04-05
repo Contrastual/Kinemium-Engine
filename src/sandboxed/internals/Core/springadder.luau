@@ -1,7 +1,7 @@
 if FlagExists("cli") then
 	return
 end
-local code = [[
+local code = [==[
     --!strict
 --!native
 ---------------------------------------------------------------------
@@ -56,7 +56,7 @@ local round = math.round
 
 local function magnitudeSq(vec: {number})
 	local out = 0
-	for _, v in vec do
+	for _, v in ipairs(vec) do
 		out += v^2
 	end
 	return out
@@ -64,7 +64,7 @@ end
 
 local function distanceSq(vec0: {number}, vec1: {number})
 	local out = 0
-	for i0, v0 in vec0 do
+	for i0, v0 in ipairs(vec0) do
 		out += (vec1[i0] - v0)^2
 	end
 	return out
@@ -763,7 +763,12 @@ function spr.target(instance: Instance, dampingRatio: number, frequency: number,
 		error(("expected undamped frequency >= 0; got %.2f"):format(frequency), 2)
 	end
 
-	local targetRecord = (if instance:IsA("Camera") then springStates_render else springStates_other) :: {[Instance]: {[string]: any}}
+	local targetRecord: {[Instance]: {[string]: any}}
+if instance:IsA("Camera") then
+    targetRecord = springStates_render
+else
+    targetRecord = springStates_other
+end
 
 	local state = targetRecord[instance]
 	if not state then
@@ -839,7 +844,7 @@ function spr.completed(instance: Instance, callback: ()->())
 end
 
 return table.freeze(spr)
-]]
+]==]
 
 local module = Instance.new("ModuleScript")
 module.Name = "spring"

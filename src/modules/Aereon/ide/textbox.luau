@@ -2805,7 +2805,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			if raylib.IsMouseButtonPressed(0) == 1 and upHovered then
 				self:incrementNumeric()
-				self.onSubmit(self:getText())
+				if self.onSubmit then
+					self.onSubmit(self:getText())
+				end
 			end
 
 			-- Down button
@@ -2824,7 +2826,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			if raylib.IsMouseButtonPressed(0) == 1 and downHovered then
 				self:decrementNumeric()
-				self.onSubmit(self:getText())
+				if self.onSubmit then
+					self.onSubmit(self:getText())
+				end
 			end
 		end
 

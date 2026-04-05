@@ -34,6 +34,22 @@ return function(objects, data)
 
 	local wrapper = {}
 
+	wrapper.set = function(prop, value)
+		if type(config[prop]) == "function" then
+			return wrapper
+		end
+		config[prop] = value
+		return wrapper
+	end
+
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
+	wrapper.get_rect = function()
+		return config.obj_rect
+	end
+
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 		local isHovered = rect.MouseIsInRect(r)

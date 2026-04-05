@@ -5,6 +5,7 @@ local EnumMap = require("@EnumMap")
 local PlayerGui = require("@PlayerGui")
 local Terrain = require("@Terrain")
 local capi = require("./capi")
+local PlayerObject = require("@Player")
 local shared = {}
 
 return function(renderer, Kinemium_camera)
@@ -22,6 +23,8 @@ return function(renderer, Kinemium_camera)
 		end,
 		getClasses = Registry.getClasses,
 	}
+
+	data.Filesystem = zune.fs
 
 	data.buffer = {
 		copy = buffer.copy,
@@ -176,14 +179,18 @@ return function(renderer, Kinemium_camera)
 		end
 	end
 
-	local playerGui = PlayerGui.InitRenderer(renderer, renderer.Signal)
+	local playerGui = nil
+	if not IsHeadless then
+		playerGui = PlayerGui.InitRenderer(renderer, renderer.Signal, mainDatamodel)
+	end
 	local terrainObject = Terrain.InitRenderer(renderer, renderer.Signal, mainDatamodel)
 
 	local players = mainDatamodel:GetService("Players")
-	players.LocalPlayer.PlayerGui = playerGui
-	players.LocalPlayer.Parent = players
+	if not IsServer and playerGui then
+		players.LocalPlayer.PlayerGui = playerGui
 
-	playerGui.Parent = players.LocalPlayer
+		playerGui.Parent = players.LocalPlayer
+	end
 
 	Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 
@@ -215,27 +222,44 @@ return function(renderer, Kinemium_camera)
 	data.io = zune.io
 	data.platform = zune.platform
 
-	data.require = function(Instance)
-		if type(Instance) == "table" then
-			if Instance.ClassName == "ModuleScript" then
-				data.script = Instance
+	data.tick = function()
+		return os.clock()
+	end
 
-				local returned = ScriptRunnerService.RunScript(Instance)
+	local requiredCache = {}
 
-				if returned then
-					return returned
-				end
-			end
-		elseif type(Instance) == "string" then
-			local callerEnv = getfenv(2)
-
-			if callerEnv.SecurityCapabilities == EnumMap.SecurityCapabilities.Internals then
-			end
-
-			return require(Instance)
-		else
-			error("require: cannot require table; expected ModuleScript")
+	data.require = function(target)
+		if type(target) == "string" then
+			return require(target)
 		end
+
+		if type(target) ~= "table" then
+			error("require: expected ModuleScript or string, got " .. type(target), 2)
+		end
+
+		if target.ClassName ~= "ModuleScript" then
+			error(`require: cannot require {target.ClassName} '{target.Name}'; expected ModuleScript`, 2)
+		end
+
+		if requiredCache[target] then
+			return requiredCache[target]
+		end
+
+		if requiredCache[target] == false then
+			error(`require: circular dependency detected on '{target.Name}'`, 2)
+		end
+
+		requiredCache[target] = false
+
+		data.script = target
+		local returned = ScriptRunnerService.RunScript(target)
+
+		if returned == nil then
+			error(`require: ModuleScript '{target.Name}' did not return a value`, 2)
+		end
+
+		requiredCache[target] = returned
+		return returned
 	end
 
 	data.import = function(v)
@@ -259,7 +283,11 @@ return function(renderer, Kinemium_camera)
 		end
 	end
 
+	data.zune = {}
+
 	local c_api = capi(data)
+
+	ScriptRunnerService.Environment = data
 
 	return data, c_api
 end

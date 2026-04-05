@@ -16,40 +16,75 @@ function RaycastParams.new()
 		CollisionGroup = "Default",
 		RespectCanCollide = false,
 		BruteForceAllSlow = false,
+		VisualizeRay = false,
 	}, RaycastParams)
 end
 
 function RaycastParams:AddToFilter(instances)
 	if typeof(instances) == "table" then
 		for _, inst in ipairs(instances) do
-			table.insert(self.FilterDescendantsInstances, inst)
+			self.FilterDescendantsInstances[#self.FilterDescendantsInstances + 1] = inst
 		end
 	else
-		table.insert(self.FilterDescendantsInstances, instances)
+		self.FilterDescendantsInstances[#self.FilterDescendantsInstances + 1] = instances
 	end
 end
 
 function RaycastParams:ToTable()
+	local copy = {}
+	for i, v in ipairs(self.FilterDescendantsInstances) do
+		copy[i] = v
+	end
+
 	return {
 		type = "RaycastParams",
-		FilterDescendantsInstances = self.FilterDescendantsInstances,
+		FilterDescendantsInstances = copy,
 		FilterType = self.FilterType,
 		IgnoreWater = self.IgnoreWater,
 		CollisionGroup = self.CollisionGroup,
 		RespectCanCollide = self.RespectCanCollide,
 		BruteForceAllSlow = self.BruteForceAllSlow,
+		VisualizeRay = self.VisualizeRay,
 	}
 end
 
 function RaycastParams.FromTable(tbl)
+	assert(type(tbl) == "table", "Expected table")
 	assert(tbl.type == "RaycastParams", "Table is not a RaycastParams")
+
 	local rp = RaycastParams.new()
-	rp.FilterDescendantsInstances = tbl.FilterDescendantsInstances or {}
-	rp.FilterType = tbl.FilterType or Enum.RaycastFilterType.Whitelist
-	rp.IgnoreWater = tbl.IgnoreWater or false
-	rp.CollisionGroup = tbl.CollisionGroup or "Default"
-	rp.RespectCanCollide = tbl.RespectCanCollide or false
-	rp.BruteForceAllSlow = tbl.BruteForceAllSlow or false
+
+	-- deep copy filter list
+	if tbl.FilterDescendantsInstances then
+		for i, v in ipairs(tbl.FilterDescendantsInstances) do
+			rp.FilterDescendantsInstances[i] = v
+		end
+	end
+
+	-- safe assignments
+	if tbl.FilterType ~= nil then
+		rp.FilterType = tbl.FilterType
+	end
+
+	if tbl.IgnoreWater ~= nil then
+		rp.IgnoreWater = tbl.IgnoreWater
+	end
+
+	if tbl.CollisionGroup ~= nil then
+		rp.CollisionGroup = tbl.CollisionGroup
+	end
+
+	if tbl.RespectCanCollide ~= nil then
+		rp.RespectCanCollide = tbl.RespectCanCollide
+	end
+
+	if tbl.BruteForceAllSlow ~= nil then
+		rp.BruteForceAllSlow = tbl.BruteForceAllSlow
+	end
+	if tbl.VisualizeRay ~= nil then
+		rp.VisualizeRay = tbl.VisualizeRay
+	end
+
 	return rp
 end
 

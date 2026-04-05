@@ -1,4 +1,4 @@
--- Impulse3D Broadphase — Uniform Grid Spatial Hash
+-- Impulse3D Broadphase - Uniform Grid Spatial Hash
 -- devcell
 --
 -- Usage per frame:

@@ -529,10 +529,19 @@ local TRI_TABLE = {
 local Terrain = Instance.new("Terrain")
 
 local CHUNK_SIZE = 16 -- voxels per chunk axis
+local MAX_REPLICATION_VOXELS_PER_BATCH = 20
 local UV_SCALE = 0.5 -- scale for planar UV mapping
 
 local function chunkKey(cx, cy, cz)
 	return cx .. "," .. cy .. "," .. cz
+end
+
+local function isVoxelSolid(voxel)
+	return voxel ~= nil and (voxel.density or 0) > 0
+end
+
+local function shouldStoreVoxel(voxel)
+	return isVoxelSolid(voxel)
 end
 
 local function voxelToChunk(x, y, z)
@@ -544,6 +553,7 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		Decoration = true,
 		GrassLength = 10,
 		BaseClass = "Singleton",
+		CanReplicate = false,
 		MaterialColors = "",
 		WaterColor = Color3.new(0, 0, 0),
 		WaterReflectance = 0,
@@ -555,11 +565,16 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		IsoLevel = 0.2,
 		_blocks = {}, -- [x][y][z] = voxel
 		_chunks = {}, -- chunkKey -> { mesh, dirty }
+		_dirtyChunkQueue = {},
+		_dirtyChunkQueueHead = 1,
+		_dirtyChunkLookup = {},
+		_replicationDirtyChunks = {},
+		_nextOutgoingReplicationTransferId = 0,
+		_nextExpectedReplicationTransferId = 1,
+		_pendingReplicationTransfers = {},
 	})
 
-	if FlagExists("server") then
-		return Terrain
-	end
+	local isHeadlessRuntime = IsHeadless == true
 
 	function Terrain:_getVoxel(x, y, z)
 		local xr = Terrain._blocks[x]
@@ -598,17 +613,98 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		return nx / len, ny / len, nz / len
 	end
 
-	function Terrain:_setVoxel(x, y, z, voxel)
-		Terrain._blocks[x] = Terrain._blocks[x] or {}
-		Terrain._blocks[x][y] = Terrain._blocks[x][y] or {}
-		Terrain._blocks[x][y][z] = voxel
+	local function markChunkDirtyByCoords(cx, cy, cz, skipReplication)
+		local k = chunkKey(cx, cy, cz)
+		local chunk = Terrain._chunks[k]
+		if not chunk then
+			chunk = { mesh = nil, dirty = true, cx = cx, cy = cy, cz = cz }
+			Terrain._chunks[k] = chunk
+		else
+			chunk.dirty = true
+		end
+
+		if skipReplication ~= true then
+			Terrain._replicationDirtyChunks[k] = true
+		end
+
+		if not Terrain._dirtyChunkLookup[k] then
+			Terrain._dirtyChunkLookup[k] = true
+			Terrain._dirtyChunkQueue[#Terrain._dirtyChunkQueue + 1] = k
+		end
+
+		return chunk, k
+	end
+
+	local function removeVoxelFromStorage(x, y, z)
+		local xr = Terrain._blocks[x]
+		if not xr then
+			return
+		end
+
+		local yr = xr[y]
+		if not yr then
+			return
+		end
+
+		yr[z] = nil
+		if next(yr) == nil then
+			xr[y] = nil
+		end
+		if next(xr) == nil then
+			Terrain._blocks[x] = nil
+		end
+	end
+
+	function Terrain:_setVoxel(x, y, z, voxel, skipReplication)
+		if shouldStoreVoxel(voxel) then
+			Terrain._blocks[x] = Terrain._blocks[x] or {}
+			Terrain._blocks[x][y] = Terrain._blocks[x][y] or {}
+			Terrain._blocks[x][y][z] = voxel
+		else
+			removeVoxelFromStorage(x, y, z)
+		end
 
 		local cx, cy, cz = voxelToChunk(x, y, z)
-		local k = chunkKey(cx, cy, cz)
-		if not Terrain._chunks[k] then
-			Terrain._chunks[k] = { mesh = nil, dirty = true, cx = cx, cy = cy, cz = cz }
-		else
-			Terrain._chunks[k].dirty = true
+		markChunkDirtyByCoords(cx, cy, cz, skipReplication)
+	end
+
+	function Terrain:_clearChunkVoxels(cx, cy, cz, skipReplication)
+		local x0 = cx * CHUNK_SIZE
+		local y0 = cy * CHUNK_SIZE
+		local z0 = cz * CHUNK_SIZE
+
+		for x = x0, x0 + CHUNK_SIZE - 1 do
+			local xr = Terrain._blocks[x]
+			if xr then
+				for y = y0, y0 + CHUNK_SIZE - 1 do
+					local yr = xr[y]
+					if yr then
+						for z = z0, z0 + CHUNK_SIZE - 1 do
+							yr[z] = nil
+						end
+						if next(yr) == nil then
+							xr[y] = nil
+						end
+					end
+				end
+				if next(xr) == nil then
+					Terrain._blocks[x] = nil
+				end
+			end
+		end
+
+		markChunkDirtyByCoords(cx, cy, cz, skipReplication)
+	end
+
+	local function releaseChunkResources(chunk)
+		if chunk._cpuMeshData then
+			r3d.lib.R3D_UnloadMeshData(chunk._cpuMeshData)
+			chunk._cpuMeshData = nil
+		end
+		if chunk.grassInstanceBuffer then
+			pcall(rlib.R3D_UnloadInstanceBuffer, chunk.grassInstanceBuffer)
+			chunk.grassInstanceBuffer = nil
+			chunk.grassInstanceCount = nil
 		end
 	end
 
@@ -900,14 +996,17 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end
 
 		if #vertices == 0 then
+			releaseChunkResources(chunk)
 			chunk.mesh = nil
 			chunk.dominantMaterial = nil
-			if chunk.grassInstanceBuffer then
-				pcall(rlib.R3D_UnloadInstanceBuffer, chunk.grassInstanceBuffer)
-				chunk.grassInstanceBuffer = nil
-				chunk.grassInstanceCount = nil
-			end
 			chunk.dirty = false
+
+			local PhysicsService = datamodel:GetService("JoltPhysicsService")
+			if PhysicsService then
+				local k = chunkKey(cx, cy, cz)
+				PhysicsService.UpdateTerrainChunk(k, nil, nil)
+			end
+
 			return
 		end
 
@@ -941,11 +1040,25 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 			angleThreshold = 90,
 			tolerance = Terrain.VoxelSize * 0.05,
 		})
-		chunk.mesh = meshgen.buildMesh(sv, si, {
+		if chunk._cpuMeshData then
+			r3d.lib.R3D_UnloadMeshData(chunk._cpuMeshData)
+			chunk._cpuMeshData = nil
+		end
+
+		local result = meshgen.buildMeshWithData(sv, si, {
 			indicesAreZeroBased = true,
 			usage = meshgen.Usage.Dynamic,
 		})
+		chunk._cpuMeshData = result[1]
+		chunk.mesh = result[2]
 		chunk.dirty = false
+
+		local PhysicsService = datamodel:GetService("JoltPhysicsService")
+		if PhysicsService then
+			local k = chunkKey(cx, cy, cz)
+			PhysicsService.UpdateTerrainChunk(k, sv, si)
+		end
+
 		if Terrain.Decoration then
 			Terrain:_spawnGrassForChunk(chunk)
 		end
@@ -955,6 +1068,10 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 	local MAX_CHUNK_DISTANCE = 12 -- chunks distance
 
 	function Terrain:GenerateMesh()
+		if isServerRuntime then
+			return
+		end
+
 		if Terrain._isGenerating then
 			return
 		end
@@ -963,9 +1080,16 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		task.spawn(function()
 			local count = 0
 			local workspace = datamodel:GetService("Workspace")
+			local queue = Terrain._dirtyChunkQueue
 
-			for _, chunk in pairs(Terrain._chunks) do
-				if chunk.dirty then
+			while Terrain._dirtyChunkQueueHead <= #queue do
+				local key = queue[Terrain._dirtyChunkQueueHead]
+				Terrain._dirtyChunkQueue[Terrain._dirtyChunkQueueHead] = nil
+				Terrain._dirtyChunkQueueHead += 1
+				Terrain._dirtyChunkLookup[key] = nil
+
+				local chunk = Terrain._chunks[key]
+				if chunk and chunk.dirty then
 					local camera = workspace.CurrentCamera
 					local camPos = camera and camera.CFrame.Position or Vector3.new(0, 0, 0)
 
@@ -988,6 +1112,9 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 					end
 				end
 			end
+
+			Terrain._dirtyChunkQueue = {}
+			Terrain._dirtyChunkQueueHead = 1
 			Terrain._isGenerating = false
 		end)
 	end
@@ -1011,14 +1138,12 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		for x = x0, x0 + CHUNK_SIZE - 1 do
 			for z = z0, z0 + CHUNK_SIZE - 1 do
-				-- scan from 2 above the chunk top to catch surface voxels near the boundary
 				for y = y0 + CHUNK_SIZE + 1, y0, -1 do
 					local v = Terrain:_getVoxel(x, y, z)
 					if not v or (v.density or 0) < Terrain.IsoLevel then
 						continue -- air, keep scanning down
 					end
 
-					-- this voxel is solid, check the one above is air
 					local above = Terrain:_getVoxel(x, y + 1, z)
 					local aboveIsSolid = above and (above.density or 0) >= Terrain.IsoLevel
 					if aboveIsSolid then
@@ -1026,7 +1151,6 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 					end
 
 					if v.material == "grass" then
-						-- solid grass voxel with air above: spawn here
 						local nx, ny, nz = Terrain:_getNormal(x, y, z)
 						if ny >= 0.6 then
 							local dBelow = Terrain:_getDensity(x, y, z)
@@ -1090,6 +1214,354 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		local buf, n = grassgen.createGrassInstanceBuffer(rlib, instances)
 		chunk.grassInstanceBuffer = buf
 		chunk.grassInstanceCount = n
+	end
+
+	function Terrain:_captureReplicationSettings()
+		return {
+			voxelSize = Terrain.VoxelSize,
+			useMarchingCubes = Terrain.UseMarchingCubes,
+			isoLevel = Terrain.IsoLevel,
+			decoration = Terrain.Decoration,
+			grassLength = Terrain.GrassLength,
+		}
+	end
+
+	function Terrain:_applyReplicationSettings(settings)
+		if type(settings) ~= "table" then
+			return
+		end
+
+		if settings.voxelSize ~= nil then
+			Terrain.VoxelSize = settings.voxelSize
+		end
+		if settings.useMarchingCubes ~= nil then
+			Terrain.UseMarchingCubes = settings.useMarchingCubes
+		end
+		if settings.isoLevel ~= nil then
+			Terrain.IsoLevel = settings.isoLevel
+		end
+		if settings.decoration ~= nil then
+			Terrain.Decoration = settings.decoration
+		end
+		if settings.grassLength ~= nil then
+			Terrain.GrassLength = settings.grassLength
+		end
+	end
+
+	function Terrain:_captureReplicationChunk(cx, cy, cz)
+		local voxels = {}
+		local x0 = cx * CHUNK_SIZE
+		local y0 = cy * CHUNK_SIZE
+		local z0 = cz * CHUNK_SIZE
+
+		for x = x0, x0 + CHUNK_SIZE - 1 do
+			local xr = Terrain._blocks[x]
+			if xr then
+				for y = y0, y0 + CHUNK_SIZE - 1 do
+					local yr = xr[y]
+					if yr then
+						for z = z0, z0 + CHUNK_SIZE - 1 do
+							local voxel = yr[z]
+							if isVoxelSolid(voxel) then
+								voxels[#voxels + 1] = {
+									x = x - x0,
+									y = y - y0,
+									z = z - z0,
+									density = voxel.density or 0,
+									material = voxel.material,
+									color = voxel.color and voxel.color:ToTable() or nil,
+								}
+							end
+						end
+					end
+				end
+			end
+		end
+
+		return {
+			key = chunkKey(cx, cy, cz),
+			cx = cx,
+			cy = cy,
+			cz = cz,
+			voxels = voxels,
+		}
+	end
+
+	local function splitReplicationChunk(chunkState)
+		local voxels = chunkState.voxels or {}
+		if #voxels == 0 then
+			return {
+				{
+					key = chunkState.key,
+					cx = chunkState.cx,
+					cy = chunkState.cy,
+					cz = chunkState.cz,
+					reset = true,
+					voxels = {},
+				},
+			}
+		end
+
+		local segments = {}
+		local index = 1
+		while index <= #voxels do
+			local segmentVoxels = {}
+			for voxelIndex = index, math.min(index + MAX_REPLICATION_VOXELS_PER_BATCH - 1, #voxels) do
+				segmentVoxels[#segmentVoxels + 1] = voxels[voxelIndex]
+			end
+
+			segments[#segments + 1] = {
+				key = chunkState.key,
+				cx = chunkState.cx,
+				cy = chunkState.cy,
+				cz = chunkState.cz,
+				reset = index == 1,
+				voxels = segmentVoxels,
+			}
+
+			index += MAX_REPLICATION_VOXELS_PER_BATCH
+		end
+
+		return segments
+	end
+
+	function Terrain:_buildReplicationBatches(chunks, shouldReset)
+		local settings = Terrain:_captureReplicationSettings()
+		Terrain._nextOutgoingReplicationTransferId += 1
+		local transferId = Terrain._nextOutgoingReplicationTransferId
+		local segments = {}
+		for _, chunkState in ipairs(chunks or {}) do
+			for _, segment in ipairs(splitReplicationChunk(chunkState)) do
+				segments[#segments + 1] = segment
+			end
+		end
+
+		if #segments == 0 then
+			return {
+				{
+					transferId = transferId,
+					batchIndex = 1,
+					batchCount = 1,
+					settings = settings,
+					reset = shouldReset == true,
+					final = true,
+					chunks = {},
+				},
+			}
+		end
+
+		local batches = {}
+		local currentBatch = nil
+		local currentVoxelCount = 0
+
+		local function pushBatch(finalBatch)
+			if currentBatch == nil then
+				return
+			end
+
+			currentBatch.final = finalBatch == true
+			batches[#batches + 1] = currentBatch
+			currentBatch = nil
+			currentVoxelCount = 0
+		end
+
+		for _, segment in ipairs(segments) do
+			local voxelCount = #(segment.voxels or {})
+			if currentBatch == nil then
+				currentBatch = {
+					settings = #batches == 0 and settings or nil,
+					reset = shouldReset == true and #batches == 0 or nil,
+					chunks = {},
+				}
+			elseif currentVoxelCount + voxelCount > MAX_REPLICATION_VOXELS_PER_BATCH then
+				pushBatch(false)
+				currentBatch = {
+					chunks = {},
+				}
+			end
+
+			currentBatch.chunks[#currentBatch.chunks + 1] = segment
+			currentVoxelCount += voxelCount
+		end
+
+		pushBatch(true)
+		for index, batch in ipairs(batches) do
+			batch.transferId = transferId
+			batch.batchIndex = index
+			batch.batchCount = #batches
+		end
+		return batches
+	end
+
+	function Terrain:_flushPendingReplicationTransfers(applyFn)
+		while true do
+			local transfer = Terrain._pendingReplicationTransfers[Terrain._nextExpectedReplicationTransferId]
+			if not transfer then
+				return
+			end
+
+			while transfer.batches[transfer.nextBatchIndex] do
+				local payload = transfer.batches[transfer.nextBatchIndex]
+				transfer.batches[transfer.nextBatchIndex] = nil
+				applyFn(payload)
+				transfer.nextBatchIndex += 1
+			end
+
+			if transfer.nextBatchIndex <= transfer.batchCount then
+				return
+			end
+
+			Terrain._pendingReplicationTransfers[Terrain._nextExpectedReplicationTransferId] = nil
+			Terrain._nextExpectedReplicationTransferId += 1
+		end
+	end
+
+	function Terrain:_applyOrderedReplicationPayload(payload, applyFn)
+		if type(payload) ~= "table" then
+			return
+		end
+
+		if payload.transferId == nil or payload.batchIndex == nil or payload.batchCount == nil then
+			applyFn(payload)
+			return
+		end
+
+		local transfer = Terrain._pendingReplicationTransfers[payload.transferId]
+		if not transfer then
+			transfer = {
+				batchCount = payload.batchCount,
+				nextBatchIndex = 1,
+				batches = {},
+			}
+			Terrain._pendingReplicationTransfers[payload.transferId] = transfer
+		else
+			transfer.batchCount = math.max(transfer.batchCount or 0, payload.batchCount)
+		end
+
+		transfer.batches[payload.batchIndex] = payload
+		Terrain:_flushPendingReplicationTransfers(applyFn)
+	end
+
+	function Terrain:_applyReplicationChunk(chunkState)
+		if type(chunkState) ~= "table" then
+			return
+		end
+
+		local cx = chunkState.cx
+		local cy = chunkState.cy
+		local cz = chunkState.cz
+		if cx == nil or cy == nil or cz == nil then
+			return
+		end
+
+		if chunkState.reset ~= false then
+			Terrain:_clearChunkVoxels(cx, cy, cz, true)
+		end
+		for _, voxel in ipairs(chunkState.voxels or {}) do
+			Terrain:_setVoxel(cx * CHUNK_SIZE + voxel.x, cy * CHUNK_SIZE + voxel.y, cz * CHUNK_SIZE + voxel.z, {
+				density = voxel.density or 0,
+				material = voxel.material,
+				color = voxel.color and Color3.FromTable(voxel.color) or Color3.new(1, 1, 1),
+			}, true)
+		end
+	end
+
+	function Terrain:ExportReplicationSnapshot()
+		local chunks = {}
+		for _, chunk in pairs(Terrain._chunks) do
+			chunks[#chunks + 1] = Terrain:_captureReplicationChunk(chunk.cx, chunk.cy, chunk.cz)
+		end
+
+		return {
+			settings = Terrain:_captureReplicationSettings(),
+			chunks = chunks,
+		}
+	end
+
+	function Terrain:ExportReplicationSnapshotBatches()
+		local chunks = {}
+		for _, chunk in pairs(Terrain._chunks) do
+			chunks[#chunks + 1] = Terrain:_captureReplicationChunk(chunk.cx, chunk.cy, chunk.cz)
+		end
+
+		return Terrain:_buildReplicationBatches(chunks, true)
+	end
+
+	function Terrain:ConsumeReplicationChunkUpdates()
+		if next(Terrain._replicationDirtyChunks) == nil then
+			return nil
+		end
+
+		local chunks = {}
+		for key in pairs(Terrain._replicationDirtyChunks) do
+			local chunk = Terrain._chunks[key]
+			if chunk then
+				chunks[#chunks + 1] = Terrain:_captureReplicationChunk(chunk.cx, chunk.cy, chunk.cz)
+			end
+		end
+
+		Terrain._replicationDirtyChunks = {}
+
+		return {
+			settings = Terrain:_captureReplicationSettings(),
+			chunks = chunks,
+		}
+	end
+
+	function Terrain:ConsumeReplicationChunkUpdateBatches()
+		local payload = Terrain:ConsumeReplicationChunkUpdates()
+		if not payload then
+			return nil
+		end
+
+		return Terrain:_buildReplicationBatches(payload.chunks, false)
+	end
+
+	function Terrain:ResetReplicationData()
+		for _, chunk in pairs(Terrain._chunks) do
+			releaseChunkResources(chunk)
+		end
+		Terrain._blocks = {}
+		Terrain._chunks = {}
+		Terrain._dirtyChunkQueue = {}
+		Terrain._dirtyChunkQueueHead = 1
+		Terrain._dirtyChunkLookup = {}
+		Terrain._replicationDirtyChunks = {}
+	end
+
+	function Terrain:ApplyReplicationSnapshot(payload)
+		Terrain:_applyOrderedReplicationPayload(payload, function(batchPayload)
+			local isSinglePayload = batchPayload == nil or (batchPayload.reset == nil and batchPayload.final == nil)
+			Terrain:_applyReplicationSettings(batchPayload and batchPayload.settings)
+			if isSinglePayload or (batchPayload and batchPayload.reset == true) then
+				Terrain:ResetReplicationData()
+			end
+
+			for _, chunk in ipairs((batchPayload and batchPayload.chunks) or {}) do
+				Terrain:_applyReplicationChunk(chunk)
+			end
+
+			if isSinglePayload or (batchPayload and batchPayload.final ~= false) then
+				Terrain:GenerateMesh()
+			end
+		end)
+	end
+
+	function Terrain:ApplyReplicationChunkBatch(payload)
+		Terrain:_applyOrderedReplicationPayload(payload, function(batchPayload)
+			local isSinglePayload = batchPayload == nil or (batchPayload.reset == nil and batchPayload.final == nil)
+			Terrain:_applyReplicationSettings(batchPayload and batchPayload.settings)
+			if batchPayload and batchPayload.reset == true then
+				Terrain:ResetReplicationData()
+			end
+			for _, chunk in ipairs((batchPayload and batchPayload.chunks) or {}) do
+				Terrain:_applyReplicationChunk(chunk)
+			end
+
+			if isSinglePayload or (batchPayload and batchPayload.final ~= false) then
+				Terrain:GenerateMesh()
+			end
+		end)
 	end
 
 	function Terrain:FillBlock(minPos, maxPos, block)
@@ -1384,7 +1856,9 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end)
 	end
 
-	Terrain:StartRendering()
+	if not isHeadlessRuntime then
+		Terrain:StartRendering()
+	end
 
 	return Terrain
 end

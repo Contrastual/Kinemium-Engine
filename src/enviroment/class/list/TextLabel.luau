@@ -8,6 +8,30 @@ local lib = raylib.lib
 local GuiObject = require("@GuiObject")
 local RichText = require("@Kinemium.richtext")
 
+local function resolveBlendMode(value)
+	if type(value) == "number" then
+		return value
+	end
+	if type(value) ~= "string" then
+		return raylib.const.BlendMode.BLEND_ALPHA
+	end
+
+	local normalized = string.lower(value)
+	if normalized == "additive" or normalized == "add" then
+		return raylib.const.BlendMode.BLEND_ADDITIVE
+	elseif normalized == "multiply" or normalized == "multiplied" then
+		return raylib.const.BlendMode.BLEND_MULTIPLIED
+	elseif normalized == "premultiply" or normalized == "premultipliedalpha" or normalized == "premultiplied" then
+		return raylib.const.BlendMode.BLEND_ALPHA_PREMULTIPLY
+	elseif normalized == "addcolors" then
+		return raylib.const.BlendMode.BLEND_ADD_COLORS
+	elseif normalized == "subtract" or normalized == "subtractcolors" then
+		return raylib.const.BlendMode.BLEND_SUBTRACT_COLORS
+	end
+
+	return raylib.const.BlendMode.BLEND_ALPHA
+end
+
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 200, 0, 50),
@@ -48,13 +72,25 @@ propTable.render = function(lib, object, dt, structs, renderer)
 	if not object.Visible or not framePos or not frameSize then
 		return
 	end
-
 	local layout, spacing = RichText.GetLayout(object, frameSize, renderer, defaultFont)
 	if not layout then
 		return framePos, frameSize
 	end
 
+	local blend = object:FindFirstChildOfClass("UIBlend")
+	local didBlend = false
+	if blend and blend.Enabled ~= false and blend.AffectSelf ~= false then
+		lib.BeginBlendMode(resolveBlendMode(blend.Mode))
+		didBlend = true
+	end
+
 	RichText.DrawLayout(lib, object, framePos, frameSize, layout, spacing)
+
+	if didBlend then
+		lib.EndBlendMode()
+	end
+
+	GuiObject.renderChildren(lib, object, dt, structs, renderer)
 
 	return framePos, frameSize
 end

@@ -7,6 +7,7 @@ local KiRend = {}
 --local raygui = require("@raygui")
 
 -- DEPENDENCIES
+local Vector2 = require("@Vector2")
 local skybox = require("./renderer/skybox")
 local texture = require("./renderer/texture")
 local signal = require("@Kinemium.signal")
@@ -146,6 +147,19 @@ function KiRend.new(config: KiRendConf)
 		ShowPerfOverlay = false,
 		PerfStats = perf_stats,
 
+		LoadImageAsTex = function(path)
+			local image = lib.LoadImage(path)
+			local buf = lib.LoadTextureFromImage(image)
+
+			local texture = buf:getptr("texture", structs.Texture2D)
+			local texture_raw = texture:getraw()
+			raylib.lib.SetTextureFilter(texture_raw, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+			raylib.lib.SetTextureWrap(texture_raw, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+			raylib.lib.GenTextureMipmaps(texture_raw)
+
+			return buf
+		end,
+
 		SetDimension = function(self, dimension: "2D" | "3D")
 			Dimension = dimension
 		end,
@@ -201,7 +215,11 @@ function KiRend.new(config: KiRendConf)
 			end,
 
 			Remove = function(name)
-				renderer_storage.fonts[name] = nil
+				local font = renderer_storage.fonts[name]
+				if font then
+					lib.UnloadFont(font)
+					renderer_storage.fonts[name] = nil
+				end
 			end,
 		},
 
@@ -722,6 +740,18 @@ function KiRend.new(config: KiRendConf)
 
 		profileNextFrame()
 		profileBegin("Update")
+
+		local mousePos = lib.GetMousePosition()
+		local delta = lib.GetMouseDelta()
+
+		renderer_eventbus:Fire("MouseData", {
+			position = Vector2.new(mousePos.x, mousePos.y),
+			delta = Vector2.new(delta.x, delta.y),
+			mouse_wheel_move = lib.GetMouseWheelMove(),
+			mouse_wheel_delta = lib.GetMouseDelta(),
+			is_cursor_hidden = lib.IsCursorHidden() == 1,
+			is_cursor_inbounds = lib.IsCursorOnScreen() == 1,
+		})
 
 		local delta = lib.GetFrameTime()
 

@@ -76,7 +76,6 @@ local TYPE_DESERIALIZERS = {
 		return BoundingBox.FromTable(v)
 	end,
 	EnumItem = function(v)
-		print("Got enum item ", v)
 		return Enum[v.EnumType][v.Name]
 	end,
 }

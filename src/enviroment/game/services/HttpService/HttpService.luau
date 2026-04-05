@@ -63,6 +63,18 @@ HttpService.InitRenderer = function(renderer, renderer_signal, game)
 		return JSON.decode(str)
 	end
 
+	function HttpService:GenerateGUID(curly)
+		local function generateGUID(): string
+			local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"
+			return template:gsub("[xy]", function(c)
+				local r = math.random(0, 15)
+				local v = c == "x" and r or (r % 4 + 8)
+				return string.format("%x", v)
+			end)
+		end
+		return generateGUID()
+	end
+
 	function HttpService:Websocket(opts, accepted)
 		local host = opts.host
 

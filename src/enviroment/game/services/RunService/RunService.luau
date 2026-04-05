@@ -1,5 +1,7 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
+local Enum = require("@EnumMap")
+local RollbackEngine = require("./RollbackEngine")
 
 local RunService = Instance.new("RunService")
 
@@ -21,6 +23,80 @@ end
 
 function RunService:UnbindFromRenderStep(name)
 	renderBindings[name] = nil
+end
+
+local simulationBindings = {}
+local predictedInstances = {}
+local currentTick = 0
+local SIMULATION_DT = 1 / 60
+local accumulator = 0
+
+function RunService:BindToSimulation(callback, frequency)
+	table.insert(simulationBindings, callback)
+end
+
+function RunService:GetSimulationBindings()
+	return simulationBindings
+end
+
+function RunService:GetSimulationTick()
+	return currentTick
+end
+
+function RunService:GetSimulationDT()
+	return SIMULATION_DT
+end
+
+function RunService:PerformRollback(rollbackTick)
+	if not RollbackEngine:RestoreState(rollbackTick) then
+		return
+	end
+
+	local targetTick = currentTick
+	currentTick = rollbackTick
+
+	while currentTick < targetTick do
+		currentTick += 1
+		for _, callback in ipairs(simulationBindings) do
+			callback(SIMULATION_DT)
+		end
+
+		local predicted = RunService:GetPredictedInstances()
+		RollbackEngine:CaptureState(currentTick, predicted)
+	end
+end
+
+function RunService:SetPredictionMode(context, mode)
+	if type(context) == "table" then
+		rawset(context, "_predictionMode", mode)
+		if mode == Enum.PredictionMode.On or mode == Enum.PredictionMode.Automatic then
+			predictedInstances[context] = true
+		else
+			predictedInstances[context] = nil
+		end
+	end
+end
+
+function RunService:GetPredictedInstances()
+	local list = {}
+	for instance in pairs(predictedInstances) do
+		if instance.Parent then
+			table.insert(list, instance)
+		else
+			predictedInstances[instance] = nil
+		end
+	end
+	return list
+end
+
+function RunService:GetPredictionStatus(context)
+	if type(context) == "table" then
+		local mode = rawget(context, "_predictionMode") or Enum.PredictionMode.Automatic
+		if mode == Enum.PredictionMode.Off then
+			return Enum.PredictionStatus.NotPredicted
+		end
+	end
+	return Enum.PredictionStatus.Predicted
 end
 
 local function runRenderBindings(dt)
@@ -90,6 +166,19 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 		elseif route == "Heartbeat" then
 			if not status.IsPaused then
 				Heartbeat:Fire(dt)
+
+				accumulator += dt
+				while accumulator >= SIMULATION_DT do
+					currentTick += 1
+					for _, callback in ipairs(simulationBindings) do
+						callback(SIMULATION_DT)
+					end
+
+					local predicted = RunService:GetPredictedInstances()
+					RollbackEngine:CaptureState(currentTick, predicted)
+
+					accumulator -= SIMULATION_DT
+				end
 			end
 		elseif route == "Stepped" then
 			if not status.IsPaused then

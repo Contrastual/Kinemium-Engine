@@ -23,6 +23,29 @@ return {
 
 		local PhysicsService = game:GetService("JoltPhysicsService")
 
+		local function shouldApplyPhysics(part)
+			local replicator = game:GetService("ReplicatorService")
+			local ownership = replicator and replicator.NetworkOwnership or nil
+			if ownership and ownership.ShouldSimulatePhysicsForMachine then
+				return ownership.ShouldSimulatePhysicsForMachine(part, game)
+			end
+
+			if part == nil then
+				return false
+			end
+
+			if part.NetworkOwner == nil then
+				return IsServer == true
+			end
+
+			if IsClient ~= true then
+				return false
+			end
+
+			local players = game:GetService("Players")
+			return players.LocalPlayer ~= nil and players.LocalPlayer == part.NetworkOwner
+		end
+
 		local function updateArrow()
 			if not instance.Enabled or not instance.Attachment0 then
 				return
@@ -69,7 +92,7 @@ return {
 				local attach = instance.Attachment0
 				if attach and attach:IsA("Attachment") then
 					local parent = attach.Parent
-					if parent:IsA("Part") or parent:IsA("MeshPart") then
+					if (parent:IsA("Part") or parent:IsA("MeshPart")) and shouldApplyPhysics(parent) then
 						PhysicsService.ApplyImpulse(parent, instance.Force)
 					end
 				end

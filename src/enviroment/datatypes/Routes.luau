@@ -10,6 +10,8 @@ local function routeToPattern(path)
 	return "^" .. pattern .. "$"
 end
 
+Route.cleanup = nil
+
 function Route.add(path, handler)
 	assert(type(path) == "string", "Route path must be a string")
 	assert(type(handler) == "function", "Handler must be a function")
@@ -77,11 +79,29 @@ function Route.handle(path, ...)
 	for _, route in pairs(Route.routes) do
 		local captures = { path:match(route.pattern) }
 		if #captures > 0 then
-			return route.handler(table.unpack(captures), ...)
+			if Route.cleanup then
+				Route.cleanup()
+				Route.cleanup = nil
+			end
+
+			local result = route.handler(table.unpack(captures), ...)
+
+			if type(result) == "function" then
+				Route.cleanup = result
+			end
+
+			return result
 		end
 	end
 
 	return nil, "404: Route not found"
+end
+
+function Route.deselect()
+	if Route.cleanup then
+		Route.cleanup()
+		Route.cleanup = nil
+	end
 end
 
 function Route.callSafe(path, ...)

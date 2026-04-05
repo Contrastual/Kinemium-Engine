@@ -1,9 +1,35 @@
+local Vector2 = require("@Vector2")
 local Vector3 = require("@Vector3")
 local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()
+
+local ZERO_V2 = Vector2.new(0, 0)
+
+local function getParentMetrics(parent)
+	local parentAbsPos = ZERO_V2
+	local parentSize = ZERO_V2
+
+	if not parent then
+		return parentAbsPos, parentSize
+	end
+
+	if parent.AbsolutePosition then
+		parentAbsPos = parent.AbsolutePosition
+	elseif parent.RenderOffset then
+		parentAbsPos = parent.RenderOffset
+	end
+
+	if parent.AbsoluteSize then
+		parentSize = parent.AbsoluteSize
+	elseif parent.Size and parent.Size.ToPixels then
+		parentSize = parent.Size:ToPixels(Vector2.new(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()))
+	end
+
+	return parentAbsPos, parentSize
+end
 
 local propTable = {
 	Name = "UIDragDetector",
@@ -28,28 +54,35 @@ return {
 
 					if instance.isDragging == true then
 						local mousePos = raylib.lib.GetMousePosition()
+						local newAbsX = mousePos.x - instance.dragOffset.X
+						local newAbsY = mousePos.y - instance.dragOffset.Y
 
 						if instance.RespectScreenBounds then
-							local newX = math.clamp(
-								mousePos.x - instance.dragOffset.X,
+							newAbsX = math.clamp(
+								newAbsX,
 								0,
 								raylib.lib.GetScreenWidth() - absoluteSize.X
 							)
-							local newY = math.clamp(
-								mousePos.y - instance.dragOffset.Y,
+							newAbsY = math.clamp(
+								newAbsY,
 								0,
 								raylib.lib.GetScreenHeight() - absoluteSize.Y
 							)
-
-							adornee.Position = UDim2.new(adornee.Position.X.Scale, newX, adornee.Position.Y.Scale, newY)
-						else
-							adornee.Position = UDim2.new(
-								adornee.Position.X.Scale,
-								mousePos.x - instance.dragOffset.X,
-								adornee.Position.Y.Scale,
-								mousePos.y - instance.dragOffset.Y
-							)
 						end
+
+						local parentAbsPos, parentSize = getParentMetrics(adornee.Parent)
+						local anchor = adornee.AnchorPoint or ZERO_V2
+						local relativeX = newAbsX - parentAbsPos.X + absoluteSize.X * anchor.X
+						local relativeY = newAbsY - parentAbsPos.Y + absoluteSize.Y * anchor.Y
+						local scaleXOffset = parentSize.X * adornee.Position.X.Scale
+						local scaleYOffset = parentSize.Y * adornee.Position.Y.Scale
+
+						adornee.Position = UDim2.new(
+							adornee.Position.X.Scale,
+							relativeX - scaleXOffset,
+							adornee.Position.Y.Scale,
+							relativeY - scaleYOffset
+						)
 
 						raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
 					end

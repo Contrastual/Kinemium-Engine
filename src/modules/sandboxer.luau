@@ -20,8 +20,8 @@ function sandboxer.run(code, chunk, env)
 			optimization_level = 2,
 		})
 		local thread = luau.load(bytecode, options)
-
 		setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
+
 		return thread()
 	end)
 

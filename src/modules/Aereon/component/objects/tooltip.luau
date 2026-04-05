@@ -20,7 +20,9 @@ return function(objects, data)
 	local config = {
 		targetRect = data.targetRect,
 		text = data.text or "Tooltip",
+		font = data.font or defaultFont,
 		fontSize = data.fontSize or 14,
+		spacing = data.spacing or 1,
 		backgroundColor = data.backgroundColor or color3.new(0.1, 0.1, 0.1),
 		textColor = data.textColor or color3.new(1, 1, 1),
 		padding = data.padding or 8,
@@ -48,7 +50,7 @@ return function(objects, data)
 		config.animAlpha = config.animAlpha + (targetAlpha - config.animAlpha) * 0.15
 
 		if config.animAlpha > 0.01 then
-			local textWidth = raylib.lib.MeasureText(config.text, config.fontSize)
+			local textWidth = raylib.lib.MeasureTextEx(config.font, config.text, config.fontSize, config.spacing).x
 			local tooltipWidth = textWidth + config.padding * 2
 			local tooltipHeight = config.fontSize + config.padding * 2
 
@@ -64,11 +66,12 @@ return function(objects, data)
 				c3tr(config.backgroundColor, 1 - config.animAlpha)
 			)
 
-			raylib.lib.DrawText(
+			raylib.lib.DrawTextEx(
+				config.font,
 				config.text,
-				tooltipX + config.padding,
-				tooltipY + config.padding,
+				vector.create(tooltipX + config.padding, tooltipY + config.padding),
 				config.fontSize,
+				config.spacing,
 				c3tr(config.textColor, 1 - config.animAlpha)
 			)
 		end

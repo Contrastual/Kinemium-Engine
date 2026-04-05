@@ -23,15 +23,18 @@ end
 GuiObject.inherit(propTable)
 
 propTable.render = function(lib, object, dt, structs, renderer)
-	if not object.Visible then
-		return
-	end
-
 	if raylib.lib.IsWindowResized() == 1 then
 		local width, height = lib.GetRenderWidth(), lib.GetRenderHeight()
 		local texture = raylib.lib.LoadRenderTexture(width, height)
+		if object._rendertex then
+			raylib.lib.UnloadRenderTexture(object._rendertex)
+		end
 		object._rendertex = texture
 		improveQuality(texture)
+	end
+
+	if not object.Visible then
+		return
 	end
 
 	if object._rendertex then
@@ -69,6 +72,12 @@ return {
 		instance:SetProperties(propTable)
 		instance._rendertex = texture
 		improveQuality(texture)
+		instance.Destroying:Connect(function()
+			if instance._rendertex then
+				raylib.lib.UnloadRenderTexture(instance._rendertex)
+				instance._rendertex = nil
+			end
+		end)
 		return instance
 	end,
 	inherit = function(tble)

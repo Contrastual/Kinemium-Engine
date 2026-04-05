@@ -594,7 +594,7 @@ local funcs = {
 	R3D_GenMeshHemiSphere = { returns = structs.R3D_Mesh, args = { ffi.types.float, ffi.types.i32, ffi.types.i32 } },
 	R3D_GenMeshCylinder = {
 		returns = structs.R3D_Mesh,
-		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.i32 },
+		args = { ffi.types.float, ffi.types.float, ffi.types.i32 },
 	},
 	R3D_GenMeshTorus = {
 		returns = structs.R3D_Mesh,
@@ -817,15 +817,15 @@ local funcs = {
 		args = { ffi.types.float, ffi.types.float, ffi.types.i32, ffi.types.i32 },
 	},
 	R3D_GenMeshDataSlope = {
-		returns = ffi.types.pointer,
+		returns = structs.R3D_MeshData,
 		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.pointer },
 	},
 	R3D_GenMeshDataCylinder = {
-		returns = ffi.types.pointer,
-		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.i32 },
+		returns = structs.R3D_MeshData,
+		args = { ffi.types.float, ffi.types.float, ffi.types.i32 },
 	},
 	R3D_GenMeshDataCapsule = {
-		returns = ffi.types.pointer,
+		returns = structs.R3D_MeshData,
 		args = { ffi.types.float, ffi.types.float, ffi.types.i32, ffi.types.i32 },
 	},
 
@@ -893,8 +893,8 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
 	R3D_RaycastMesh = {
-		returns = ffi.types.pointer,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		returns = rlstructs.structs.RayCollision,
+		args = { rlstructs.structs.Ray, structs.R3D_MeshData, rlstructs.structs.Matrix },
 	},
 	R3D_RaycastModel = {
 		returns = ffi.types.pointer,

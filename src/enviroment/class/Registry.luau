@@ -1,4 +1,4 @@
-local filesystem = require("../../modules/filesystem")
+local _filesystem = require("../../modules/filesystem")
 local sandboxer = require("../../modules/sandboxer")
 local Instance = require("../class/Instance")
 local datatypes = require("../datatypes/getDatatypes")
@@ -18,31 +18,28 @@ else
 	entries = zune.fs.entries("./src/enviroment/class/list")
 end
 
-task.spawn(function()
-	local createClassesStart = os.clock()
-	for _, entry in pairs(entries) do
-		local createClassStart = os.clock()
-		local requirePath
-		if zembed.IsEmbedded() then
-			local name = zune.fs.path.basename(entry)
-			local full = "./list/" .. name
-			requirePath = string.gsub(full, ".luau", "")
-		else
-			requirePath = "./list/" .. string.gsub(entry.name, ".luau", "")
-		end
+local createClassesStart = os.clock()
+for _, entry in pairs(entries) do
+	local createClassStart = os.clock()
+	local requirePath
+	if zembed.IsEmbedded() then
+		local name = zune.fs.path.basename(entry)
+		local full = "./list/" .. name
+		requirePath = string.gsub(full, ".luau", "")
+	else
+		requirePath = "./list/" .. string.gsub(entry.name, ".luau", "")
+	end
 
-		local returned, s, r = require(requirePath)
-		local initTime = (os.clock() - createClassStart) * 1000
-		-- returned = { class = "Part", callback = function(Part) ... end }
+	local returned, s, r = require(requirePath)
+	local initTime = (os.clock() - createClassStart) * 1000
+	-- returned = { class = "Part", callback = function(Part) ... end }
 
-		if not returned then
-			warn(`CLASS: Failed to load {entry.name}: {s} {r}`)
-
-			return
-		end
+	if not returned then
+		_G.warn(`CLASS: Failed to load {entry.name}: {s} {r}`)
+	else
 		listOfClasses[returned.class] = returned
 
-		log(
+		_G.log(
 			string.format(
 				"CLASS: Successfully created class '%s' in %.3fms from file (required in %.3fms): %s",
 				returned.class,
@@ -52,12 +49,12 @@ task.spawn(function()
 			)
 		)
 	end
-	log(string.format("CLASS: Created all classes in %.3fms", (os.clock() - createClassesStart) * 1000))
-end)
+end
+_G.log(string.format("CLASS: Created all classes in %.3fms", (os.clock() - createClassesStart) * 1000))
 
 function registry.createclass(data)
 	listOfClasses[data.class] = data
-	log("Created class for " .. data.class)
+	_G.log("Created class for " .. data.class)
 end
 
 function registry.getClasses()
@@ -70,7 +67,6 @@ function registry.ClassValid(class)
 	else
 		return false
 	end
-	return false
 end
 
 function registry.new(class, renderer, datamodel)
@@ -96,7 +92,7 @@ function registry.new(class, renderer, datamodel)
 		found.callback(instance, renderer, datamodel)
 	end)
 	if not success then
-		warn(`CLASS: Failed to create {class}: {result}`)
+		_G.warn(`CLASS: Failed to create {class}: {result}`)
 	end
 	table.insert(created, instance)
 	return instance

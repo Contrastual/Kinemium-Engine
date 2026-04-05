@@ -8,6 +8,9 @@ local lib = jolt.lib
 local Enum = require("@EnumMap")
 local utils = require("@bufferutils")
 local structs = jolt.structs
+local bodyMaker = require("./_BodyMaker")
+local Protocol = require("../NetworkService/Protocol")
+local NetworkOwnership = require("../ReplicatorService/NetworkOwnership")
 
 local KinemiumPhysicsService = Instance.new("KinemiumPhysicsService")
 KinemiumPhysicsService.ExplorerHidden = true
@@ -24,13 +27,74 @@ local function roundVec3(v)
 end
 
 local bodiesMap = {} -- Part -> BodyID (uint32)
+local softBodiesMap = {} -- SoftBody -> BodyID (uint32)
+local softBodyStates = {} -- SoftBody -> { vIds = {number} }
 local bodyPointerMap = {} -- Part -> BodyPointer (ffi.pointer)
 local inverseMap = {} -- BodyID -> Part
 local bodyConnections = {} -- Part -> RBXScriptConnection
+local partsByNetworkId = {}
+local ownershipImpactTimestamps = {}
 
-local LAYER_NON_MOVING = 0 -- Static objects
-local LAYER_MOVING = 1 -- Dynamic objects
-local NUM_OBJECT_LAYERS = 2
+local terrainBodies = {} -- chunkKey -> BodyID
+
+local OWNERSHIP_IMPACT_COOLDOWN = 0.12
+local OWNERSHIP_IMPACT_CACHE_PRUNE_INTERVAL = 2
+local OWNERSHIP_IMPACT_MIN_CLOSING_SPEED = 2.5
+local OWNERSHIP_IMPACT_MIN_IMPULSE = 0.25
+local OWNERSHIP_IMPACT_MAX_IMPULSE = 250
+local OWNERSHIP_IMPACT_RADIUS_PADDING = 0.2
+local lastOwnershipImpactPrune = 0
+
+local collisionGroups = {
+	[0] = { name = "Default", collidesWith = {} },
+}
+local groupNameToId = { ["Default"] = 0 }
+
+for i = 0, 31 do
+	if not collisionGroups[i] then
+		collisionGroups[i] = { name = "", collidesWith = {} }
+	end
+	for j = 0, 31 do
+		collisionGroups[i].collidesWith[j] = true
+	end
+end
+
+local NUM_OBJECT_LAYERS = 128
+
+local function RegisterCollisionGroup(name)
+	if type(name) ~= "string" then
+		return 0
+	end
+	if groupNameToId[name] then
+		return groupNameToId[name]
+	end
+	for i = 1, 31 do
+		if collisionGroups[i].name == "" then
+			collisionGroups[i].name = name
+			groupNameToId[name] = i
+			return i
+		end
+	end
+	warn("Maximum number of collision groups (32) reached.")
+	return 0
+end
+
+local function GetCollisionGroupId(name)
+	return groupNameToId[name] or 0
+end
+
+local function getLayerForPart(part)
+	local cgName = part.CollisionGroup or "Default"
+	local cgId = GetCollisionGroupId(cgName)
+
+	local motionState = 0
+	if part.CanCollide then
+		motionState = part.Anchored and 0 or 1
+	else
+		motionState = part.Anchored and 2 or 3
+	end
+	return (cgId * 4) + motionState
+end
 
 local function isZero(v)
 	if v == -0 then
@@ -39,6 +103,67 @@ local function isZero(v)
 		return true
 	end
 	return false
+end
+
+local function getNetworkAuthorityTarget(object)
+	return select(1, NetworkOwnership.GetControllerRoot(object)) or object
+end
+
+local function indexPart(part)
+	local networkId = part and part.NetworkId
+	if networkId ~= nil then
+		partsByNetworkId[networkId] = part
+	end
+end
+
+local function unindexPart(part)
+	local networkId = part and part.NetworkId
+	if networkId ~= nil and partsByNetworkId[networkId] == part then
+		partsByNetworkId[networkId] = nil
+	end
+end
+
+local function getPartMass(part)
+	local assemblyMass = part.AssemblyMass or 0
+	if assemblyMass > 0 then
+		return assemblyMass
+	end
+
+	local mass = part.Mass or 1
+	if mass > 0 then
+		return mass
+	end
+
+	return 1
+end
+
+local function getPartRadius(part)
+	local size = part.Size or Vector3.new(1, 1, 1)
+	return math.max(size.X, size.Y, size.Z) * 0.5 + OWNERSHIP_IMPACT_RADIUS_PADDING
+end
+
+local function clampImpulse(impulse)
+	local magnitude = impulse:Magnitude()
+	if magnitude <= OWNERSHIP_IMPACT_MAX_IMPULSE then
+		return impulse
+	end
+	if magnitude <= 1e-6 then
+		return Vector3.zero
+	end
+	return impulse:Unit() * OWNERSHIP_IMPACT_MAX_IMPULSE
+end
+
+local function pruneOwnershipImpactCache(now)
+	if now - lastOwnershipImpactPrune < OWNERSHIP_IMPACT_CACHE_PRUNE_INTERVAL then
+		return
+	end
+
+	lastOwnershipImpactPrune = now
+	for key, timestamp in pairs(ownershipImpactTimestamps) do
+		if now - timestamp > OWNERSHIP_IMPACT_CACHE_PRUNE_INTERVAL * 3 then
+			ownershipImpactTimestamps[key] = nil
+		end
+	end
 end
 
 local function ToJoltVec3(vec3)
@@ -59,6 +184,37 @@ end
 
 local function FromJoltVec3(jvec)
 	return Vector3.new(jvec.x, jvec.y, jvec.z)
+end
+
+local function syncBodyTransformFromPart(part, bodyInterface, bodyID)
+	if not part.CFrame or not part.CFrame.Position then
+		return false
+	end
+
+	local pos_rvec = RVec3(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+
+	local rot_quat = structs.JPH_Quat:new({})
+	local x, y, z, w = part.CFrame:ToQuaternion()
+	buffer.writef32(rot_quat, 0, x)
+	buffer.writef32(rot_quat, 4, y)
+	buffer.writef32(rot_quat, 8, z)
+	buffer.writef32(rot_quat, 12, w)
+
+	if lib.JPH_BodyInterface_SetPositionAndRotation then
+		lib.JPH_BodyInterface_SetPositionAndRotation(bodyInterface, bodyID, pos_rvec, rot_quat, 1)
+	else
+		lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
+		lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
+	end
+
+	local linear = part.AssemblyLinearVelocity or Vector3.zero
+	local angular = part.AssemblyAngularVelocity or Vector3.zero
+	lib.JPH_BodyInterface_SetLinearVelocity(bodyInterface, bodyID, structs.JPH_Vec3:new(ToJoltVec3(linear)))
+	if lib.JPH_BodyInterface_SetAngularVelocity then
+		lib.JPH_BodyInterface_SetAngularVelocity(bodyInterface, bodyID, structs.JPH_Vec3:new(ToJoltVec3(angular)))
+	end
+
+	return true
 end
 
 local function _CFrameToJolt(cf)
@@ -92,9 +248,110 @@ local function _debugBody(bodyInterface, bodyID, partName)
 	)
 end
 
-local function buildShapeForPart(part, halfSize)
+local function getMotionTypeForPart(part)
+	if not part.Anchored then
+		return 2
+	elseif part.isKinematic then
+		return 1
+	end
+
+	return 0
+end
+
+local function getMeshPartGeometry(part)
+	local mesh = part.MeshObject
+	if not mesh or (mesh.ClassName ~= "EditableMesh" and mesh.class ~= "EditableMesh") then
+		return nil
+	end
+
+	local vertexIds = {}
+	for id in pairs(mesh._vertices or {}) do
+		table.insert(vertexIds, id)
+	end
+	if #vertexIds < 3 then
+		return nil
+	end
+
+	table.sort(vertexIds)
+
+	local points = {}
+	local vertexIndex = {}
+	local meshScale = part.MeshScale or 1
+	local collisionScale = part.CollisionScale or 1
+	local sx = part.Size.X * meshScale * collisionScale
+	local sy = part.Size.Y * meshScale * collisionScale
+	local sz = part.Size.Z * meshScale * collisionScale
+
+	for index, vertexId in ipairs(vertexIds) do
+		local position = mesh._vertices[vertexId]
+		if position then
+			points[index] = {
+				position.X * sx,
+				position.Y * sy,
+				position.Z * sz,
+			}
+			vertexIndex[vertexId] = index - 1
+		end
+	end
+
+	local triangles = {}
+	for _, face in pairs(mesh._faces or {}) do
+		local i0 = vertexIndex[face[1]]
+		local i1 = vertexIndex[face[2]]
+		local i2 = vertexIndex[face[3]]
+		if i0 ~= nil and i1 ~= nil and i2 ~= nil then
+			table.insert(triangles, { i0, i1, i2 })
+		end
+	end
+
+	if #triangles == 0 then
+		return nil
+	end
+
+	return points, triangles
+end
+
+local function buildDynamicMeshFallbackShape(part, halfSize, convexRadius)
+	local size = part.Size or Vector3.new(1, 1, 1)
+	local minSize = math.min(size.X, size.Y, size.Z)
+	local maxSize = math.max(size.X, size.Y, size.Z)
+
+	if minSize > 0 and (maxSize / minSize) <= 1.1 then
+		return lib.JPH_SphereShape_Create(minSize * 0.5)
+	end
+
+	return lib.JPH_BoxShape_Create(halfSize, convexRadius)
+end
+
+local function buildShapeForPart(part, halfSize, motionType)
+	local convexRadius = math.min(0.05, math.min(part.Size.X, part.Size.Y, part.Size.Z) * 0.1)
+
+	if part:IsA("MeshPart") then
+		local geometryPoints, geometryTriangles = getMeshPartGeometry(part)
+		if geometryPoints and geometryTriangles and part.CollisionFidelity ~= Enum.CollisionFidelity.Box then
+			if motionType == 2 then
+				print("rocking")
+				return buildDynamicMeshFallbackShape(part, halfSize, convexRadius)
+			elseif part.CollisionFidelity == Enum.CollisionFidelity.Hull then
+				if #geometryPoints >= 4 then
+					local hullShape = bodyMaker.convexHullShape(geometryPoints, convexRadius)
+					if hullShape ~= ffi.null then
+						print("using convex hull for", part.Name)
+						return hullShape
+					end
+				end
+				print("falling back to dynamic mesh for", part.Name)
+				return buildDynamicMeshFallbackShape(part, halfSize, convexRadius)
+			else
+				local meshShape = bodyMaker.meshShape(geometryPoints, geometryTriangles)
+				if meshShape ~= ffi.null then
+					return meshShape
+				end
+			end
+		end
+	end
+
 	if part.Shape == Enum.PartType.Block then
-		local convexRadius = math.min(0.05, math.min(part.Size.X, part.Size.Y, part.Size.Z) * 0.1)
 		return lib.JPH_BoxShape_Create(halfSize, convexRadius)
 	elseif part.Shape == Enum.PartType.Ball then
 		local radius = part.Size.X * 0.5
@@ -104,15 +361,42 @@ local function buildShapeForPart(part, halfSize)
 	return lib.JPH_BoxShape_Create(halfSize, 0.05)
 end
 
+local function updateBodyShape(part, bodyInterface, bodyID)
+	local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+	halfSize:writef32(0, part.Size.X / 2)
+	halfSize:writef32(4, part.Size.Y / 2)
+	halfSize:writef32(8, part.Size.Z / 2)
+
+	local newShape = buildShapeForPart(part, halfSize, getMotionTypeForPart(part))
+	if not newShape or newShape == ffi.null then
+		warn("[Physics] Failed to build shape for", part.Name)
+		return false
+	end
+
+	lib.JPH_BodyInterface_SetShape(bodyInterface, bodyID, newShape, 1, 1)
+	return true
+end
+
 local function createBody(bodyInterface, part, motionType)
 	local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
 	halfSize:writef32(0, part.Size.X / 2)
 	halfSize:writef32(4, part.Size.Y / 2)
 	halfSize:writef32(8, part.Size.Z / 2)
 
-	local shape = buildShapeForPart(part, halfSize)
+	local shape = buildShapeForPart(part, halfSize, motionType)
+	if not shape or shape == ffi.null then
+		warn("[Physics] Failed to build shape for", part.Name)
+		return
+	end
+
+	if not part.CFrame then
+		return
+	end
 
 	part.Position = part.CFrame.Position
+	if not part.Position then
+		return
+	end
 
 	local position = ffi.alloc(structs.JPH_RVec3:size(), structs.JPH_RVec3:alignment())
 	position:writef64(0, part.Position.X)
@@ -126,10 +410,12 @@ local function createBody(bodyInterface, part, motionType)
 	rotation:writef32(8, rotZ)
 	rotation:writef32(12, rotW)
 
-	local layer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
+	local layer = getLayerForPart(part)
 
 	local bodySettings = lib.JPH_BodyCreationSettings_Create3(shape, position, rotation, motionType, layer)
 	lib.JPH_BodyCreationSettings_SetAllowSleeping(bodySettings, 1)
+
+	lib.JPH_BodyCreationSettings_SetAllowDynamicOrKinematic(bodySettings, 1)
 
 	local bodyPtr = lib.JPH_BodyInterface_CreateBody(bodyInterface, bodySettings)
 	if bodyPtr == ffi.null then
@@ -150,6 +436,89 @@ local function createBody(bodyInterface, part, motionType)
 	inverseMap[bodyID] = part
 
 	--debugBody(bodyInterface, bodyID, part.Name)
+	return bodyID
+end
+
+local function createSoftBody(bodyInterface, softBody)
+	local mesh = softBody.Mesh
+	if not mesh or mesh.class ~= "EditableMesh" then
+		warn("[Physics] SoftBody missing valid EditableMesh")
+		return
+	end
+
+	local sharedSettings = lib.JPH_SoftBodySharedSettings_Create()
+
+	local vIds = {}
+	local index = 0
+
+	local vertexSize = structs.JPH_SoftBodyVertex:size()
+	local vertexAlign = structs.JPH_SoftBodyVertex:alignment()
+	local vBuffer = ffi.alloc(vertexSize, vertexAlign)
+
+	local sortedVIds = {}
+	for id, _ in pairs(mesh._vertices) do
+		table.insert(sortedVIds, id)
+	end
+	table.sort(sortedVIds)
+
+	for _, id in ipairs(sortedVIds) do
+		local pos = mesh._vertices[id]
+		table.insert(vIds, id)
+		index += 1
+
+		buffer.writef32(vBuffer, 0, pos.X) -- position.x
+		buffer.writef32(vBuffer, 4, pos.Y) -- position.y
+		buffer.writef32(vBuffer, 8, pos.Z) -- position.z
+		buffer.writef32(vBuffer, 12, 0) -- velocity.x
+		buffer.writef32(vBuffer, 16, 0) -- velocity.y
+		buffer.writef32(vBuffer, 20, 0) -- velocity.z
+		buffer.writef32(vBuffer, 24, 1.0) -- invMass (1.0 = 1kg)
+
+		lib.JPH_SoftBodySharedSettings_AddVertex(sharedSettings, vBuffer)
+
+		if index >= 512 then
+			warn("[Physics] SoftBody vertex limit (512) reached. Clipping mesh.")
+			break
+		end
+	end
+
+	local vIdToIndex = {}
+	for i, id in ipairs(vIds) do
+		vIdToIndex[id] = i - 1
+	end
+
+	for id, face in pairs(mesh._faces) do
+		local i1 = vIdToIndex[face[1]]
+		local i2 = vIdToIndex[face[2]]
+		local i3 = vIdToIndex[face[3]]
+
+		if i1 and i2 and i3 then
+			lib.JPH_SoftBodySharedSettings_AddFace(sharedSettings, i1, i2, i3)
+		end
+	end
+
+	local position = RVec3(0, 0, 0)
+
+	local rotation = structs.JPH_Quat:new({})
+	buffer.writef32(rotation, 12, 1)
+
+	local layer = getLayerForPart(softBody)
+	local creationSettings = lib.JPH_SoftBodyCreationSettings_Create(sharedSettings, position, rotation, layer)
+
+	local bodyPtr = lib.JPH_BodyInterface_CreateAndAddSoftBody(bodyInterface, creationSettings, 0) -- Activate=0
+	if bodyPtr == ffi.null then
+		warn("[Physics] Failed to create SoftBody")
+		return
+	end
+
+	local bodyID = lib.JPH_Body_GetID(bodyPtr)
+	softBodiesMap[softBody] = bodyID
+	softBodyStates[softBody] = {
+		vIds = vIds,
+	}
+	bodyPointerMap[softBody] = bodyPtr
+
+	log("[Physics] Created SoftBody for", softBody.Name, "with", index, "vertices")
 	return bodyID
 end
 
@@ -184,12 +553,27 @@ local function CalculateBodyPhysics(part, bodyInterface, bodyID)
 	local angvelY = angular_vel:readf32(4)
 	local angvelZ = angular_vel:readf32(8)
 
-	local rotX = rotation:readf32(0)
-	local rotY = rotation:readf32(4)
-	local rotZ = rotation:readf32(8)
-	local rotW = rotation:readf32(12)
+	local qx = rotation:readf32(0)
+	local qy = rotation:readf32(4)
+	local qz = rotation:readf32(8)
+	local qw = rotation:readf32(12)
 
-	local finalCF = CFrame.fromQuaternion(rotX, rotY, rotZ, rotW, roundVec3(Vector3.new(posX, posY, posZ)))
+	local qlen = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+	if qlen > 1e-6 then
+		qx, qy, qz, qw = qx / qlen, qy / qlen, qz / qlen, qw / qlen
+	end
+
+	local xx, yy, zz = qx * qx, qy * qy, qz * qz
+	local xy, xz, yz = qx * qy, qx * qz, qy * qz
+	local wx, wy, wz = qw * qx, qw * qy, qw * qz
+
+	local right = Vector3.new(1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy))
+	local up = Vector3.new(2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx))
+	local nLook = Vector3.new(-(2 * (xz + wy)), -(2 * (yz - wx)), -(1 - 2 * (xx + yy)))
+
+	local backward = -nLook
+
+	local finalCF = CFrame.fromMatrix(roundVec3(Vector3.new(posX, posY, posZ)), right, up, backward)
 	local linearVelocity = roundVec3(Vector3.new(velX, velY, velZ))
 	local angularVelocity = roundVec3(Vector3.new(angvelX, angvelY, angvelZ))
 
@@ -241,33 +625,69 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		end
 		log("[Physics] Jolt initialized")
 
+		-- BroadPhase has 3 buckets: 0=NonMoving, 1=Moving, 2=Intangible (both ghost layers share one BP bucket)
+		local NUM_BROADPHASE_LAYERS = 3
 		local broadPhaseLayerInterface =
-			lib.JPH_BroadPhaseLayerInterfaceTable_Create(NUM_OBJECT_LAYERS, NUM_OBJECT_LAYERS)
+			lib.JPH_BroadPhaseLayerInterfaceTable_Create(NUM_OBJECT_LAYERS, NUM_BROADPHASE_LAYERS)
 		if broadPhaseLayerInterface == ffi.null then
 			error("[Physics] Failed to create BroadPhaseLayerInterface")
 		end
 
-		lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, LAYER_NON_MOVING, 0)
-		lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, LAYER_MOVING, 1)
-		log("[Physics] BroadPhaseLayerInterface created")
+		for cg = 0, 31 do
+			local baseLayer = cg * 4
+			lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, baseLayer + 0, 0)
+			lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, baseLayer + 1, 1)
+			lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, baseLayer + 2, 2)
+			lib.JPH_BroadPhaseLayerInterfaceTable_MapObjectToBroadPhaseLayer(broadPhaseLayerInterface, baseLayer + 3, 2)
+		end
+		log("[Physics] BroadPhaseLayerInterface created (4 object layers, 3 BP buckets)")
 
 		local objectLayerPairFilter = lib.JPH_ObjectLayerPairFilterTable_Create(NUM_OBJECT_LAYERS)
 		if objectLayerPairFilter == ffi.null then
 			error("[Physics] Failed to create ObjectLayerPairFilter")
 		end
 
-		lib.JPH_ObjectLayerPairFilterTable_DisableCollision(objectLayerPairFilter, LAYER_NON_MOVING, LAYER_NON_MOVING)
-		lib.JPH_ObjectLayerPairFilterTable_EnableCollision(objectLayerPairFilter, LAYER_NON_MOVING, LAYER_MOVING)
-		lib.JPH_ObjectLayerPairFilterTable_EnableCollision(objectLayerPairFilter, LAYER_MOVING, LAYER_NON_MOVING)
-		lib.JPH_ObjectLayerPairFilterTable_EnableCollision(objectLayerPairFilter, LAYER_MOVING, LAYER_MOVING)
+		local function SetupCollisionMatrix()
+			for cgA = 0, 31 do
+				for cgB = 0, 31 do
+					local collides = collisionGroups[cgA].collidesWith[cgB]
+					for stateA = 0, 3 do
+						for stateB = 0, 3 do
+							local layerA = cgA * 4 + stateA
+							local layerB = cgB * 4 + stateB
 
-		log("[Physics] ObjectLayerPairFilter created")
+							local isIntangibleA = (stateA == 2 or stateA == 3)
+							local isIntangibleB = (stateB == 2 or stateB == 3)
+							local isBothStatic = (stateA == 0 or stateA == 2) and (stateB == 0 or stateB == 2)
+
+							if isIntangibleA or isIntangibleB or isBothStatic or not collides then
+								lib.JPH_ObjectLayerPairFilterTable_DisableCollision(
+									objectLayerPairFilter,
+									layerA,
+									layerB
+								)
+							else
+								lib.JPH_ObjectLayerPairFilterTable_EnableCollision(
+									objectLayerPairFilter,
+									layerA,
+									layerB
+								)
+							end
+						end
+					end
+				end
+			end
+		end
+
+		SetupCollisionMatrix()
+
+		log("[Physics] ObjectLayerPairFilter created (intangible layers disabled)")
 
 		local objectVsBroadPhaseFilter = lib.JPH_ObjectVsBroadPhaseLayerFilterTable_Create(
 			broadPhaseLayerInterface,
 			NUM_OBJECT_LAYERS,
 			objectLayerPairFilter,
-			NUM_OBJECT_LAYERS
+			NUM_BROADPHASE_LAYERS
 		)
 		if objectVsBroadPhaseFilter == ffi.null then
 			error("[Physics] Failed to create ObjectVsBroadPhaseLayerFilter")
@@ -312,8 +732,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			broadPhaseLayerInterface = broadPhaseLayerInterface,
 			objectLayerPairFilter = objectLayerPairFilter,
 			objectVsBroadPhaseFilter = objectVsBroadPhaseFilter,
-			LAYER_MOVING = LAYER_MOVING,
-			LAYER_NON_MOVING = LAYER_NON_MOVING,
+			SetupCollisionMatrix = SetupCollisionMatrix,
 		}
 
 		local config = structs.JPH_JobSystemConfig:new({
@@ -331,6 +750,189 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 		log("[Physics] Job system created")
 
+		local networkService = game:GetService("NetworkService")
+		local playersService = game:GetService("Players")
+
+		local function applyOwnershipImpactToPart(targetPart, impulse)
+			if not targetPart or targetPart.Parent == nil or targetPart.Anchored then
+				return
+			end
+
+			local clampedImpulse = clampImpulse(impulse)
+			if clampedImpulse:MagnitudeSquared() <= 1e-4 then
+				return
+			end
+
+			KinemiumPhysicsService.ApplyImpulse(targetPart, clampedImpulse)
+		end
+
+		local function relayOwnershipImpacts()
+			if IsClient ~= true or not networkService or not networkService.IsClientConnected then
+				return
+			end
+
+			local localPlayer = playersService and playersService.LocalPlayer or nil
+			if not localPlayer then
+				return
+			end
+
+			local now = os.clock()
+			pruneOwnershipImpactCache(now)
+
+			for sourcePart in pairs(bodiesMap) do
+				if
+					sourcePart.Parent == nil
+					or sourcePart.Anchored
+					or sourcePart.CanCollide == false
+					or sourcePart.NetworkId == nil
+					or not NetworkOwnership.IsOwnedByPlayer(sourcePart, localPlayer)
+				then
+					continue
+				end
+
+				local sourceRoot = getNetworkAuthorityTarget(sourcePart)
+				local sourcePosition = sourcePart.CFrame.Position
+				local sourceVelocity = sourcePart.AssemblyLinearVelocity or Vector3.zero
+				local sourceRadius = getPartRadius(sourcePart)
+				local sourceMass = getPartMass(sourcePart)
+
+				for targetPart in pairs(bodiesMap) do
+					if
+						targetPart == sourcePart
+						or targetPart.Parent == nil
+						or targetPart.Anchored
+						or targetPart.CanCollide == false
+						or targetPart.NetworkId == nil
+						or NetworkOwnership.IsOwnedByPlayer(targetPart, localPlayer)
+					then
+						continue
+					end
+
+					if getNetworkAuthorityTarget(targetPart) == sourceRoot then
+						continue
+					end
+
+					local offset = targetPart.CFrame.Position - sourcePosition
+					local collisionDistance = sourceRadius + getPartRadius(targetPart)
+					if offset:MagnitudeSquared() > collisionDistance * collisionDistance then
+						continue
+					end
+
+					local targetVelocity = targetPart.AssemblyLinearVelocity or Vector3.zero
+					local relativeVelocity = sourceVelocity - targetVelocity
+					local relativeSpeed = relativeVelocity:Magnitude()
+					if relativeSpeed <= 1e-4 then
+						continue
+					end
+
+					local normal = offset:MagnitudeSquared() > 1e-4 and offset:Unit() or relativeVelocity:Unit()
+					local closingSpeed = relativeVelocity:Dot(normal)
+					if closingSpeed < OWNERSHIP_IMPACT_MIN_CLOSING_SPEED then
+						continue
+					end
+
+					local pairKey = `{sourcePart.NetworkId}:{targetPart.NetworkId}`
+					if now - (ownershipImpactTimestamps[pairKey] or 0) < OWNERSHIP_IMPACT_COOLDOWN then
+						continue
+					end
+
+					local targetMass = getPartMass(targetPart)
+					local reducedMass = (sourceMass * targetMass) / math.max(sourceMass + targetMass, 1e-4)
+					local impulse = clampImpulse(normal * (reducedMass * closingSpeed))
+					if impulse:Magnitude() < OWNERSHIP_IMPACT_MIN_IMPULSE then
+						continue
+					end
+
+					ownershipImpactTimestamps[pairKey] = now
+					networkService:SendToServer(Protocol.Channels.Input, Protocol.Kinds.OwnershipImpact, {
+						source = sourcePart.NetworkId,
+						target = targetPart.NetworkId,
+						impulse = impulse:ToTable(),
+					}, false)
+				end
+			end
+		end
+
+		if networkService and networkService.RegisterMessageHandler then
+			if IsServer == true then
+				networkService:RegisterMessageHandler(
+					Protocol.Channels.Input,
+					Protocol.Kinds.OwnershipImpact,
+					function(session, payload)
+						if not session or not session.player or type(payload) ~= "table" then
+							return
+						end
+
+						local sourcePart = partsByNetworkId[payload.source]
+						local targetPart = partsByNetworkId[payload.target]
+						if
+							not sourcePart
+							or not targetPart
+							or sourcePart == targetPart
+							or sourcePart.Parent == nil
+							or targetPart.Parent == nil
+							or sourcePart.BaseClass ~= "BasePart"
+							or targetPart.BaseClass ~= "BasePart"
+							or targetPart.Anchored
+							or not NetworkOwnership.IsOwnedByPlayer(sourcePart, session.player)
+							or NetworkOwnership.IsOwnedByPlayer(targetPart, session.player)
+						then
+							return
+						end
+
+						local impulse = payload.impulse and Vector3.FromTable(payload.impulse) or nil
+						if not impulse then
+							return
+						end
+
+						local owner = NetworkOwnership.GetOwningPlayer(targetPart)
+						local targetSession = owner and networkService:GetSessionByUserId(owner.UserId) or nil
+						if targetSession and owner ~= session.player then
+							networkService:SendToClient(
+								targetSession,
+								Protocol.Channels.Replication,
+								Protocol.Kinds.OwnershipImpact,
+								{
+									target = targetPart.NetworkId,
+									impulse = clampImpulse(impulse):ToTable(),
+								},
+								false
+							)
+							return
+						end
+
+						applyOwnershipImpactToPart(targetPart, impulse)
+					end
+				)
+			elseif IsClient == true then
+				networkService:RegisterMessageHandler(
+					Protocol.Channels.Replication,
+					Protocol.Kinds.OwnershipImpact,
+					function(_, payload)
+						if type(payload) ~= "table" then
+							return
+						end
+
+						local localPlayer = playersService and playersService.LocalPlayer or nil
+						local targetPart = partsByNetworkId[payload.target]
+						if
+							not localPlayer
+							or not targetPart
+							or targetPart.Parent == nil
+							or not NetworkOwnership.IsOwnedByPlayer(targetPart, localPlayer)
+						then
+							return
+						end
+
+						local impulse = payload.impulse and Vector3.FromTable(payload.impulse) or nil
+						if impulse then
+							applyOwnershipImpactToPart(targetPart, impulse)
+						end
+					end
+				)
+			end
+		end
+
 		-- Use existing bodyInterface from line 285
 
 		local function RemoveBody(part)
@@ -340,32 +942,41 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				bodiesMap[part] = nil
 				bodyPointerMap[part] = nil
 				inverseMap[bodyID] = nil
+				unindexPart(part)
 				if bodyConnections[part] then
 					bodyConnections[part]:Disconnect()
 					bodyConnections[part] = nil
 				end
 				log("[Physics] Destroyed body for part")
 			end
+
+			local softBodyID = softBodiesMap[part]
+			if softBodyID then
+				lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, softBodyID)
+				softBodiesMap[part] = nil
+				softBodyStates[part] = nil
+				bodyPointerMap[part] = nil
+				log("[Physics] Destroyed soft body")
+			end
 		end
 
 		local function CreateBodyForPart(part)
-			if not part.CanCollide then
+			if not part.CFrame then
 				return
 			end
 
-			local motion = 0
-			if not part.Anchored then
-				motion = 2
-			elseif part.isKinematic then
-				motion = 1
-			else
-				motion = 0
+			if not part.Parent or not part:IsDescendantOf(game.Workspace) then
+				return
 			end
+
+			local motion = getMotionTypeForPart(part)
 
 			local oldBody = bodiesMap[part]
 			if oldBody then
+				indexPart(part)
 			else
 				createBody(bodyInterface, part, motion)
+				indexPart(part)
 
 				local connection = part.Changed:Connect(function(property)
 					local bodyID = bodiesMap[part]
@@ -373,23 +984,27 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 						return
 					end
 
-					if property == "Size" or property == "Shape" then
-						local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
-						halfSize:writef32(0, part.Size.X / 2)
-						halfSize:writef32(4, part.Size.Y / 2)
-						halfSize:writef32(8, part.Size.Z / 2)
-
-						local newShape = buildShapeForPart(part, halfSize)
-						if newShape ~= ffi.null then
-							lib.JPH_BodyInterface_SetShape(bodyInterface, bodyID, newShape, 1, 1) -- updateMassProperties=1, activationMode=1 (Activate)
-						end
+					if
+						property == "Size"
+						or property == "Shape"
+						or property == "MeshObject"
+						or property == "CollisionFidelity"
+						or property == "CollisionScale"
+						or property == "MeshScale"
+					then
+						updateBodyShape(part, bodyInterface, bodyID)
 					elseif property == "Anchored" then
-						local newMotion = part.Anchored and 0 or 2
-						local newLayer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
+						local newMotion = getMotionTypeForPart(part)
+						local newLayer = getLayerForPart(part)
 
 						lib.JPH_BodyInterface_SetMotionType(bodyInterface, bodyID, newMotion, 1) -- activationMode=1 (Activate)
 						lib.JPH_BodyInterface_SetObjectLayer(bodyInterface, bodyID, newLayer)
+						updateBodyShape(part, bodyInterface, bodyID)
 						lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+					elseif property == "CanCollide" or property == "CollisionGroup" then
+						-- Hot-swap the object layer to enable/disable collision filtering
+						local newLayer = getLayerForPart(part)
+						lib.JPH_BodyInterface_SetObjectLayer(bodyInterface, bodyID, newLayer)
 					elseif property == "Position" or property == "CFrame" then
 						if part.Anchored then
 							local pos_rvec =
@@ -434,11 +1049,34 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				if not body then
 					return
 				end
+				updateBodyShape(part, bodyInterface, body)
+				if part.Anchored then
+					syncBodyTransformFromPart(part, bodyInterface, body)
+				end
 				CalculateBodyPhysics(part, bodyInterface, body)
 			end,
 
 			AddBody = function(part)
 				bodiesMap[part] = createBody(bodyInterface, part)
+			end,
+
+			RegisterCollisionGroup = RegisterCollisionGroup,
+
+			CollisionGroupSetCollidable = function(name1, name2, collidable)
+				local id1 = GetCollisionGroupId(name1)
+				local id2 = GetCollisionGroupId(name2)
+				if collisionGroups[id1] and collisionGroups[id2] then
+					collisionGroups[id1].collidesWith[id2] = collidable
+					collisionGroups[id2].collidesWith[id1] = collidable
+					if _physicsState and _physicsState.SetupCollisionMatrix then
+						_physicsState.SetupCollisionMatrix()
+					end
+				end
+			end,
+
+			GetCollisionGroupInfo = function(name)
+				local id = GetCollisionGroupId(name)
+				return collisionGroups[id]
 			end,
 
 			Enabled = false,
@@ -478,21 +1116,716 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				end)
 			end,
 
+			ApplyTorque = function(part, torque)
+				local bodyID = bodiesMap[part]
+				if not bodyID then
+					return
+				end
+				lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+				local jTorque = structs.JPH_Vec3:new({ x = torque.X, y = torque.Y, z = torque.Z })
+				lib.JPH_BodyInterface_AddTorque(bodyInterface, bodyID, jTorque)
+			end,
+
+			GetBodyRotation = function(part)
+				local bodyID = bodiesMap[part]
+				if not bodyID then
+					return 0, 0, 0, 1
+				end
+				local rot = ffi.alloc(structs.JPH_Quat:size(), structs.JPH_Quat:alignment())
+				lib.JPH_BodyInterface_GetRotation(bodyInterface, bodyID, rot)
+				return rot:readf32(0), rot:readf32(4), rot:readf32(8), rot:readf32(12)
+			end,
+
+			GetAngularVelocity = function(part)
+				local bodyID = bodiesMap[part]
+				if not bodyID then
+					return Vector3.new(0, 0, 0)
+				end
+				local av = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+				lib.JPH_BodyInterface_GetAngularVelocity(bodyInterface, bodyID, av)
+				return Vector3.new(av:readf32(0), av:readf32(4), av:readf32(8))
+			end,
+
+			UpdateTerrainChunk = function(chunkKey, vertices, indices)
+				if terrainBodies[chunkKey] then
+					lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, terrainBodies[chunkKey])
+					terrainBodies[chunkKey] = nil
+				end
+
+				if not vertices or #vertices == 0 or not indices or #indices == 0 then
+					return
+				end
+
+				-- Convert vertices to _BodyMaker's required format
+				local points = bodyMaker.pointsFromMeshgenVerts(vertices)
+
+				-- Convert indices to the triangles table _BodyMaker expects
+				local triangles = {}
+				-- indices are zero-based from Terrain:_rebuildChunk's meshgen
+				for i = 1, #indices - 2, 3 do
+					table.insert(triangles, { indices[i], indices[i + 1], indices[i + 2] })
+				end
+
+				-- _BodyMaker.buildMeshBody handles MeshShape and BodyCreation
+				local bodyID = bodyMaker.buildMeshBody(bodyInterface, points, triangles, nil, {
+					motionType = 0, -- Static
+					layer = 0, -- Static, Solid (Layer 0)
+				})
+
+				if bodyID then
+					terrainBodies[chunkKey] = bodyID
+				end
+			end,
+
 			CreateWeld = function(partA, partB)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					warn(
+						"[Physics] CreateWeld: missing body for",
+						partA and partA.Name or "?",
+						"or",
+						partB and partB.Name or "?"
+					)
+					return
+				end
+
+				local FCS = structs.JPH_FixedConstraintSettings
+				local settings = ffi.alloc(FCS:size(), FCS:alignment())
+				lib.JPH_FixedConstraintSettings_Init(settings)
+
+				-- Use autoDetectPoint so Jolt computes correct local-space anchors
+				-- from both bodies' current world transforms automatically.
+				settings:writei32(FCS:offset("space"), 1) -- WorldSpace (1)
+				settings:writeu8(FCS:offset("autoDetectPoint"), 1) -- let Jolt derive anchor points
+
+				local constraint = lib.JPH_FixedConstraint_Create(settings, bodyA, bodyB)
+				if constraint == ffi.null then
+					warn("[Physics] CreateWeld: JPH_FixedConstraint_Create returned null")
+					return
+				end
+				lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				return constraint
+			end,
+
+			CreateHinge = function(partA, partB, point1, axis1, normal1, point2, axis2, normal2, maxTorque)
 				local bodyA = bodyPointerMap[partA]
 				local bodyB = bodyPointerMap[partB]
 				if not bodyA or not bodyB then
 					return
 				end
 
-				local settings = structs.JPH_FixedConstraintSettings:new({
-					autoDetectPoint = 1,
-					space = 0,
-				})
+				local HCS = structs.JPH_HingeConstraintSettings
+				local settings = ffi.alloc(HCS:size(), HCS:alignment())
+				lib.JPH_HingeConstraintSettings_Init(settings)
 
-				local constraint = lib.JPH_FixedConstraint_Create(settings, bodyA, bodyB)
-				lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				settings:writei32(HCS:offset("space"), 1) -- JPH_ConstraintSpace_WorldSpace (1)
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(HCS:offset("point1"), point1)
+				setVec3(HCS:offset("hingeAxis1"), axis1)
+				setVec3(HCS:offset("normalAxis1"), normal1)
+
+				setRVec3(HCS:offset("point2"), point2)
+				setVec3(HCS:offset("hingeAxis2"), axis2)
+				setVec3(HCS:offset("normalAxis2"), normal2)
+
+				settings:writef32(HCS:offset("limitsMin"), 3.14159)
+				settings:writef32(HCS:offset("limitsMax"), -3.14159)
+
+				local torque = maxTorque or 10000
+				local MS = structs.JPH_MotorSettings
+				local motorOffset = HCS:offset("motorSettings")
+				local SS = structs.JPH_SpringSettings
+				settings:writeu32(motorOffset + MS:offset("springSettings") + SS:offset("mode"), 0)
+				settings:writef32(motorOffset + MS:offset("springSettings") + SS:offset("frequencyOrStiffness"), 10.0)
+				settings:writef32(motorOffset + MS:offset("springSettings") + SS:offset("damping"), 0.5)
+				settings:writef32(motorOffset + MS:offset("minForceLimit"), -torque)
+				settings:writef32(motorOffset + MS:offset("maxForceLimit"), torque)
+				settings:writef32(motorOffset + MS:offset("minTorqueLimit"), -torque)
+				settings:writef32(motorOffset + MS:offset("maxTorqueLimit"), torque)
+
+				local constraint = lib.JPH_HingeConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
 				return constraint
+			end,
+
+			CreateBallSocket = function(partA, partB, point1, point2)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local PCS = structs.JPH_PointConstraintSettings
+				local settings = ffi.alloc(PCS:size(), PCS:alignment())
+				lib.JPH_PointConstraintSettings_Init(settings)
+
+				settings:writei32(PCS:offset("space"), 1) -- JPH_ConstraintSpace_WorldSpace (1)
+
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(PCS:offset("point1"), point1)
+				setRVec3(PCS:offset("point2"), point2)
+
+				local constraint = lib.JPH_PointConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreateUniversal = function(
+				partA,
+				partB,
+				point1,
+				axisX1,
+				axisY1,
+				point2,
+				axisX2,
+				axisY2,
+				limitMinX,
+				limitMaxX,
+				limitMinY,
+				limitMaxY
+			)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local SCS = structs.JPH_SixDOFConstraintSettings
+				local settings = ffi.alloc(SCS:size(), SCS:alignment())
+				lib.JPH_SixDOFConstraintSettings_Init(settings)
+				settings:writei32(SCS:offset("space"), 1) -- WorldSpace
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(SCS:offset("position1"), point1)
+				setVec3(SCS:offset("axisX1"), axisX1)
+				setVec3(SCS:offset("axisY1"), axisY1)
+
+				setRVec3(SCS:offset("position2"), point2)
+				setVec3(SCS:offset("axisX2"), axisX2)
+				setVec3(SCS:offset("axisY2"), axisY2)
+
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 0) -- TransX
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 1) -- TransY
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 2) -- TransZ
+
+				lib.JPH_SixDOFConstraintSettings_SetLimitedAxis(settings, 3, limitMinX or -3.1415, limitMaxX or 3.1415) -- RotX
+				lib.JPH_SixDOFConstraintSettings_SetLimitedAxis(settings, 4, limitMinY or -3.1415, limitMaxY or 3.1415) -- RotY
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 5) -- RotZ (Twist locked)
+
+				local constraint = lib.JPH_SixDOFConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreateRod = function(partA, partB, point1, point2, length)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local DCS = structs.JPH_DistanceConstraintSettings
+				local settings = ffi.alloc(DCS:size(), DCS:alignment())
+				lib.JPH_DistanceConstraintSettings_Init(settings)
+
+				-- WorldSpace = 1
+				settings:writei32(DCS:offset("space"), 1)
+
+				-- point1 (RVec3 = 3x double)
+				settings:writef64(DCS:offset("point1") + 0, point1.X)
+				settings:writef64(DCS:offset("point1") + 8, point1.Y)
+				settings:writef64(DCS:offset("point1") + 16, point1.Z)
+
+				-- point2 (RVec3 = 3x double)
+				settings:writef64(DCS:offset("point2") + 0, point2.X)
+				settings:writef64(DCS:offset("point2") + 8, point2.Y)
+				settings:writef64(DCS:offset("point2") + 16, point2.Z)
+
+				-- Fixed rod: min == max == length
+				settings:writef32(DCS:offset("minDistance"), length)
+				settings:writef32(DCS:offset("maxDistance"), length)
+
+				local constraint = lib.JPH_DistanceConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreateRope = function(partA, partB, point1, point2, maxLength, stiffness, damping)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local DCS = structs.JPH_DistanceConstraintSettings
+				local settings = ffi.alloc(DCS:size(), DCS:alignment())
+				lib.JPH_DistanceConstraintSettings_Init(settings)
+
+				-- WorldSpace = 1
+				settings:writei32(DCS:offset("space"), 1)
+
+				-- point1
+				settings:writef64(DCS:offset("point1") + 0, point1.X)
+				settings:writef64(DCS:offset("point1") + 8, point1.Y)
+				settings:writef64(DCS:offset("point1") + 16, point1.Z)
+
+				-- point2
+				settings:writef64(DCS:offset("point2") + 0, point2.X)
+				settings:writef64(DCS:offset("point2") + 8, point2.Y)
+				settings:writef64(DCS:offset("point2") + 16, point2.Z)
+
+				-- Rope: min = 0 (slack allowed), max = maxLength (can't stretch)
+				settings:writef32(DCS:offset("minDistance"), 0)
+				settings:writef32(DCS:offset("maxDistance"), maxLength)
+
+				-- Optional spring softness for the limit
+				if stiffness and stiffness > 0 then
+					local SS = structs.JPH_SpringSettings
+					local springOff = DCS:offset("limitsSpringSettings")
+					-- SpringMode: 0 = FrequencyAndDamping, 1 = StiffnessAndDamping
+					settings:writei32(springOff + SS:offset("mode"), 1)
+					settings:writef32(springOff + SS:offset("frequencyOrStiffness"), stiffness)
+					settings:writef32(springOff + SS:offset("damping"), damping or 0.1)
+				end
+
+				local constraint = lib.JPH_DistanceConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreatePlane = function(partA, partB, point1, axisX1, axisY1, point2, axisX2, axisY2)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local SCS = structs.JPH_SixDOFConstraintSettings
+				local settings = ffi.alloc(SCS:size(), SCS:alignment())
+				lib.JPH_SixDOFConstraintSettings_Init(settings)
+				settings:writei32(SCS:offset("space"), 1)
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(SCS:offset("position1"), point1)
+				setVec3(SCS:offset("axisX1"), axisX1)
+				setVec3(SCS:offset("axisY1"), axisY1)
+				setRVec3(SCS:offset("position2"), point2)
+				setVec3(SCS:offset("axisX2"), axisX2)
+				setVec3(SCS:offset("axisY2"), axisY2)
+
+				lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 0) -- TransX
+				lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 1) -- TransY
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 2) -- TransZ Fixed to 0 (Plane normal)
+
+				lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 3) -- RotX
+				lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 4) -- RotY
+				lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 5) -- RotZ
+
+				local constraint = lib.JPH_SixDOFConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreateTorsionSpring = function(
+				partA,
+				partB,
+				point1,
+				axisX1,
+				axisY1,
+				point2,
+				axisX2,
+				axisY2,
+				stiffness,
+				damping
+			)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local SCS = structs.JPH_SixDOFConstraintSettings
+				local settings = ffi.alloc(SCS:size(), SCS:alignment())
+				lib.JPH_SixDOFConstraintSettings_Init(settings)
+				settings:writei32(SCS:offset("space"), 1)
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(SCS:offset("position1"), point1)
+				setVec3(SCS:offset("axisX1"), axisX1)
+				setVec3(SCS:offset("axisY1"), axisY1)
+				setRVec3(SCS:offset("position2"), point2)
+				setVec3(SCS:offset("axisX2"), axisX2)
+				setVec3(SCS:offset("axisY2"), axisY2)
+
+				-- All free
+				for i = 0, 5 do
+					lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, i)
+				end
+
+				-- Setup Spring Limits on RotX (axis 3)
+				-- We will give it a wide range limit but apply limits spring so it acts primarily like a torsion spring
+				lib.JPH_SixDOFConstraintSettings_SetLimitedAxis(settings, 3, -3.1415, 3.1415)
+
+				local springSettings =
+					ffi.alloc(structs.JPH_SpringSettings:size(), structs.JPH_SpringSettings:alignment())
+				springSettings:writeu32(structs.JPH_SpringSettings:offset("mode"), 0) -- FrequencyAndDamping
+				springSettings:writef32(structs.JPH_SpringSettings:offset("frequencyOrStiffness"), stiffness or 10.0)
+				springSettings:writef32(structs.JPH_SpringSettings:offset("damping"), damping or 0.5)
+
+				lib.JPH_SixDOFConstraintSettings_SetLimitsSpringSettings(settings, 3, springSettings)
+
+				local constraint = lib.JPH_SixDOFConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			CreateCylindrical = function(
+				partA,
+				partB,
+				point1,
+				axisX1,
+				axisY1,
+				point2,
+				axisX2,
+				axisY2,
+				limitMinTrans,
+				limitMaxTrans,
+				limitMinRot,
+				limitMaxRot
+			)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local SCS = structs.JPH_SixDOFConstraintSettings
+				local settings = ffi.alloc(SCS:size(), SCS:alignment())
+				lib.JPH_SixDOFConstraintSettings_Init(settings)
+				settings:writei32(SCS:offset("space"), 1)
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(SCS:offset("position1"), point1)
+				setVec3(SCS:offset("axisX1"), axisX1)
+				setVec3(SCS:offset("axisY1"), axisY1)
+				setRVec3(SCS:offset("position2"), point2)
+				setVec3(SCS:offset("axisX2"), axisX2)
+				setVec3(SCS:offset("axisY2"), axisY2)
+
+				if limitMinTrans ~= nil and limitMaxTrans ~= nil then
+					lib.JPH_SixDOFConstraintSettings_SetLimitedAxis(settings, 0, limitMinTrans, limitMaxTrans)
+				else
+					lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 0) -- TransX Free
+				end
+
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 1) -- TransY Locked
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 2) -- TransZ Locked
+
+				if limitMinRot ~= nil and limitMaxRot ~= nil then
+					lib.JPH_SixDOFConstraintSettings_SetLimitedAxis(settings, 3, limitMinRot, limitMaxRot)
+				else
+					lib.JPH_SixDOFConstraintSettings_MakeFreeAxis(settings, 3) -- RotX Free
+				end
+
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 4) -- RotY Locked
+				lib.JPH_SixDOFConstraintSettings_MakeFixedAxis(settings, 5) -- RotZ Locked
+
+				local constraint = lib.JPH_SixDOFConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			SetHingeMotorState = function(constraint, state)
+				if not constraint then
+					return
+				end
+				-- state: 0=Off, 1=Velocity, 2=Position
+				lib.JPH_HingeConstraint_SetMotorState(constraint, state)
+			end,
+
+			SetHingeTargetVelocity = function(constraint, velocity)
+				if not constraint then
+					return
+				end
+				lib.JPH_HingeConstraint_SetTargetAngularVelocity(constraint, velocity)
+			end,
+
+			SetHingeTargetAngle = function(constraint, angle)
+				if not constraint then
+					return
+				end
+				lib.JPH_HingeConstraint_SetTargetAngle(constraint, angle)
+			end,
+			GetHingeAngle = function(constraint)
+				if not constraint then
+					return 0
+				end
+				return lib.JPH_HingeConstraint_GetCurrentAngle(constraint)
+			end,
+
+			SetHingeLimits = function(constraint, min, max)
+				if not constraint then
+					return
+				end
+				lib.JPH_HingeConstraint_SetLimits(constraint, min, max)
+			end,
+
+			SetHingeMotorSettings = function(constraint, maxTorque)
+				if not constraint then
+					return
+				end
+				local MS = structs.JPH_MotorSettings
+				local SS = structs.JPH_SpringSettings
+				local settings = ffi.alloc(MS:size(), MS:alignment())
+				-- springSettings first (offset 0 within MotorSettings)
+				settings:writeu32(MS:offset("springSettings") + SS:offset("mode"), 0) -- FrequencyAndDamping
+				settings:writef32(MS:offset("springSettings") + SS:offset("frequencyOrStiffness"), 10.0)
+				settings:writef32(MS:offset("springSettings") + SS:offset("damping"), 0.5)
+				-- then force/torque limits
+				settings:writef32(MS:offset("minForceLimit"), -maxTorque)
+				settings:writef32(MS:offset("maxForceLimit"), maxTorque)
+				settings:writef32(MS:offset("minTorqueLimit"), -maxTorque)
+				settings:writef32(MS:offset("maxTorqueLimit"), maxTorque)
+				lib.JPH_HingeConstraint_SetMotorSettings(constraint, settings)
+			end,
+
+			ActivatePart = function(part)
+				local bodyID = bodiesMap[part]
+				if bodyID then
+					lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+				end
+			end,
+
+			CreateSpring = function(
+				partA,
+				partB,
+				point1,
+				point2,
+				minDistance,
+				maxDistance,
+				springMode,
+				frequencyOrStiffness,
+				damping
+			)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local DCS = structs.JPH_DistanceConstraintSettings
+				local settings = ffi.alloc(DCS:size(), DCS:alignment())
+				lib.JPH_DistanceConstraintSettings_Init(settings)
+
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				settings:writei32(DCS:offset("space"), 1) -- JPH_ConstraintSpace_WorldSpace
+				setRVec3(DCS:offset("point1"), point1)
+				setRVec3(DCS:offset("point2"), point2)
+
+				settings:writef32(DCS:offset("minDistance"), minDistance)
+				settings:writef32(DCS:offset("maxDistance"), maxDistance)
+
+				local SS = structs.JPH_SpringSettings
+				local springOffset = DCS:offset("limitsSpringSettings")
+				settings:writeu32(springOffset + SS:offset("mode"), springMode)
+				settings:writef32(springOffset + SS:offset("frequencyOrStiffness"), frequencyOrStiffness)
+				settings:writef32(springOffset + SS:offset("damping"), damping)
+
+				local constraint = lib.JPH_DistanceConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			SetSpringLimits = function(constraint, minDistance, maxDistance)
+				if not constraint then
+					return
+				end
+				lib.JPH_DistanceConstraint_SetDistance(constraint, minDistance, maxDistance)
+			end,
+
+			SetSpringSettings = function(constraint, springMode, frequencyOrStiffness, damping)
+				if not constraint then
+					return
+				end
+				local SS = structs.JPH_SpringSettings
+				local settings = ffi.alloc(SS:size(), SS:alignment())
+				settings:writeu32(SS:offset("mode"), springMode)
+				settings:writef32(SS:offset("frequencyOrStiffness"), frequencyOrStiffness)
+				settings:writef32(SS:offset("damping"), damping)
+				lib.JPH_DistanceConstraint_SetLimitsSpringSettings(constraint, settings)
+			end,
+
+			CreateSlider = function(partA, partB, point1, axis1, normal1, point2, axis2, normal2)
+				local bodyA = bodyPointerMap[partA]
+				local bodyB = bodyPointerMap[partB]
+				if not bodyA or not bodyB then
+					return
+				end
+
+				local SCS = structs.JPH_SliderConstraintSettings
+				local settings = ffi.alloc(SCS:size(), SCS:alignment())
+				lib.JPH_SliderConstraintSettings_Init(settings)
+
+				settings:writei32(SCS:offset("space"), 0) -- JPH_ConstraintSpace_LocalToBodyCOM (0)
+
+				local function setVec3(offset, v)
+					settings:writef32(offset, v.X)
+					settings:writef32(offset + 4, v.Y)
+					settings:writef32(offset + 8, v.Z)
+				end
+
+				local function setRVec3(offset, v)
+					settings:writef64(offset, v.X)
+					settings:writef64(offset + 8, v.Y)
+					settings:writef64(offset + 16, v.Z)
+				end
+
+				setRVec3(SCS:offset("point1"), point1)
+				setVec3(SCS:offset("sliderAxis1"), axis1)
+				setVec3(SCS:offset("normalAxis1"), normal1)
+
+				setRVec3(SCS:offset("point2"), point2)
+				setVec3(SCS:offset("sliderAxis2"), axis2)
+				setVec3(SCS:offset("normalAxis2"), normal2)
+
+				local constraint = lib.JPH_SliderConstraint_Create(settings, bodyA, bodyB)
+				if constraint ~= ffi.null then
+					lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+				end
+				return constraint
+			end,
+
+			SetSliderLimits = function(constraint, min, max)
+				if not constraint then
+					return
+				end
+				lib.JPH_SliderConstraint_SetLimits(constraint, min, max)
+			end,
+
+			SetSliderMotorSettings = function(constraint, maxForce)
+				if not constraint then
+					return
+				end
+				local MS = structs.JPH_MotorSettings
+				local SS = structs.JPH_SpringSettings
+				local settings = ffi.alloc(MS:size(), MS:alignment())
+				-- springSettings first (offset 0 within MotorSettings)
+				settings:writeu32(MS:offset("springSettings") + SS:offset("mode"), 0) -- FrequencyAndDamping
+				settings:writef32(MS:offset("springSettings") + SS:offset("frequencyOrStiffness"), 10.0)
+				settings:writef32(MS:offset("springSettings") + SS:offset("damping"), 0.5)
+				-- then force limits
+				settings:writef32(MS:offset("minForceLimit"), -maxForce)
+				settings:writef32(MS:offset("maxForceLimit"), maxForce)
+				lib.JPH_SliderConstraint_SetMotorSettings(constraint, settings)
+			end,
+
+			SetSliderMotorState = function(constraint, state)
+				if not constraint then
+					return
+				end
+				lib.JPH_SliderConstraint_SetMotorState(constraint, state)
+			end,
+
+			SetSliderTargetVelocity = function(constraint, velocity)
+				if not constraint then
+					return
+				end
+				lib.JPH_SliderConstraint_SetTargetVelocity(constraint, velocity)
+			end,
+
+			SetSliderTargetPosition = function(constraint, position)
+				if not constraint then
+					return
+				end
+				lib.JPH_SliderConstraint_SetTargetPosition(constraint, position)
+			end,
+
+			GetSliderPosition = function(constraint)
+				if not constraint then
+					return 0
+				end
+				return lib.JPH_SliderConstraint_GetCurrentPosition(constraint)
 			end,
 
 			SetVelocity = function(part, velocity)
@@ -566,10 +1899,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		}
 
 		renderer.Hook.new("Renderstep", function(dt)
-			KinemiumPhysicsService.Enabled = _PlaytestService.IsPlaytesting
-			if KinemiumPhysicsService.Enabled == false then
-				return
-			end
 			if
 				game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Jolt
 				or game.Workspace.PhysicsEngine == Enum.PhysicsEngine.Default
@@ -593,23 +1922,14 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 				local _loopStart = os.clock()
 				for part, bodyID in pairs(bodiesMap) do
+					indexPart(part)
 					if part.Anchored == true then
-						-- set part cframe
-						local pos_rvec = RVec3(part.CFrame.Position.X, part.CFrame.Position.Y, part.CFrame.Position.Z)
+						syncBodyTransformFromPart(part, bodyInterface, bodyID)
+						continue
+					end
 
-						local rot_quat = structs.JPH_Quat:new({})
-						local x, y, z, w = part.CFrame:ToQuaternion()
-						buffer.writef32(rot_quat, 0, x)
-						buffer.writef32(rot_quat, 4, y)
-						buffer.writef32(rot_quat, 8, z)
-						buffer.writef32(rot_quat, 12, w)
-
-						if lib.JPH_BodyInterface_SetPositionAndRotation then
-							lib.JPH_BodyInterface_SetPositionAndRotation(bodyInterface, bodyID, pos_rvec, rot_quat, 1)
-						else
-							lib.JPH_BodyInterface_SetPosition(bodyInterface, bodyID, pos_rvec, 1)
-							lib.JPH_BodyInterface_SetRotation(bodyInterface, bodyID, rot_quat, 1)
-						end
+					if not NetworkOwnership.ShouldSimulatePhysicsForMachine(part, game) then
+						syncBodyTransformFromPart(part, bodyInterface, bodyID)
 						continue
 					end
 
@@ -632,10 +1952,39 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 						part.AssemblyAngularVelocity = angular
 					end
 
-					if cf ~= CFrame.new(0, 0, 0) then
-						part.CFrame = cf
+					part.CFrame = cf
+				end
+
+				relayOwnershipImpacts()
+
+				for softBody, bodyID in pairs(softBodiesMap) do
+					local bodyPtr = bodyPointerMap[softBody]
+					if not bodyPtr then
+						continue
+					end
+
+					local numVertices = lib.JPH_SoftBody_GetNumVertices(bodyPtr)
+					local bufferSize = numVertices * structs.JPH_SoftBodyVertex:size()
+					local resultBuffer = ffi.alloc(bufferSize, structs.JPH_SoftBodyVertex:alignment())
+
+					lib.JPH_SoftBody_GetVertices(bodyPtr, resultBuffer, numVertices)
+
+					local mesh = softBody.Mesh
+					local state = softBodyStates[softBody]
+					if mesh and state then
+						-- Vertices are returned in a flat array matching the order added to SharedSettings
+						for index, id in ipairs(state.vIds) do
+							local offset = (index - 1) * structs.JPH_SoftBodyVertex:size()
+							local px = buffer.readf32(resultBuffer, offset)
+							local py = buffer.readf32(resultBuffer, offset + 4)
+							local pz = buffer.readf32(resultBuffer, offset + 8)
+
+							mesh._vertices[id] = Vector3.new(px, py, pz)
+						end
+						mesh._geometryDirty = true
 					end
 				end
+
 				--[[
 			local loopEnd = os.clock()
 			local totalEnd = os.clock()
@@ -653,12 +2002,18 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 		renderer_signal:Connect(function(route, data)
 			if route == "UpdatePart" or route == "AddedPartToRenderPool" then
-				local pList = bodiesMap[data]
-				if not pList then
+				local bodyID = bodiesMap[data]
+				if not bodyID then
 					CreateBodyForPart(data)
+				else
+					propTable.UpdatePart(data)
 				end
 			elseif route == "RemovedPartFromRenderPool" then
 				RemoveBody(data)
+			elseif route == "UpdateSoftBody" then
+				if not softBodiesMap[data] then
+					createSoftBody(bodyInterface, data)
+				end
 			end
 		end)
 

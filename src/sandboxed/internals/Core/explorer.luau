@@ -6,6 +6,8 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local Selection = game:GetService("Selection")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local FileDialogService = game:GetService("FileDialogService")
+local KineFileService = game:GetService("KineFileService")
 local ScriptRunnerService = game:GetService("ScriptRunnerService")
 
 -- Early returns
@@ -109,6 +111,20 @@ local function matchesSearch(instance, query)
 	return false
 end
 
+task.spawn(function()
+	local classes = Instance.getClasses()
+
+	for class in pairs(classes) do
+		if not loadedIcon[class] then
+			local asset = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".svg")
+
+			if asset then
+				loadedIcon[class] = KinemiumIconLoader.ToTexture(asset)
+			end
+		end
+	end
+end)
+
 -- Selection menu
 local SelectionMenu = gui.menu({
 	x = 0,
@@ -186,12 +202,24 @@ local SelectionMenu = gui.menu({
 
 				{
 					label = "Notepad",
-					onClick = function() end,
+					onClick = function()
+						local object = Selection:Get()[1]
+
+						if object.BaseClass == "ScriptContainer" then
+							ScriptRunnerService.OpenInExternalEditor(object, "os", ishared.FolderPath)
+						end
+					end,
 				},
 
 				{
 					label = "Let my OS choose",
-					onClick = function() end,
+					onClick = function()
+						local object = Selection:Get()[1]
+
+						if object.BaseClass == "ScriptContainer" then
+							ScriptRunnerService.OpenInExternalEditor(object, "note", ishared.FolderPath)
+						end
+					end,
 				},
 			},
 		},
@@ -222,6 +250,8 @@ local SelectionMenu = gui.menu({
 					if object.BaseClass == "BasePart" then
 						object.Transparency = 1
 						object.CanCollide = false
+					elseif object.BaseClass == "GuiObject" then
+						object.Visible = false
 					end
 				end
 			end,
@@ -231,9 +261,32 @@ local SelectionMenu = gui.menu({
 			submenu = {
 				{
 					label = "as .KINEOBJ",
-					onClick = function() end,
+					onClick = function()
+						local object = Selection:Get()[1]
+						if object then
+							local path = FileDialogService.RequestSaveFile(object.Name)
+
+							local dir = path:match("^(.*)[\\/][^\\/]+$")
+							local name = path:match("[^\\/]+$")
+
+							KineFileService.ExportObject(object, dir, name)
+						end
+					end,
 				},
 			},
+		},
+		{
+			label = "Import",
+			onClick = function()
+				local path = FileDialogService.RequestFile({})
+
+				local ins = KineFileService.DecodeFile(path)
+
+				local object = Selection:Get()[1]
+				if object and ins then
+					ins.Parent = object
+				end
+			end,
 		},
 	},
 })
@@ -365,10 +418,17 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	addMenuScroll[instance] = addMenuScroll[instance] or 0
 
 	local instanceTypes = Instance.getClasses()
-	local totalItems = 0
-	for _ in pairs(instanceTypes) do
-		totalItems = totalItems + 1
+
+	local sortedClasses = {}
+	for class in pairs(instanceTypes) do
+		table.insert(sortedClasses, class)
 	end
+
+	table.sort(sortedClasses, function(a, b)
+		return a < b -- alphabetical
+	end)
+
+	local totalItems = #sortedClasses
 
 	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2
 	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT
@@ -383,7 +443,6 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		Theme.SecondaryBackgroundColor:ToRaylib(0)
 	)
 
-	-- Handle scrolling
 	local menuRect = { x = menuX, y = menuY, width = ADD_MENU_WIDTH, height = menuHeight }
 	if isMouseInRect(menuRect, mousePos) then
 		local mouseWheel = rl.GetMouseWheelMove()
@@ -404,11 +463,10 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	)
 
 	local i = 0
-	for class, _ in pairs(instanceTypes) do
+	for _, class in ipairs(sortedClasses) do
 		i = i + 1
 		local itemY = menuY + MENU_PADDING + ((i - 1) * ADD_MENU_ITEM_HEIGHT) - addMenuScroll[instance]
 
-		-- Skip items outside visible area
 		if itemY + ADD_MENU_ITEM_HEIGHT < menuY or itemY > menuY + menuHeight then
 			continue
 		end
@@ -431,9 +489,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 			end
 		end
 
-		-- Draw icon
-		local iconTex = loadedIcon[class]
-		if iconTex then
+		local iconTex = loadedIcon[class] or notfound_tex
+		if iconTex and iconTex.texture then
 			local iconSize = ADD_MENU_ITEM_HEIGHT - 6
 			rl.DrawTexturePro(
 				iconTex.texture,
@@ -507,14 +564,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	local hasChildren = #children > 0
 	local ctrl = rl.IsKeyDown(341) == 1 or rl.IsKeyDown(345) == 1
 
-	-- Load icon if needed
-	if not loadedIcon[instance.ClassName] then
-		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".svg")
-		if svg then
-			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
-		end
-	end
-
 	local btnX = winX + 25 + winWidth - NODE_WIDTH - PADDING - (indent * -INDENT_SIZE)
 	local btnY = winY + 10 + yOffset - scrollOffset
 	local rectData = { x = btnX, y = btnY, width = NODE_WIDTH, height = NODE_HEIGHT }
@@ -537,6 +586,13 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	-- Draw node background
 	rl.DrawRectangleRounded(structs.Rectangle:new(rectData), 0.5, 20, color:ToRaylib(transparency))
+
+	if not loadedIcon[instance.ClassName] then
+		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".svg")
+		if svg then
+			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
+		end
+	end
 
 	-- Draw icon
 	local icon = loadedIcon[instance.ClassName] or notfound_tex
@@ -687,18 +743,6 @@ local explorerWindow = window.create({
 	width = frame.AbsoluteSize.X,
 	height = frame.AbsoluteSize.Y,
 })
-
-task.spawn(function()
-	local classes = Instance.getClasses()
-	for class, _ in pairs(classes) do
-		if not loadedIcon[class] then
-			local png = KinemiumIconLoader.Get(class .. ".png")
-			if png then
-				loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
-			end
-		end
-	end
-end)
 
 explorerWindow.stepped = function(windowData)
 	if windowData.title ~= "Explorer" then

@@ -5,16 +5,25 @@ ReplicatorService.ExplorerHidden = true
 
 local Server = require("./_Server")
 local Client = require("./_Client")
+local StateRegistry = require("./StateRegistry")
+local NetworkOwnership = require("./NetworkOwnership")
 
 ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 	task.spawn(function()
-		-- wait a bit until the game loads
 		task.wait(4)
 
 		repeat
-			--log("[Replicator] Waiting for SerializationService and NetworkService")
 			task.wait()
 		until game.SerializationService and game.NetworkService
+
+		ReplicatorService:SetProperties({
+			RegisterStateAdapter = function(self, name, adapter)
+				StateRegistry.RegisterAdapter(name, adapter)
+			end,
+			StateRegistry = StateRegistry,
+			NetworkOwnership = NetworkOwnership,
+		})
+
 		local ctx = {
 			game = game,
 			ReplicatorService = ReplicatorService,
@@ -22,10 +31,10 @@ ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 			NetworkService = game:GetService("NetworkService"),
 			renderer = renderer,
 			signal = renderer_signal,
+			StateRegistry = StateRegistry,
+			NetworkOwnership = NetworkOwnership,
 		}
 
-		log("[Replicator] Initialized")
-		print(IsServer, IsClient)
 		if IsServer then
 			Server.init(ctx)
 		end

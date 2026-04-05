@@ -105,7 +105,7 @@ local function buildExecutable(name, exec_ext, lib_ext)
 	if not exec.ok then
 		error("could not bundle executable: " .. tostring(exec.stderr))
 	end
-	print("successfully bundled at " .. l_exec)
+	print("succaessfully bundled at " .. l_exec)
 end
 
 if b_windows or zune.platform.os == "windows" then

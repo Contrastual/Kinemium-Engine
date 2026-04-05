@@ -80,7 +80,7 @@ RunService.GuiRender:Connect(function()
 	)
 end)
 
--- ── state
+-- state
 
 local scrollOffset = 0
 local maxScrollOffset = 0
@@ -90,7 +90,7 @@ local editorComps = {} -- [propName] = { comp, typeName }
 
 local blacklisted = { "Children", "UniqueId" }
 
--- ── helpers
+-- helpers
 
 local function round(n)
 	return math.floor(n * 1000 + 0.5) / 1000
@@ -117,7 +117,7 @@ local function numTb(col, onSubmit)
 	return makeTextbox({ numeric = true, TextColor = col:ToRaylib(0), onSubmit = onSubmit })
 end
 
--- ── datatypes
+-- datatypes
 --
 -- each datatype table can contain:
 --   build(selected, propName, propValue) → comp
@@ -195,6 +195,31 @@ datatypes["Vector2"] = {
 		}
 		comps.x:setText(tostring(propValue.X))
 		comps.y:setText(tostring(propValue.Y))
+		return comps
+	end,
+	render = function(comps, ex, ey, ew, eh)
+		local sp = 3
+		local w = (ew - sp) / 2
+		comps.x:drawWithExtras(ex, ey, w, eh)
+		comps.y:drawWithExtras(ex + w + sp, ey, w, eh)
+	end,
+}
+
+-- UDim
+datatypes["UDim"] = {
+	build = function(selected, propName, propValue)
+		local comps = {
+			x = numTb(Color3.new(1, 0, 0), function(v)
+				local c = selected[propName]
+				selected[propName] = UDim.new(tonumber(v) or 0, c.Offset)
+			end),
+			y = numTb(Color3.new(0, 1, 0), function(v)
+				local c = selected[propName]
+				selected[propName] = UDim.new(c.Scale, tonumber(v) or 0)
+			end),
+		}
+		comps.x:setText(tostring(propValue.Scale))
+		comps.y:setText(tostring(propValue.Offset))
 		return comps
 	end,
 	render = function(comps, ex, ey, ew, eh)
@@ -585,6 +610,7 @@ end
 
 local function buildBuckets(selected)
 	local buckets, seen = {}, {}
+
 	for propName, propValue in pairs(selected._props) do
 		if isBlacklisted(propName, propValue) then
 			continue
@@ -593,18 +619,44 @@ local function buildBuckets(selected)
 		if not buckets[cat] then
 			buckets[cat] = {}
 		end
-		table.insert(buckets[cat], { propName = propName, propValue = propValue })
+		table.insert(buckets[cat], { propName = propName, propValue = propValue, displayName = propName })
 		seen[cat] = true
 	end
+
+	local attrs = selected:GetAttributes()
+	if attrs and next(attrs) then
+		buckets["Attributes"] = {}
+		seen["Attributes"] = true
+		for name, val in pairs(attrs) do
+			table.insert(buckets["Attributes"], { propName = name, propValue = val, displayName = name })
+		end
+	end
+
+	local tags = selected:GetTags()
+	if tags and #tags > 0 then
+		buckets["Tags"] = {}
+		seen["Tags"] = true
+		for _, tag in ipairs(tags) do
+			table.insert(buckets["Tags"], { propName = tag, propValue = true, displayName = tag })
+		end
+	end
+
 	local order = {}
 	for _, cat in ipairs(CATEGORY_ORDER) do
 		if seen[cat] then
 			table.insert(order, cat)
 		end
 	end
+	if seen["Attributes"] then
+		table.insert(order, "Attributes")
+	end
+	if seen["Tags"] then
+		table.insert(order, "Tags")
+	end
+
 	for _, cat in ipairs(order) do
 		table.sort(buckets[cat], function(a, b)
-			return a.propName < b.propName
+			return a.displayName < b.displayName
 		end)
 	end
 	return buckets, order
@@ -627,10 +679,47 @@ Selection.SelectionAdded:Connect(function(selected)
 		local dt = datatypes[typeName]
 		if dt then
 			local comp = dt.build(selected, propName, propValue)
-			editorComps[propName] = { comp = comp, typeName = typeName }
+			editorComps[propName] = { comp = comp, typeName = typeName, displayName = propName }
 			if type(comp) == "table" and comp._isDropdown then
 				overlapping[propName] = comp
 			end
+		end
+	end
+
+	local attrProxy = setmetatable({}, {
+		__index = function(_, k)
+			return selected:GetAttribute(k)
+		end,
+		__newindex = function(_, k, v)
+			selected:SetAttribute(k, v)
+		end,
+	})
+
+	for attrName, attrValue in pairs(selected:GetAttributes() or {}) do
+		local typeName = getPropTypeName(attrValue)
+		local dt = datatypes[typeName]
+		if dt then
+			local comp = dt.build(attrProxy, attrName, attrValue)
+			editorComps["_attr_" .. attrName] = { comp = comp, typeName = typeName, displayName = attrName }
+		end
+	end
+
+	local tagProxy = setmetatable({}, {
+		__index = function()
+			return true
+		end,
+		__newindex = function(_, k, v)
+			if v == false then
+				selected:RemoveTag(k)
+			end
+		end,
+	})
+
+	for _, tag in ipairs(selected:GetTags() or {}) do
+		local dt = datatypes["boolean"]
+		if dt then
+			local comp = dt.build(tagProxy, tag, true)
+			editorComps["_tag_" .. tag] = { comp = comp, typeName = "boolean", displayName = tag }
 		end
 	end
 end)
@@ -699,9 +788,11 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 	rl.DrawRectangle(divX, y, 1, rh, Theme.ThirdBackgroundColor:ToRaylib(0))
 
 	local entry = editorComps[propName]
+	local displayName = entry and entry.displayName or propName
+
 	if not entry then
 		-- no editor, just draw name plainly
-		rl.DrawTextEx(vend, propName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
+		rl.DrawTextEx(vend, displayName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
 		return
 	end
 
@@ -723,7 +814,7 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 			1,
 			Theme.SecondaryTextColor:ToRaylib(0.5)
 		)
-		rl.DrawTextEx(vend, propName, vector.create(winX + PADDING + 14, y + (rh - 14) / 2), 14, 1, TextColor)
+		rl.DrawTextEx(vend, displayName, vector.create(winX + PADDING + 14, y + (rh - 14) / 2), 14, 1, TextColor)
 
 		if rl.IsMouseButtonPressed(0) == 1 and isHovered and dt.onRowClick then
 			dt.onRowClick(comp, propName)
@@ -741,7 +832,7 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 			1,
 			Theme.SecondaryTextColor:ToRaylib(0.5)
 		)
-		rl.DrawTextEx(vend, propName, vector.create(winX + PADDING + 14, y + (rh - 14) / 2), 14, 1, TextColor)
+		rl.DrawTextEx(vend, displayName, vector.create(winX + PADDING + 14, y + (rh - 14) / 2), 14, 1, TextColor)
 
 		if rl.IsMouseButtonPressed(0) == 1 and isHovered and dt.onRowClick then
 			dt.onRowClick(comp, propName)
@@ -750,9 +841,9 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 			dt.render(comp, editorX, y, editorW, editorH, propName, propValue)
 		end
 	elseif type(comp) == "table" and comp._isDropdown then
-		rl.DrawTextEx(vend, propName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
+		rl.DrawTextEx(vend, displayName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
 	else
-		rl.DrawTextEx(vend, propName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
+		rl.DrawTextEx(vend, displayName, vector.create(winX + PADDING, y + (rh - 14) / 2), 14, 1, TextColor)
 		if dt then
 			dt.render(comp, editorX, editorY, editorW, editorH)
 		end

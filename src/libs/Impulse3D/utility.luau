@@ -209,7 +209,6 @@ function PhysicsUtils.resolveSphereSphere(bodyA, bodyB)
 	local radiusSum = bodyA.radius + bodyB.radius
 
 	if distSq < 1e-12 then
-		-- Perfectly overlapping — push upward
 		return Vector3Double.new(0, 1, 0), radiusSum
 	end
 

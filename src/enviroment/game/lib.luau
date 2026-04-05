@@ -9,6 +9,23 @@ DataModel.__index = DataModel
 local fs = zune.fs
 
 local aliases = {}
+local HEADLESS_SKIP_INIT = {
+	DiscordService = true,
+	FileDialogService = true,
+	GuiStackService = true,
+	KinemiumFontService = true,
+	KinemiumIconLoader = true,
+	Plugin = true,
+	ProjectLoaderService = true,
+	ProjectSyncService = true,
+	Selection = true,
+	SoundService = true,
+	SteamService = true,
+	StudioThemeService = true,
+	UserInputService = true,
+	VideoService = true,
+	WebviewService = true,
+}
 
 function DataModel.new(RENDERER, ...)
 	local self = setmetatable({}, DataModel)
@@ -21,6 +38,7 @@ function DataModel.new(RENDERER, ...)
 	self.Stop3DInput = false
 	self.ShutdownCallbacks = {}
 	self.Loaded = false
+	self.MultiplayerMode = Enum.MultiplayerMode.MultiPlayer
 
 	self.Services = {}
 
@@ -57,7 +75,11 @@ function DataModel.new(RENDERER, ...)
 			local success2, returnedData2 = pcall(function()
 				self.Services[name] = returnedData
 				if returnedData.InitRenderer then
-					returnedData.InitRenderer(RENDERER, RENDERER.EventBus, self)
+					if not (IsHeadless == true and HEADLESS_SKIP_INIT[name] == true) then
+						returnedData.InitRenderer(RENDERER, RENDERER.EventBus, self)
+					else
+						log(string.format("[ServiceRegistry] Skipped headless init for service %s", name))
+					end
 					if returnedData.aliases then
 						aliases[name] = returnedData.aliases
 					end
@@ -74,7 +96,7 @@ function DataModel.new(RENDERER, ...)
 					)
 				)
 			else
-				error(
+				warn(
 					"Error initializing service '"
 						.. name
 						.. "' at path '"
@@ -84,6 +106,7 @@ function DataModel.new(RENDERER, ...)
 						.. "\n"
 						.. debug.traceback("", 2)
 				)
+				zune.process.exit(0)
 			end
 		else
 			error(

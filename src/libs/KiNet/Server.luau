@@ -10,7 +10,7 @@ local HEARTBEAT_TIMEOUT = 15
 local MAX_MESSAGE_SIZE = 100000
 local MESSAGE_TIMEOUT = 10
 local MAX_CLIENTS = 130
-local MAX_MESSAGES_PER_CLIENT = 100
+local MAX_MESSAGES_PER_CLIENT = 300
 local MTU_SIZE = 1400
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
@@ -98,7 +98,7 @@ function Server:ValidateMessage(data, client)
 end
 
 function Server:CheckRateLimit(client)
-	local currentTime = os.time()
+	local currentTime = os.clock()
 
 	if not client.rateLimitWindow then
 		client.rateLimitWindow = {}
@@ -124,22 +124,25 @@ function Server:FragmentMessage(data, messageId)
 	local buf = Serializer.Serialize(data)
 
 	if buffer.len(buf) <= MTU_SIZE then
-		return { {
-			fragment = false,
-			data = data,
-		} }
+		return { data }
+	end
+
+	if data.kind then
+		print(`[KiNet][Server] Fragmenting {data.channel}:{data.kind} for {messageId} into {math.ceil(buffer.len(buf) / MTU_SIZE)} fragments ({buffer.len(buf)} bytes)`)
 	end
 
 	local fragments = {}
 	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
 
 	for i = 0, totalFragments - 1 do
-		local start = i * MTU_SIZE + 1
-		local stop = math.min((i + 1) * MTU_SIZE, buffer.len(buf))
-		local chunk = string.sub(buf, start, stop)
+		local startOffset = i * MTU_SIZE
+		local chunkLength = math.min(MTU_SIZE, buffer.len(buf) - startOffset)
+		local chunk = buffer.create(chunkLength)
+		buffer.copy(chunk, 0, buf, startOffset, chunkLength)
 
 		table.insert(fragments, {
 			fragment = true,
+			reliable = true,
 			messageId = messageId,
 			fragmentIndex = i,
 			totalFragments = totalFragments,
@@ -165,20 +168,31 @@ function Server:ReassembleFragments(fragmentData, client)
 		}
 	end
 
-	local buffer = client.fragmentBuffer[msgId]
+	local fragmentState = client.fragmentBuffer[msgId]
 
-	if not buffer.fragments[fragmentData.fragmentIndex] then
-		buffer.fragments[fragmentData.fragmentIndex] = fragmentData.data
-		buffer.received = buffer.received + 1
+	if not fragmentState.fragments[fragmentData.fragmentIndex] then
+		fragmentState.fragments[fragmentData.fragmentIndex] = fragmentData.data
+		fragmentState.received = fragmentState.received + 1
 	end
 
-	if buffer.received == buffer.totalFragments then
-		local completeData = ""
-		for i = 0, buffer.totalFragments - 1 do
-			completeData = completeData .. buffer.fragments[i]
+	if fragmentState.received == fragmentState.totalFragments then
+		local totalLength = 0
+		for i = 0, fragmentState.totalFragments - 1 do
+			totalLength += buffer.len(fragmentState.fragments[i])
+		end
+
+		local completeData = buffer.create(totalLength)
+		local writeOffset = 0
+		for i = 0, fragmentState.totalFragments - 1 do
+			local chunk = fragmentState.fragments[i]
+			local chunkLength = buffer.len(chunk)
+			buffer.copy(completeData, writeOffset, chunk, 0, chunkLength)
+			writeOffset += chunkLength
 		end
 
 		client.fragmentBuffer[msgId] = nil
+
+		print(`[KiNet][Server] Reassembled fragmented message {msgId} from {clientKey(client)} ({fragmentState.totalFragments} fragments)`)
 
 		return Serializer.Deserialize(completeData)
 	end
@@ -462,7 +476,15 @@ function Server:Listen()
 				break
 			end
 
-			local addr, data = self.Socket:recvMsg(MAX_MESSAGE_SIZE)
+			local success, addr, data = pcall(function()
+				return self.Socket:recvMsg(MAX_MESSAGE_SIZE)
+			end)
+
+			if not success then
+				warn(`[KiNet][Server] recvMsg failed: {addr}`)
+				task.wait()
+				continue
+			end
 
 			if not data then
 				task.wait()
@@ -481,16 +503,16 @@ function Server:Listen()
 				local client = Server.ConnectedClients[key]
 
 				if decoded.fragment and client then
-					if decoded.reliable then
-						self:SendRaw(client, {
-							type = "ACK",
-							messageId = decoded.messageId,
-						})
-					end
-
+					local fragmentMessageId = decoded.messageId
 					local reassembled = self:ReassembleFragments(decoded, client)
 					if reassembled then
 						decoded = reassembled
+						if decoded.reliable then
+							self:SendRaw(client, {
+								type = "ACK",
+								messageId = fragmentMessageId,
+							})
+						end
 					else
 						task.wait()
 						continue

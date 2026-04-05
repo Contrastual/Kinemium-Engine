@@ -86,6 +86,12 @@ local cells = gui.cellparser({
 			backgroundColor = ThirdBackgroundColor,
 		},
 		{
+			name = "Language",
+			description = "Change interface language.",
+			font = vend,
+			backgroundColor = ThirdBackgroundColor,
+		},
+		{
 			name = "Theme",
 			description = "Change display gui theme.",
 			font = vend,

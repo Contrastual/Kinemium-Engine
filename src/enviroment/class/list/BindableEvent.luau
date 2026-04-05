@@ -1,26 +1,22 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
-local Enum = require("@EnumMap")
-local Instance = require("@Instance")
-
 local signal = require("@Kinemium.signal")
 
 local propTable = {}
 
 return {
 	class = "BindableEvent",
-	callback = function(object)
+	callback = function(instance, renderer, game)
+		instance:SetProperties(propTable)
+
 		local bindableSignal = signal.new()
 
-		propTable = {
-			Fire = bindableSignal.Fire,
-			Event = bindableSignal.Connect,
-			Name = "BindableEvent",
-		}
-		object.SetProperties(propTable)
+		instance.Event = bindableSignal
+		instance.Name = "BindableEvent"
 
-		return object
+		function instance:Fire(...)
+			bindableSignal:Fire(...)
+		end
+
+		return instance
 	end,
 	inherit = function(tble)
 		for prop, val in pairs(propTable) do

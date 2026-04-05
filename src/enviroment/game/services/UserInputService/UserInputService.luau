@@ -2,11 +2,14 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
 local UserInputService = Instance.new("UserInputService")
+local Vector2 = require("@Vector2")
 
 local InputBegan = signal.new()
 local InputEnded = signal.new()
 local MouseMoved = signal.new()
 local MouseWheel = signal.new()
+
+local raylib = require("@raylib")
 
 local active_keys = {} -- [keyValue: number] = true | nil
 
@@ -15,6 +18,8 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 		UserInputService:SetProperties({})
 		return
 	end
+
+	local prevMousePos = raylib.lib.GetMousePosition()
 
 	local Enum = require("@EnumMap")
 	local lib = renderer.Raylib.lib
@@ -94,6 +99,13 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 		return nil
 	end
 
+	function UserInputService:GetMouseDelta()
+		local mousePos = raylib.lib.GetMousePosition()
+		local delta = Vector2.new(mousePos.X - prevMousePos.X, mousePos.Y - prevMousePos.Y)
+		prevMousePos = mousePos
+		return delta
+	end
+
 	function UserInputService:IsKeyDown(key)
 		return lib.IsKeyDown(key.Value) == 1
 	end
@@ -104,6 +116,43 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 
 	function UserInputService:IsKeyReleased(key)
 		return lib.IsKeyReleased(key.Value) == 1
+	end
+
+	function UserInputService:IsMouseButtonDown(button)
+		return lib.IsMouseButtonDown(button.Value) == 1
+	end
+
+	function UserInputService:IsMouseButtonPressed(button)
+		return lib.IsMouseButtonPressed(button.Value) == 1
+	end
+
+	function UserInputService:IsMouseButtonReleased(button)
+		return lib.IsMouseButtonReleased(button.Value) == 1
+	end
+
+	function UserInputService:SetMousePosition(position: Vector2)
+		lib.SetMousePosition(position.X, position.Y)
+	end
+
+	function UserInputService:GetWindowDimensions()
+		return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
+	end
+
+	function UserInputService:DisableCursor()
+		lib.DisableCursor()
+	end
+
+	function UserInputService:EnableCursor()
+		lib.EnableCursor()
+	end
+
+	function UserInputService:GetMousePosition()
+		local mousePos = raylib.lib.GetMousePosition()
+		return Vector2.new(mousePos.X, mousePos.Y)
+	end
+
+	function UserInputService:GetScreenDimensions()
+		return Vector2.new(lib.GetScreenWidth(), lib.GetScreenHeight())
 	end
 
 	renderer_signal:Connect(function(route, data)

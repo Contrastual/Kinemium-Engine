@@ -16,6 +16,10 @@ local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
 
 function Client:Init(serverAddress, serverPort, authToken)
+	if self.Socket then
+		self:Disconnect()
+	end
+
 	local socket = net.createSocket(
 		net.ADDRF.INET,
 		bit32.bor(net.SOCKF.DGRAM, net.SOCKF.NONBLOCK, net.SOCKF.CLOEXEC),
@@ -34,10 +38,16 @@ function Client:Init(serverAddress, serverPort, authToken)
 	self.MessageSequence = 0
 	self.ReceivedSequences = {}
 	self.RateLimitWindow = {}
-	self.MaxMessagesPerSecond = 100
+	self.MaxMessagesPerSecond = 300
 	self.PendingAcks = {}
 	self.FragmentBuffer = {}
 	self.ReliableQueue = {}
+	self._reliableQueueRunning = false
+	self._heartbeatRunning = false
+	self._listenRunning = false
+
+	onRecieveConnections = {}
+	messageQueue = {}
 
 	print(`Created client socket with auth token`)
 	return socket
@@ -82,7 +92,7 @@ function Client:ValidateMessage(data)
 end
 
 function Client:CheckRateLimit()
-	local currentTime = os.time()
+	local currentTime = os.clock()
 
 	local filtered = {}
 	for _, timestamp in ipairs(self.RateLimitWindow or {}) do
@@ -104,22 +114,25 @@ function Client:FragmentMessage(data, messageId)
 	local buf = Serializer.Serialize(data)
 
 	if buffer.len(buf) <= MTU_SIZE then
-		return { {
-			fragment = false,
-			data = data,
-		} }
+		return { data }
+	end
+
+	if data.kind then
+		print(`[KiNet][Client] Fragmenting {data.channel}:{data.kind} into {math.ceil(buffer.len(buf) / MTU_SIZE)} fragments ({buffer.len(buf)} bytes)`)
 	end
 
 	local fragments = {}
 	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
 
 	for i = 0, totalFragments - 1 do
-		local start = i * MTU_SIZE + 1
-		local stop = math.min((i + 1) * MTU_SIZE, buffer.len(buf))
-		local chunk = string.sub(buf, start, stop)
+		local startOffset = i * MTU_SIZE
+		local chunkLength = math.min(MTU_SIZE, buffer.len(buf) - startOffset)
+		local chunk = buffer.create(chunkLength)
+		buffer.copy(chunk, 0, buf, startOffset, chunkLength)
 
 		table.insert(fragments, {
 			fragment = true,
+			reliable = true,
 			messageId = messageId,
 			fragmentIndex = i,
 			totalFragments = totalFragments,
@@ -141,20 +154,31 @@ function Client:ReassembleFragments(fragmentData)
 		}
 	end
 
-	local buffer = self.FragmentBuffer[msgId]
+	local fragmentState = self.FragmentBuffer[msgId]
 
-	if not buffer.fragments[fragmentData.fragmentIndex] then
-		buffer.fragments[fragmentData.fragmentIndex] = fragmentData.data
-		buffer.received = buffer.received + 1
+	if not fragmentState.fragments[fragmentData.fragmentIndex] then
+		fragmentState.fragments[fragmentData.fragmentIndex] = fragmentData.data
+		fragmentState.received = fragmentState.received + 1
 	end
 
-	if buffer.received == buffer.totalFragments then
-		local completeData = ""
-		for i = 0, buffer.totalFragments - 1 do
-			completeData = completeData .. buffer.fragments[i]
+	if fragmentState.received == fragmentState.totalFragments then
+		local totalLength = 0
+		for i = 0, fragmentState.totalFragments - 1 do
+			totalLength += buffer.len(fragmentState.fragments[i])
+		end
+
+		local completeData = buffer.create(totalLength)
+		local writeOffset = 0
+		for i = 0, fragmentState.totalFragments - 1 do
+			local chunk = fragmentState.fragments[i]
+			local chunkLength = buffer.len(chunk)
+			buffer.copy(completeData, writeOffset, chunk, 0, chunkLength)
+			writeOffset += chunkLength
 		end
 
 		self.FragmentBuffer[msgId] = nil
+
+		print(`[KiNet][Client] Reassembled fragmented message {msgId} ({fragmentState.totalFragments} fragments)`)
 
 		return Serializer.Deserialize(completeData)
 	end
@@ -206,8 +230,13 @@ function Client:SendRaw(data)
 end
 
 function Client:ProcessReliableQueue()
+	if self._reliableQueueRunning then
+		return
+	end
+
+	self._reliableQueueRunning = true
 	task.spawn(function()
-		while true do
+		while self._reliableQueueRunning do
 			task.wait(0.1)
 
 			local currentTime = os.clock()
@@ -222,7 +251,9 @@ function Client:ProcessReliableQueue()
 						ackData.lastSent = currentTime
 
 						for _, fragment in ipairs(ackData.fragments) do
-							self:SendRaw(fragment)
+							if self.Socket then
+								self:SendRaw(fragment)
+							end
 						end
 					end
 				end
@@ -271,9 +302,19 @@ function Client:Disconnect()
 		})
 	end
 
+	self._reliableQueueRunning = false
+	self._heartbeatRunning = false
+	self._listenRunning = false
+
 	self.Socket:close()
+	self.Socket = nil
 	self.IsAuthenticated = false
 	self.SessionId = nil
+	self.PendingAcks = {}
+	self.FragmentBuffer = {}
+	self.ReliableQueue = {}
+	self.ReceivedSequences = {}
+	self.RateLimitWindow = {}
 
 	if Client._OnShutdown then
 		Client._OnShutdown()
@@ -337,8 +378,13 @@ function Client._middleware(v, addr)
 end
 
 function Client:StartHeartbeat()
+	if self._heartbeatRunning then
+		return
+	end
+
+	self._heartbeatRunning = true
 	task.spawn(function()
-		while true do
+		while self._heartbeatRunning do
 			task.wait(HEARTBEAT_INTERVAL)
 			if Client.IsAuthenticated then
 				Client:Send({
@@ -350,10 +396,19 @@ function Client:StartHeartbeat()
 end
 
 function Client:Listen()
+	if self._listenRunning then
+		return
+	end
+
+	self._listenRunning = true
 	self:ProcessReliableQueue()
 
 	task.spawn(function()
-		while true do
+		while self._listenRunning do
+			if not self.Socket then
+				break
+			end
+
 			local success, addr, data = pcall(function()
 				return self.Socket:recvMsg(MAX_MESSAGE_SIZE)
 			end)
@@ -368,16 +423,16 @@ function Client:Listen()
 
 				if decoded then
 					if decoded.fragment then
-						if decoded.reliable then
-							self:SendRaw({
-								type = "ACK",
-								messageId = decoded.messageId,
-							})
-						end
-
+						local fragmentMessageId = decoded.messageId
 						local reassembled = self:ReassembleFragments(decoded)
 						if reassembled then
 							decoded = reassembled
+							if decoded.reliable then
+								self:SendRaw({
+									type = "ACK",
+									messageId = fragmentMessageId,
+								})
+							end
 						else
 							task.wait()
 							continue

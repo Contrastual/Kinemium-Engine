@@ -20,6 +20,34 @@ local function mulRotation(a, b)
 	return r
 end
 
+local function safeUnit(vec, fallback)
+	local magSq = vec.X * vec.X + vec.Y * vec.Y + vec.Z * vec.Z
+	if magSq <= CF_EPSILON * CF_EPSILON then
+		return fallback
+	end
+
+	local mag = math.sqrt(magSq)
+	return Vector3.new(vec.X / mag, vec.Y / mag, vec.Z / mag)
+end
+
+local function buildLookRotation(pos, target, up)
+	up = up or Vector3.new(0, 1, 0)
+
+	local z = safeUnit(pos - target, Vector3.new(0, 0, 1))
+	if math.abs(up:Dot(z)) > 0.999 then
+		up = Vector3.new(0, 0, 1)
+	end
+
+	local x = safeUnit(up:Cross(z), Vector3.new(1, 0, 0))
+	local y = safeUnit(z:Cross(x), Vector3.new(0, 1, 0))
+
+	return {
+		{ x.X, y.X, z.X },
+		{ x.Y, y.Y, z.Y },
+		{ x.Z, y.Z, z.Z },
+	}
+end
+
 function CFrame.new(...)
 	local args = { ... }
 	local self = setmetatable({}, CFrame)
@@ -36,20 +64,8 @@ function CFrame.new(...)
 		self.Position = Vector3.new(args[1], args[2], args[3])
 	elseif #args == 2 then
 		local pos, target = args[1], args[2]
-		local z = (pos - target)
-		local zmag = math.sqrt(z.X ^ 2 + z.Y ^ 2 + z.Z ^ 2)
-		z = Vector3.new(z.X / zmag, z.Y / zmag, z.Z / zmag)
-		local up = Vector3.new(0, 1, 0)
-		local x = up:Cross(z)
-		local xmag = math.sqrt(x.X ^ 2 + x.Y ^ 2 + x.Z ^ 2)
-		x = Vector3.new(x.X / xmag, x.Y / xmag, x.Z / xmag)
-		local y = z:Cross(x)
 		self.Position = pos
-		self.Rotation = {
-			{ x.X, y.X, z.X },
-			{ x.Y, y.Y, z.Y },
-			{ x.Z, y.Z, z.Z },
-		}
+		self.Rotation = buildLookRotation(pos, target)
 	elseif #args == 12 then
 		self.Position = Vector3.new(args[1], args[2], args[3])
 		self.Rotation = {
@@ -58,14 +74,21 @@ function CFrame.new(...)
 			{ args[10], args[11], args[12] },
 		}
 	else
-		error("Invalid CFrame.new arguments")
+		self.Position = Vector3.new(0, 0, 0)
 	end
 
 	return self
 end
 
 function CFrame:ToQuaternion()
-	local r = self.Rotation
+	local cf = CFrame.new(self.Position)
+	cf.Rotation = {
+		{ self.Rotation[1][1], self.Rotation[1][2], self.Rotation[1][3] },
+		{ self.Rotation[2][1], self.Rotation[2][2], self.Rotation[2][3] },
+		{ self.Rotation[3][1], self.Rotation[3][2], self.Rotation[3][3] },
+	}
+	cf:Orthonormalize()
+	local r = cf.Rotation
 
 	-- Calculate trace
 	local trace = r[1][1] + r[2][2] + r[3][3]
@@ -102,16 +125,28 @@ function CFrame:ToQuaternion()
 end
 
 function CFrame.__mul(a, b)
-	local pos = a.Position
-		+ Vector3.new(
-			a.Rotation[1][1] * b.Position.X + a.Rotation[1][2] * b.Position.Y + a.Rotation[1][3] * b.Position.Z,
-			a.Rotation[2][1] * b.Position.X + a.Rotation[2][2] * b.Position.Y + a.Rotation[2][3] * b.Position.Z,
-			a.Rotation[3][1] * b.Position.X + a.Rotation[3][2] * b.Position.Y + a.Rotation[3][3] * b.Position.Z
-		)
-	local rot = mulRotation(a.Rotation, b.Rotation)
-	local cf = CFrame.new(pos)
-	cf.Rotation = rot
-	return cf
+	if typeof(b) == "table" and b.X and b.Y and b.Z and not b.Position then
+		-- Vector3 check (has coordinates but not a nested Position)
+		return a.Position
+			+ Vector3.new(
+				a.Rotation[1][1] * b.X + a.Rotation[1][2] * b.Y + a.Rotation[1][3] * b.Z,
+				a.Rotation[2][1] * b.X + a.Rotation[2][2] * b.Y + a.Rotation[2][3] * b.Z,
+				a.Rotation[3][1] * b.X + a.Rotation[3][2] * b.Y + a.Rotation[3][3] * b.Z
+			)
+	elseif typeof(b) == "table" and b.Position and b.Rotation then
+		-- CFrame check
+		local pos = a.Position
+			+ Vector3.new(
+				a.Rotation[1][1] * b.Position.X + a.Rotation[1][2] * b.Position.Y + a.Rotation[1][3] * b.Position.Z,
+				a.Rotation[2][1] * b.Position.X + a.Rotation[2][2] * b.Position.Y + a.Rotation[2][3] * b.Position.Z,
+				a.Rotation[3][1] * b.Position.X + a.Rotation[3][2] * b.Position.Y + a.Rotation[3][3] * b.Position.Z
+			)
+		local rot = mulRotation(a.Rotation, b.Rotation)
+		local cf = CFrame.new(pos)
+		cf.Rotation = rot
+		return cf
+	end
+	error("CFrame can only be multiplied by Vector3 or CFrame (got " .. typeof(b) .. ")")
 end
 
 function CFrame:Inverse()
@@ -150,24 +185,8 @@ function CFrame:ToWorldSpace(cf)
 end
 
 function CFrame.lookAt(pos, target, up)
-	up = up or Vector3.new(0, 1, 0)
-	local z = (pos - target)
-	local zmag = math.sqrt(z.X ^ 2 + z.Y ^ 2 + z.Z ^ 2)
-	z = Vector3.new(z.X / zmag, z.Y / zmag, z.Z / zmag)
-	if math.abs(up:Dot(z)) > 0.999 then
-		up = Vector3.new(0, 0, 1)
-	end
-
-	local x = up:Cross(z)
-	local xmag = math.sqrt(x.X ^ 2 + x.Y ^ 2 + x.Z ^ 2)
-	x = Vector3.new(x.X / xmag, x.Y / xmag, x.Z / xmag)
-	local y = z:Cross(x)
 	local cf = CFrame.new(pos)
-	cf.Rotation = {
-		{ x.X, y.X, z.X },
-		{ x.Y, y.Y, z.Y },
-		{ x.Z, y.Z, z.Z },
-	}
+	cf.Rotation = buildLookRotation(pos, target, up)
 
 	return cf
 end
@@ -714,7 +733,10 @@ function CFrame.Angles(x, y, z)
 end
 
 function CFrame:__tostring()
-	return ("CFrame.new(%s, %s, %s)"):format(self.Position.X, self.Position.Y, self.Position.Z)
+	return string.format(
+		"%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f",
+		self:GetComponents()
+	)
 end
 
 function CFrame:ToTable()
@@ -733,7 +755,14 @@ function CFrame.FromTable(tbl)
 end
 
 function CFrame:ToRaylibMatrixScale(scale, structs)
-	local r = self.Rotation
+	local cf = CFrame.new(self.Position)
+	cf.Rotation = {
+		{ self.Rotation[1][1], self.Rotation[1][2], self.Rotation[1][3] },
+		{ self.Rotation[2][1], self.Rotation[2][2], self.Rotation[2][3] },
+		{ self.Rotation[3][1], self.Rotation[3][2], self.Rotation[3][3] },
+	}
+	cf:Orthonormalize()
+	local r = cf.Rotation
 	local p = self.Position
 	scale = scale or { X = 1, Y = 1, Z = 1 }
 

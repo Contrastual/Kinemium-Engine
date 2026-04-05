@@ -94,17 +94,6 @@ ki3d.shaders = {
 	end,
 }
 
--- Post-process filter registry
---   Required fields (per filter):
---     shader     { vertex, fragment }   — shader paths
---     priority   number                 — lower = runs earlier (default 0)
---     begin      function(self, rt)     — called before drawing the full-screen quad
---     finish     function(self, rt)     — called after drawing the full-screen quad
---   Optional fields:
---     blendMode    "multiply"           — SSAO-style multiply composite instead of replace
---     inputTexture "depth"|"normal"     — sample depth/normal RT instead of colour
---     disableauto  true                — skip the full-screen draw; only call setuniforms()
---     setuniforms  function(self, rt)  — called when disableauto=true
 ki3d.filters = {
 	new = function(name, data: KI3DFilter)
 		local object = data
@@ -140,20 +129,6 @@ ki3d.init = function(screenWidth, screenHeight)
 	outputRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 	swapRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 end
-
--- ─── Main Frame Entry Point ───────────────────────────────────────────────────
---
--- ki3d:Frame(camera, drawFn)
---
---   camera  — Raylib camera buffer (passed to BeginMode3D inside drawFn)
---   drawFn  — function()  the full scene draw (BeginMode3D … draws … EndMode3D)
---
--- Internally executes:
---   1. Depth prepass   → depthRT   (if _depthShader is set)
---   2. Normal prepass  → normalRT  (if _normalShader is set)
---   3. Main scene      → sceneRT
---   4. Post-process filter chain (sorted by priority)
---   → result is stored in self.finalRT; call ki3d:Draw() to blit to screen
 
 ki3d.Frame = function(self, camera, drawFn)
 	if not sceneRT or not ki3d.enabled then

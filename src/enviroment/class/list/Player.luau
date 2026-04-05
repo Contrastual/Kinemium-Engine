@@ -4,7 +4,7 @@ local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 local signal = require("@Kinemium.signal")
 
-local propTable = {
+local baseProps = {
 	Name = "Player",
 	UserId = 0,
 	Character = nil,
@@ -16,17 +16,26 @@ local propTable = {
 	JumpPower = 50,
 }
 
+local function makeProps()
+	local props = {}
+	for key, value in pairs(baseProps) do
+		props[key] = value
+	end
+
+	props.CharacterAdded = signal.new()
+	props.CharacterRemoving = signal.new()
+
+	return props
+end
+
 return {
 	class = "Player",
 	non_creatable = true,
 	callback = function(instance, starterGui)
-		local CharacterAdded = signal.new()
-		local CharacterRemoving = signal.new()
-
-		propTable.CharacterAdded = CharacterAdded
-		propTable.CharacterRemoving = CharacterRemoving
-
-		instance:SetProperties(propTable)
+		if rawget(instance, "_playerCallbackInitialized") ~= true then
+			rawset(instance, "_playerCallbackInitialized", true)
+			instance:SetProperties(makeProps())
+		end
 		if starterGui and starterGui.ClassName == "StarterGui" then
 			instance.PlayerGui = starterGui:Clone()
 		end
@@ -34,7 +43,7 @@ return {
 		return instance
 	end,
 	inherit = function(tble)
-		for prop, val in pairs(propTable) do
+		for prop, val in pairs(makeProps()) do
 			tble[prop] = val
 		end
 	end,

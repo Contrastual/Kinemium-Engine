@@ -3,6 +3,7 @@ local signal = require("@kinemium.signal")
 local Enum = require("@EnumMap")
 local ffi = zune.ffi
 local CFrame = require("@CFrame")
+local Vector3 = require("@Vector3")
 
 local propTable = {
 	Color = Color3.new(0.5, 0.5, 0.5),
@@ -19,8 +20,10 @@ local propTable = {
 
 	-- enum
 	Style = Enum.HandlesStyle.Movement,
+	RotationSnap = 0,
 
 	_gizmoTransform = ffi.alloc(12 + 16 + 12),
+	_isDragging = false,
 }
 
 return {
@@ -40,6 +43,17 @@ return {
 					instance._gizmoTransform:writef32(0, pos.X)
 					instance._gizmoTransform:writef32(4, pos.Y)
 					instance._gizmoTransform:writef32(8, pos.Z)
+
+					local x, y, z, w = part.CFrame:ToQuaternion()
+					instance._gizmoTransform:writef32(12, x)
+					instance._gizmoTransform:writef32(16, y)
+					instance._gizmoTransform:writef32(20, z)
+					instance._gizmoTransform:writef32(24, w)
+
+					local size = part.Size
+					instance._gizmoTransform:writef32(28, size.X)
+					instance._gizmoTransform:writef32(32, size.Y)
+					instance._gizmoTransform:writef32(36, size.Z)
 				end
 			end
 		end)
@@ -47,23 +61,53 @@ return {
 		propTable.render = function(handles, renderer, datamodel)
 			if handles.Adornee then
 				local part = handles.Adornee
+				if part and part:IsA("BasePart") then
+					-- ONLY update buffer from part if NOT currently dragging
+					if not handles._isDragging then
+						local pos = part.CFrame.Position
+						handles._gizmoTransform:writef32(0, pos.X)
+						handles._gizmoTransform:writef32(4, pos.Y)
+						handles._gizmoTransform:writef32(8, pos.Z)
+
+						local x, y, z, w = part.CFrame:ToQuaternion()
+						handles._gizmoTransform:writef32(12, x)
+						handles._gizmoTransform:writef32(16, y)
+						handles._gizmoTransform:writef32(20, z)
+						handles._gizmoTransform:writef32(24, w)
+
+						local size = part.Size
+						handles._gizmoTransform:writef32(28, size.X)
+						handles._gizmoTransform:writef32(32, size.Y)
+						handles._gizmoTransform:writef32(36, size.Z)
+					end
+				end
 
 				local success = false
+
+				if handles.Style == Enum.HandlesStyle.Rotation then
+					gizmo.SetGizmoRotateSnapDegrees(handles.RotationSnap or 0)
+				end
 
 				if handles.Style == Enum.HandlesStyle.Movement then
 					success = gizmo.DrawGizmo3D(gizmo.Flags.TRANSLATE, handles._gizmoTransform)
 				elseif handles.Style == Enum.HandlesStyle.Rotation then
 					success = gizmo.DrawGizmo3D(gizmo.Flags.ROTATE, handles._gizmoTransform)
 				elseif handles.Style == Enum.HandlesStyle.Resize then
-					success = gizmo.DrawGizmo3D(gizmo.Flags.TRANSLATE, handles._gizmoTransform)
+					success = gizmo.DrawGizmo3D(gizmo.Flags.SCALE, handles._gizmoTransform)
 				end
 
+				handles._isDragging = success
+
 				if success then
-					local gizmoTransform = handles._gizmoTransform
-					local newCF =
-						CFrame.new(gizmoTransform:readf32(0), gizmoTransform:readf32(4), gizmoTransform:readf32(8))
+					local gt = handles._gizmoTransform
+					local pos = Vector3.new(gt:readf32(0), gt:readf32(4), gt:readf32(8))
+					local qx, qy, qz, qw = gt:readf32(12), gt:readf32(16), gt:readf32(20), gt:readf32(24)
+
+					local newCF = CFrame.fromQuaternion(qx, qy, qz, qw, pos)
+					local newScale = Vector3.new(gt:readf32(28), gt:readf32(32), gt:readf32(36))
+
 					handles.Transform = newCF
-					instance.MouseDrag:Fire(newCF)
+					instance.MouseDrag:Fire(newCF, newScale)
 				end
 			end
 		end

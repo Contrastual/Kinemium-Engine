@@ -20,9 +20,18 @@ Part.inherit(propTable)
 return {
 	class = "MeshPart",
 
-	callback = function(instance, renderer)
+	callback = function(instance, renderer, game)
 		instance:SetProperties(propTable)
 		instance:SetMetadata("IsMovable", true)
+
+		local KinemiumPhysicsService = game and game:GetService("JoltPhysicsService") or nil
+		instance.ApplyImpulse = function(self, v)
+			if KinemiumPhysicsService then
+				KinemiumPhysicsService.ApplyImpulse(instance, v)
+			end
+		end
+
+		renderer.EventBus:Fire("UpdatePart", instance)
 
 		return instance
 	end,

@@ -20,16 +20,6 @@ local propTable = {
 	Visible = true,
 }
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
 GuiObject.inherit(propTable)
 
 return {

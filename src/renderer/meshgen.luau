@@ -725,6 +725,18 @@ function meshgen.buildMesh(vertices, indices, opts)
 	return mesh
 end
 
+function meshgen.buildMeshWithData(vertices, indices, opts)
+	local meshData = meshgen.buildMeshData(vertices, indices, opts)
+	if not meshData then
+		return nil
+	end
+	local primitive = (opts and opts.primitive) or meshgen.Primitive.Triangles
+	local usage = (opts and opts.usage) or meshgen.Usage.Static
+	local mesh = r3d.R3D_LoadMesh(primitive, meshData, ffi.null, usage)
+	-- meshData is intentionally NOT unloaded here
+	return { meshData, mesh }
+end
+
 function meshgen.mergeMeshData(meshList)
 	local outVerts, outIndices, offset = {}, {}, 0
 	for _, m in ipairs(meshList) do
@@ -1459,7 +1471,9 @@ function meshgen.buildFromTriangles(triangles, opts)
 	end
 	local newOpts = opts or {}
 	newOpts.indicesAreZeroBased = true
-	return meshgen.buildMesh(verts, indices, newOpts)
+	-- Use buildMeshWithData so we get both CPU data (for raycasting) and the
+	-- uploaded GPU mesh in a single pass, without building meshData twice.
+	return meshgen.buildMeshWithData(verts, indices, newOpts)
 end
 
 return meshgen

@@ -6,6 +6,30 @@ local GuiObject = require("@GuiObject")
 local raylib = require("@raylib")
 local lib = raylib.lib
 
+local function resolveBlendMode(value)
+	if type(value) == "number" then
+		return value
+	end
+	if type(value) ~= "string" then
+		return raylib.const.BlendMode.BLEND_ALPHA
+	end
+
+	local normalized = string.lower(value)
+	if normalized == "additive" or normalized == "add" then
+		return raylib.const.BlendMode.BLEND_ADDITIVE
+	elseif normalized == "multiply" or normalized == "multiplied" then
+		return raylib.const.BlendMode.BLEND_MULTIPLIED
+	elseif normalized == "premultiply" or normalized == "premultipliedalpha" or normalized == "premultiplied" then
+		return raylib.const.BlendMode.BLEND_ALPHA_PREMULTIPLY
+	elseif normalized == "addcolors" then
+		return raylib.const.BlendMode.BLEND_ADD_COLORS
+	elseif normalized == "subtract" or normalized == "subtractcolors" then
+		return raylib.const.BlendMode.BLEND_SUBTRACT_COLORS
+	end
+
+	return raylib.const.BlendMode.BLEND_ALPHA
+end
+
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 100, 0, 100),
@@ -27,6 +51,16 @@ local propTable = {
 
 propTable.render = function(lib, object, dt, structs, renderer)
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
+	if not framePos or not frameSize then
+		return
+	end
+
+	local blend = object:FindFirstChildOfClass("UIBlend")
+	local didBlend = false
+	if blend and blend.Enabled ~= false and blend.AffectSelf ~= false then
+		lib.BeginBlendMode(resolveBlendMode(blend.Mode))
+		didBlend = true
+	end
 
 	if type(object.Image) == "table" and object.Image.ClassName == "EditableImage" then
 		local eImage = object.Image
@@ -108,6 +142,10 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		end
 	end
 
+	if didBlend then
+		lib.EndBlendMode()
+	end
+
 	return framePos, frameSize, object._cached
 end
 
@@ -141,6 +179,13 @@ return {
 						instance._cached = nil
 					end
 				end
+			end
+		end)
+
+		instance.Destroying:Connect(function()
+			if instance._cached then
+				lib.UnloadTexture(instance._cached)
+				instance._cached = nil
 			end
 		end)
 

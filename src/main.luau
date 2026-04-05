@@ -229,7 +229,7 @@ local function loadInternals()
 		Folder.Parent = kilang.env.game.CoreGui
 	end
 
-	loop("src/sandboxed/internals", function(path, entry)
+	loop(zembed.IsEmbedded() and "../../src/sandboxed/internals" or "src/sandboxed/internals", function(path, entry)
 		if kilang.threads[path] then
 			return
 		end
@@ -274,7 +274,7 @@ end
 
 -- LOAD USER SCRIPTS
 function Kinemium:run()
-	loop("src/sandboxed", function(path, entry)
+	loop(zembed.IsEmbedded() and "../../src/sandboxed" or "src/sandboxed", function(path, entry)
 		if string.find(path, "internals") or string.find(path, "Core") then
 			return
 		end

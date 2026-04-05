@@ -6,6 +6,7 @@ local sandboxer = require("@sandboxer")
 local task = zune.task
 local fs = zune.fs
 local process = zune.process
+local kilang = require("@Kilang")
 local platform = zune.platform
 
 local ScriptRunnerService = Instance.new("ScriptRunnerService")
@@ -13,6 +14,7 @@ ScriptRunnerService.ExplorerHidden = true
 
 local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
 local userThreads = {}
+local externalEditorThreads = {}
 
 -- Thread metadata: { name, thread, env, status, memoryLimit, memoryUsed }
 local threadMeta = {}
@@ -49,26 +51,11 @@ end
 ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 	local ScriptRan = signal.new()
 
-	-- Wrap buffer.create to enforce max buffer size
-	local originalBufferCreate = buffer.create
-	enviroment.buffer = enviroment.buffer or {}
-	local envBuffer = setmetatable({}, { __index = buffer })
-
-	envBuffer.create = function(size)
-		if size >= MAX_BUFFER_SIZE then
-			error(`Cannot create buffer of size {size} bytes. Maximum allowed is {MAX_BUFFER_SIZE} bytes (1GB).`)
-		end
-		return originalBufferCreate(size)
-	end
-
-	-- Override buffer in environment
-	enviroment.buffer = envBuffer
-
 	ScriptRunnerService:SetProperties({
 		RunLuauScript = function(ScriptInstance)
 			local LogService = datamodel:GetService("LogService")
 			local outsideSuccess, outsideResult
-			local scriptEnv = setmetatable({}, { __index = enviroment })
+			local scriptEnv = table.clone(enviroment)
 			scriptEnv.script = ScriptInstance
 
 			local object = task.spawn(function()
@@ -235,6 +222,11 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 				pcall(task.cancel, thread)
 			end
 
+			for uniqueId, thread in pairs(externalEditorThreads) do
+				pcall(task.cancel, thread)
+				externalEditorThreads[uniqueId] = nil
+			end
+
 			-- Mark all thread metadata as dead
 			for name, info in pairs(threadMeta) do
 				info.status = "dead"
@@ -246,29 +238,57 @@ ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 		end,
 
 		OpenInExternalEditor = function(script, program, folderPath)
+			local path = folderPath .. "/" .. script.UniqueId .. ".luau"
+			fs.writeFile(path, script.Source)
+
+			script.IsOverridden = true
+
+			local abs = fs.realPath(path)
+
+			local command
+			local args = { abs }
+
 			if program == "vscode" then
-				local path = folderPath .. "/" .. script.UniqueId .. ".luau"
-				fs.writeFile(path, script.Source)
-
-				script.IsOverridden = true
-
-				local abs = fs.realPath(path)
-
-				task.spawn(function()
-					process.run("code", { abs }, { shell = true })
-				end)
-				task.spawn(function()
-					while true do
-						if fs.stat(path).kind ~= "none" then
-							script.Source = fs.readFile(path)
-							task.wait(0.3)
-						else
-							print("File not found")
-							break
-						end
-					end
-				end)
+				command = "code"
+			elseif program == "note" then
+				command = "notepad"
+			else -- "let my os choose"
+				command = "start"
+				args = { "", abs } -- important: empty title for start
 			end
+
+			task.spawn(function()
+				process.run(command, args, { shell = true })
+			end)
+
+			local existingThread = externalEditorThreads[script.UniqueId]
+			if existingThread then
+				pcall(task.cancel, existingThread)
+			end
+
+			local syncThread
+			syncThread = task.spawn(function()
+				local lastSource = script.Source
+				while not script.Destroyed do
+					local ok, stat = pcall(fs.stat, path)
+					if not ok or not stat or stat.kind == "none" then
+						break
+					end
+
+					local okRead, source = pcall(fs.readFile, path)
+					if okRead and source ~= lastSource then
+						lastSource = source
+						script.Source = source
+					end
+
+					task.wait(0.3)
+				end
+
+				if externalEditorThreads[script.UniqueId] == syncThread then
+					externalEditorThreads[script.UniqueId] = nil
+				end
+			end)
+			externalEditorThreads[script.UniqueId] = syncThread
 		end,
 
 		-- Memory limit getter

@@ -21,7 +21,9 @@ return function(objects, data)
 		x = data.x or data[1],
 		y = data.y or data[2],
 		text = data.text or "1",
+		font = data.font or defaultFont,
 		fontSize = data.fontSize or 12,
+		spacing = data.spacing or 1,
 		backgroundColor = data.backgroundColor or color3.new(1, 0.2, 0.2),
 		textColor = data.textColor or color3.new(1, 1, 1),
 		minWidth = data.minWidth or 18,
@@ -34,7 +36,7 @@ return function(objects, data)
 	end
 
 	wrapper.render = function(dt)
-		local textWidth = raylib.lib.MeasureText(config.text, config.fontSize)
+		local textWidth = raylib.lib.MeasureTextEx(config.font, config.text, config.fontSize, config.spacing).x
 		local badgeWidth = math.max(config.minWidth, textWidth + 8)
 		local badgeHeight = config.fontSize + 6
 
@@ -45,7 +47,14 @@ return function(objects, data)
 		local textX = config.x + (badgeWidth - textWidth) / 2
 		local textY = config.y + 3
 
-		raylib.lib.DrawText(config.text, textX, textY, config.fontSize, c3tr(config.textColor, 0))
+		raylib.lib.DrawTextEx(
+			config.font,
+			config.text,
+			vector.create(textX, textY),
+			config.fontSize,
+			config.spacing,
+			c3tr(config.textColor, 0)
+		)
 	end
 
 	table.insert(objects, wrapper)

@@ -1,12 +1,15 @@
 local Instance = require("@Instance")
-local signal = require("@Kinemium.signal")
+local GuiMirror = require("./GuiMirror")
 
 local PlayerGui = Instance.new("PlayerGui")
+local guiMirroringBound = false
+local guiMirrorController = nil
 
 PlayerGui.InitRenderer = function(renderer, renderer_signal, datamodel)
 	PlayerGui:SetProperties({
 		ResetOnSpawn = true,
 	})
+	GuiMirror.MarkTreeLocalOnly(PlayerGui)
 
 	PlayerGui.ChildAdded:Connect(function(child)
 		if type(child) == "table" and child.BaseClass == "UIContainer" then
@@ -23,6 +26,13 @@ PlayerGui.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end
 		end
 	end)
+
+	if datamodel and guiMirroringBound == false then
+		guiMirroringBound = true
+		guiMirrorController = GuiMirror.new(PlayerGui)
+		guiMirrorController:BindContainer(datamodel.StarterGui, "StarterGui")
+		guiMirrorController:BindContainer(datamodel.CoreGui, "CoreGui")
+	end
 
 	return PlayerGui
 end

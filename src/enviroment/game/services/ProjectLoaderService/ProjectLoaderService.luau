@@ -16,11 +16,35 @@ if zembed.IsEmbedded() then
 	projectsFile = "../" .. tomlFile[1]
 end
 
-local absolutePath = fs.realPath("./src/projects.toml")
-
 local settings = {
-	["luau-lsp.types.definitionFiles"] = { absolutePath },
+	["luau-lsp.types.definitionFiles"] = { "" },
 }
+
+local function buildProjectConfig(name, iconPath, description)
+	return {
+		info = {
+			name = name,
+			icon = iconPath,
+			desc = description,
+		},
+		pointers = {
+			assets = "game.ReplicatedStorage",
+			server = "game.ServerScriptService",
+			client = "game.StarterPlayerScripts",
+			gui = "game.StarterGui",
+			objects = "game.Workspace",
+		},
+		sync = {
+			live = false,
+			debounce = 0.35,
+			ignore = { ".git", ".vscode", "autosave" },
+		},
+		scripting = {
+			polyglot = true,
+			ntvcg = true,
+		},
+	}
+end
 
 ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 	ProjectLoaderService:SetProperties({
@@ -82,31 +106,8 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 					})
 				)
 
-				fs.createFile(kprojFile, {
-					exclusive = true,
-				})
-
-				fs.writeFile(
-					kprojFile,
-					serde.toml.encode({
-						info = {
-							name = name,
-							icon = iconPath,
-							desc = description,
-						},
-						pointers = {
-							assets = "game.ReplicatedStorage",
-							server = "game.ServerScriptService",
-							client = "game.StarterPlayerScripts",
-							gui = "game.StarterGui",
-							objects = "game.Workspace",
-						},
-						scripting = {
-							polyglot = true,
-							ntvcg = true,
-						},
-					})
-				)
+				local encodedProject = serde.toml.encode(buildProjectConfig(name, iconPath, description))
+				fs.writeFile(kprojFile, encodedProject)
 			end)
 			print(success, result)
 

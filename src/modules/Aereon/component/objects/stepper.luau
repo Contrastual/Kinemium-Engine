@@ -24,6 +24,8 @@ return function(objects, data)
 		currentStep = data.currentStep or 1,
 		size = data.size or 30,
 		spacing = data.spacing or 60,
+		font = data.font or defaultFont,
+		fontSpacing = data.fontSpacing or 1,
 		activeColor = data.activeColor or color3.new(0.02, 0.5, 1),
 		inactiveColor = data.inactiveColor or color3.new(0.3, 0.3, 0.3),
 		textColor = data.textColor or color3.new(1, 1, 1),
@@ -31,8 +33,17 @@ return function(objects, data)
 
 	local wrapper = {}
 
+	wrapper.set = function(prop, value)
+		if type(config[prop]) == "function" then
+			return wrapper
+		end
+		config[prop] = value
+		return wrapper
+	end
+
 	wrapper.setStep = function(step)
 		config.currentStep = math.clamp(step, 1, config.steps)
+		return wrapper
 	end
 
 	wrapper.render = function(dt)
@@ -60,12 +71,13 @@ return function(objects, data)
 
 			local stepText = tostring(i)
 			local fontSize = config.size / 2
-			local textWidth = raylib.lib.MeasureText(stepText, fontSize)
-			raylib.lib.DrawText(
+			local textWidth = raylib.lib.MeasureTextEx(config.font, stepText, fontSize, config.fontSpacing).x
+			raylib.lib.DrawTextEx(
+				config.font,
 				stepText,
-				stepX + config.size / 2 - textWidth / 2,
-				stepY + config.size / 2 - fontSize / 2,
+				vector.create(stepX + config.size / 2 - textWidth / 2, stepY + config.size / 2 - fontSize / 2),
 				fontSize,
+				config.fontSpacing,
 				c3tr(config.textColor, 0)
 			)
 		end

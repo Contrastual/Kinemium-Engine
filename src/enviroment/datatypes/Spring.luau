@@ -20,6 +20,56 @@ local cos = math.cos
 local sin = math.sin
 local EPS = 1e-4
 
+local function inferTypeName(value)
+	local luaType = type(value)
+	if luaType == "number" then
+		return "Number"
+	end
+
+	if luaType ~= "table" then
+		return nil
+	end
+
+	local mt = getmetatable(value)
+	if mt == Vector3 then
+		return "Vector3"
+	end
+	if mt == Vector2 then
+		return "Vector2"
+	end
+	if mt == Color3 then
+		return "Color3"
+	end
+	if mt == Color4 then
+		return "Color4"
+	end
+	if mt == CFrame then
+		return "CFrame"
+	end
+	if mt == UDim then
+		return "UDim"
+	end
+	if mt == UDim2 then
+		return "UDim2"
+	end
+	if mt == Ray then
+		return "Ray"
+	end
+	if mt == BoundingBox then
+		return "BoundingBox"
+	end
+
+	return value.__type or value.type
+end
+
+local function serializeValue(value)
+	if type(value) == "table" and value.ToTable then
+		return value:ToTable()
+	end
+
+	return value
+end
+
 local function zeroLike(v, typeName)
 	if typeName == "Number" then
 		return 0
@@ -33,6 +83,13 @@ local function zeroLike(v, typeName)
 	if typeName == "CFrame" then
 		return Vector3.new(0, 0, 0)
 	end -- track only position for velocity
+	if typeName == "UDim2" then
+		return UDim2.new(0, 0, 0, 0)
+	end
+	if typeName == "UDim" then
+		return UDim.new(0, 0)
+	end
+
 	error("Unsupported type: " .. tostring(typeName))
 end
 
@@ -122,7 +179,12 @@ Datatypes.UDim2 = {
 	step = function(x, v, target, d, f, dt)
 		local xVal, xVel = Datatypes.UDim.step(x.X, v.X, target.X, d, f, dt)
 		local yVal, yVel = Datatypes.UDim.step(x.Y, v.Y, target.Y, d, f, dt)
-		return UDim2.new(xVal, yVal), UDim2.new(xVel, yVel)
+		return UDim2.new(xVal.Scale, xVal.Offset, yVal.Scale, yVal.Offset), UDim2.new(
+			xVel.Scale,
+			xVel.Offset,
+			yVel.Scale,
+			yVel.Offset
+		)
 	end,
 }
 
@@ -187,6 +249,8 @@ function Spring.new(damping, frequency, typeName, initialValue)
 	}, Spring)
 end
 
+local activeTargets: { [Instance]: { [string]: typeof(Spring.new()) } } = {}
+
 function Spring:Play()
 	self.running = true
 end
@@ -225,9 +289,9 @@ function Spring:ToTable()
 		type = "Spring",
 		d = self.d,
 		f = self.f,
-		value = self.value:ToTable(),
-		velocity = self.velocity:ToTable(),
-		target = self.target:ToTable(),
+		value = serializeValue(self.value),
+		velocity = serializeValue(self.velocity),
+		target = serializeValue(self.target),
 		running = self.running,
 		typeName = self.typeName,
 	}
@@ -240,6 +304,48 @@ function Spring.FromTable(tbl)
 	spring.target = tbl.target
 	spring.running = tbl.running
 	return spring
+end
+
+function Spring.target(object: Instance, damping: number, frequency: number, props: { [string]: any })
+	for prop, targetValue in props do
+		local cache = activeTargets[object]
+		if not cache then
+			cache = {}
+			activeTargets[object] = cache
+		end
+
+		local spring = cache[prop]
+		if not spring then
+			local currentValue = (object :: any)[prop]
+			local typeName = inferTypeName(targetValue) or inferTypeName(currentValue)
+			assert(typeName and Datatypes[typeName], "Unsupported spring target type for property " .. tostring(prop))
+			spring = Spring.new(damping, frequency, typeName, currentValue)
+			spring:Play()
+			cache[prop] = spring
+		else
+			spring.d = damping
+			spring.f = frequency
+		end
+
+		spring:set(targetValue)
+	end
+end
+
+function Spring.stepTargets(dt: number)
+	for object, cache in activeTargets do
+		if not object.Parent then
+			activeTargets[object] = nil
+			continue
+		end
+		for prop, spring in cache do
+			local success, val = pcall(spring.step, spring, dt)
+			if success then
+				(object :: any)[prop] = val
+			else
+				cache[prop] = nil
+			end
+		end
+	end
 end
 
 return Spring

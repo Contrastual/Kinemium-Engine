@@ -22,10 +22,13 @@ return function(objects, data)
 		tabs = data.tabs or { "Tab 1", "Tab 2", "Tab 3" },
 		activeIndex = data.activeIndex or 1,
 		onTabChange = data.onTabChange,
+		font = data.font or defaultFont,
 		backgroundColor = data.backgroundColor or color3.new(0.15, 0.15, 0.15),
+		backgroundTransparency = data.backgroundTransparency or 0,
 		activeColor = data.activeColor or color3.new(0.02, 0.5, 1),
 		textColor = data.textColor or color3.new(1, 1, 1),
 		fontSize = data.fontSize or 16,
+		spacing = data.spacing or 1,
 		animX = 0,
 	}
 
@@ -43,11 +46,24 @@ return function(objects, data)
 		config.activeIndex = math.clamp(index, 1, #config.tabs)
 	end
 
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
+	wrapper.get_rect = function()
+		return config.obj_rect
+	end
+
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 		local tabWidth = r.width / #config.tabs
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(config.backgroundColor, 0))
+		raylib.lib.DrawRectangleRounded(
+			rect:translate(r),
+			0.2,
+			8,
+			c3tr(config.backgroundColor, config.backgroundTransparency)
+		)
 
 		local targetX = r.x + (config.activeIndex - 1) * tabWidth
 		config.animX = config.animX + (targetX - config.animX) * 0.15
@@ -65,11 +81,18 @@ return function(objects, data)
 			local tabX = r.x + (i - 1) * tabWidth
 			local tabRect = rect.new(tabX, r.y, tabWidth, r.height)
 
-			local textWidth = raylib.lib.MeasureText(tab, config.fontSize)
+			local textWidth = raylib.lib.MeasureTextEx(config.font, tab, config.fontSize, config.spacing).x
 			local textX = tabX + (tabWidth - textWidth) / 2
 			local textY = r.y + (r.height - config.fontSize) / 2
 
-			raylib.lib.DrawText(tab, textX, textY, config.fontSize, c3tr(config.textColor, 0))
+			raylib.lib.DrawTextEx(
+				config.font,
+				tab,
+				vector.create(textX, textY),
+				config.fontSize,
+				config.spacing,
+				c3tr(config.textColor, 0)
+			)
 
 			if rect.MouseIsInRect(tabRect) and raylib.lib.IsMouseButtonReleased(0) == 1 then
 				config.activeIndex = i

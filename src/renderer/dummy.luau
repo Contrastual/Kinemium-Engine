@@ -621,7 +621,6 @@ function KiRend.new(config: KiRendConf)
 		renderer_eventbus:Fire("PreRender", frameTime)
 		renderer_eventbus:Fire("RenderStepped", frameTime)
 
-		-- Key watching (no-op in headless — keys are never down, but hooks still fire)
 		local keyboardListenStart = os.clock()
 		perf_stats.input_key_ms = (os.clock() - keyboardListenStart) * 1000
 

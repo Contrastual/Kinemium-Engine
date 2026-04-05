@@ -29,6 +29,7 @@ return function(objects, data)
 		separatorColor = data.separatorColor or color3.new(0.25, 0.25, 0.25),
 		textColor = data.textColor or color3.new(0.9, 0.9, 0.9),
 		descriptionColor = data.descriptionColor or color3.new(0.6, 0.6, 0.6),
+		backgroundTransparency = data.backgroundTransparency or 0,
 
 		-- Position in list
 		position = data.position or "middle", -- "first", "middle", "last", "single"
@@ -96,58 +97,18 @@ return function(objects, data)
 	end
 
 	local function drawRoundedCellBackground(r, bgColor, position, roundness, segments)
-		-- Draw rectangle with selective corner rounding based on position
-		-- "first" = round top corners only
-		-- "middle" = no rounded corners
-		-- "last" = round bottom corners only
-		-- "single" = round all corners
+		local col = c3tr(bgColor, config.backgroundTransparency)
 
 		if position == "single" then
-			-- All corners rounded
-			raylib.lib.DrawRectangleRounded(rect:translate(r), roundness, segments, c3tr(bgColor, 0))
+			raylib.lib.DrawRectangleRounded(rect:translate(r), roundness, segments, col)
 		elseif position == "first" then
-			-- Top corners rounded, bottom square
-			-- Draw main rectangle
-			raylib.lib.DrawRectangle(
-				r.x,
-				r.y + r.height * roundness,
-				r.width,
-				r.height * (1 - roundness),
-				c3tr(bgColor, 0)
-			)
-
-			-- Draw rounded top
-			raylib.lib.DrawRectangleRounded(
-				structs.Rectangle:new({
-					x = r.x,
-					y = r.y,
-					width = r.width,
-					height = r.height * roundness * 3,
-				}),
-				roundness * 2,
-				segments,
-				c3tr(bgColor, 0)
-			)
+			raylib.lib.DrawRectangleRounded(rect:translate(r), roundness, segments, col)
+			raylib.lib.DrawRectangle(r.x, r.y + r.height / 2, r.width, r.height / 2, col)
 		elseif position == "last" then
-			-- Bottom corners rounded, top square
-			-- Draw main rectangle
-			raylib.lib.DrawRectangle(r.x, r.y, r.width, r.height * (1 - roundness), c3tr(bgColor, 0))
-
-			-- Draw rounded bottom
-			raylib.lib.DrawRectangleRounded(
-				structs.Rectangle:new({
-					x = r.x,
-					y = r.y + r.height * (1 - roundness * 3),
-					width = r.width,
-					height = r.height * roundness * 3,
-				}),
-				roundness * 2,
-				segments,
-				c3tr(bgColor, 0)
-			)
+			raylib.lib.DrawRectangleRounded(rect:translate(r), roundness, segments, col)
+			raylib.lib.DrawRectangle(r.x, r.y, r.width, r.height / 2, col)
 		else -- "middle"
-			-- No rounded corners
-			raylib.lib.DrawRectangle(r.x, r.y, r.width, r.height, c3tr(bgColor, 0))
+			raylib.lib.DrawRectangle(r.x, r.y, r.width, r.height, col)
 		end
 	end
 
@@ -206,13 +167,10 @@ return function(objects, data)
 			)
 		end
 
-		-- Calculate editor position (right side)
 		local editorX = r.x + r.width - config.editorWidth - config.padding
-		local editorY = r.y + (r.height - 30) / 2 -- Center vertically
+		local editorY = r.y + (r.height - 30) / 2
 		local editorWidth = config.editorWidth
 		local editorHeight = 30
-
-		-- Render editor component if provided
 		if config.editorComponent then
 			if config.editorComponent.drawWithExtras then
 				-- Textbox-style component

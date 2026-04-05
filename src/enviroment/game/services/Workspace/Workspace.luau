@@ -4,6 +4,7 @@ local Workspace = Instance.new("Workspace")
 local Enum = require("@EnumMap")
 local pool = {}
 local renderablePool = {}
+local RaycastResult = require("@RaycastResult")
 
 local raylib = require("@raylib")
 local structs = raylib.structs
@@ -15,6 +16,7 @@ local material_shader_manager = require("./materialShaders/_main")
 
 local CHUNK_SIZE = 32
 local chunks = {}
+local chunkList = {}
 
 local function worldToChunk(pos)
 	if not pos then
@@ -24,7 +26,18 @@ local function worldToChunk(pos)
 end
 
 Workspace.InitRenderer = function(renderer, signal, game)
+	table.clear(chunks)
+	table.clear(chunkList)
+	table.clear(pool)
+	table.clear(renderablePool)
+
 	local IdPool = {}
+	local visibleChunks = {}
+	local visibleChunkCacheDirty = true
+	local lastVisibleChunkSettingsKey = nil
+	local lastVisibilityCameraPos = nil
+	local lastVisibilityCameraLook = nil
+	local lastVisibilityMaxDistance = nil
 
 	local mtsh_sh = material_shader_manager:AddFilters()
 
@@ -35,12 +48,22 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		AirTurbulenceIntensity = 0,
 		AirDensity = 0,
 		StreamingEnabled = false,
+		UseFixedSimulation = true,
+		PlayerScriptsUseInputActionSystem = true,
+		NextGenerationReplication = true,
+		ServerAuthority = {
+			AuthorityMode = Enum.AuthorityMode.Client,
+		},
 		PhysicsEngine = Enum.PhysicsEngine.Default, -- jolt
 
 		-- rendering
 		MAX_VIEW_DISTANCE = 4000,
 		UseGpuInstancing = true,
 		MinInstancesPerBatch = 2,
+		EnableViewFrustumCulling = true,
+		ViewFrustumPadding = 12,
+		VisibilityRefreshDistance = 16,
+		VisibilityRefreshDotThreshold = 0.9925,
 		EnableDefaultPlayerMenu = true,
 
 		-- debugging
@@ -80,7 +103,42 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		},
 	}
 
-	IdPool = proptable.Pool.GetAllUniqueIds()
+	local function markVisibleChunkCacheDirty()
+		visibleChunkCacheDirty = true
+	end
+
+	local function makeChunk(cx, cy, cz, key)
+		local min = Vector3.new(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE)
+		local max = Vector3.new((cx + 1) * CHUNK_SIZE, (cy + 1) * CHUNK_SIZE, (cz + 1) * CHUNK_SIZE)
+		local center = Vector3.new((min.X + max.X) * 0.5, (min.Y + max.Y) * 0.5, (min.Z + max.Z) * 0.5)
+		local halfExtentX = (max.X - min.X) * 0.5
+		local halfExtentY = (max.Y - min.Y) * 0.5
+		local halfExtentZ = (max.Z - min.Z) * 0.5
+		local chunk = {
+			key = key,
+			parts = {},
+			aabbMin = min,
+			aabbMax = max,
+			center = center,
+			boundsRadius = math.sqrt(halfExtentX * halfExtentX + halfExtentY * halfExtentY + halfExtentZ * halfExtentZ),
+			dirty = true,
+			instanceDataDirty = true,
+			batches = {},
+			batchList = {},
+			singleParts = {},
+			r3dAABB = structs.BoundingBox:new({
+				min = vector.create(min.X, min.Y, min.Z),
+				max = vector.create(max.X, max.Y, max.Z),
+			}),
+		}
+
+		chunk.listIndex = #chunkList + 1
+		chunkList[chunk.listIndex] = chunk
+		chunks[key] = chunk
+		markVisibleChunkCacheDirty()
+
+		return chunk
+	end
 
 	local function addPart(part)
 		local pos = part.CFrame and part.CFrame.Position or part.Position
@@ -89,26 +147,23 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 		local chunk = chunks[key]
 		if not chunk then
-			chunk = {
-				parts = {},
-				aabbMin = Vector3.new(cx * CHUNK_SIZE, cy * CHUNK_SIZE, cz * CHUNK_SIZE),
-				aabbMax = Vector3.new((cx + 1) * CHUNK_SIZE, (cy + 1) * CHUNK_SIZE, (cz + 1) * CHUNK_SIZE),
-				dirty = true,
-				batches = {},
-				singleParts = {},
-			}
-			chunks[key] = chunk
+			chunk = makeChunk(cx, cy, cz, key)
 		end
 
 		chunk.parts[#chunk.parts + 1] = part
 		chunk.dirty = true
+		chunk.instanceDataDirty = true
 		rawset(part, "__workspaceChunk", chunk)
 		rawset(part, "__workspaceChunkKey", key)
+		rawset(part, "__workspaceChunkIndex", #chunk.parts)
 	end
 
-	local function markChunkDirty(chunk)
+	local function markChunkDirty(chunk, structureChanged)
 		if chunk then
-			chunk.dirty = true
+			if structureChanged == true then
+				chunk.dirty = true
+			end
+			chunk.instanceDataDirty = true
 		end
 	end
 
@@ -127,22 +182,38 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local function removePart(part)
 		local chunk = rawget(part, "__workspaceChunk")
 		local key = rawget(part, "__workspaceChunkKey")
+		local index = rawget(part, "__workspaceChunkIndex")
 		if not chunk then
 			return
 		end
 
-		local idx = table.find(chunk.parts, part)
-		if idx then
-			table.remove(chunk.parts, idx)
+		if index then
+			local lastIndex = #chunk.parts
+			local lastPart = chunk.parts[lastIndex]
+			chunk.parts[index] = lastPart
+			chunk.parts[lastIndex] = nil
+			if lastPart and lastPart ~= part then
+				rawset(lastPart, "__workspaceChunkIndex", index)
+			end
 		end
 		chunk.dirty = true
+		chunk.instanceDataDirty = true
 
 		rawset(part, "__workspaceChunk", nil)
 		rawset(part, "__workspaceChunkKey", nil)
+		rawset(part, "__workspaceChunkIndex", nil)
 
 		if #chunk.parts <= 0 and key then
 			unloadChunkBatches(chunk)
+			local listIndex = chunk.listIndex
+			local lastChunk = chunkList[#chunkList]
+			chunkList[listIndex] = lastChunk
+			chunkList[#chunkList] = nil
+			if lastChunk and lastChunk ~= chunk then
+				lastChunk.listIndex = listIndex
+			end
 			chunks[key] = nil
+			markVisibleChunkCacheDirty()
 		end
 	end
 
@@ -154,7 +225,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local newKey = cx .. "," .. cy .. "," .. cz
 
 		if oldKey == newKey then
-			markChunkDirty(oldChunk)
+			markChunkDirty(oldChunk, false)
 			return
 		end
 
@@ -173,36 +244,40 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				return
 			end
 
-			if
-				prop == "Size"
-				or prop == "Color"
-				or prop == "Transparency"
-				or prop == "Material"
-				or prop == "Shape"
-				or prop == "MeshObject"
-				or prop == "Destroyed"
-			then
-				markChunkDirty(rawget(part, "__workspaceChunk"))
+			if prop == "Size" or prop == "Color" or prop == "Transparency" then
+				markChunkDirty(rawget(part, "__workspaceChunk"), false)
+			elseif prop == "Material" or prop == "Shape" or prop == "MeshObject" or prop == "Destroyed" then
+				markChunkDirty(rawget(part, "__workspaceChunk"), true)
 			end
 		end)
 
 		rawset(part, "__workspaceRenderConn", conn)
 	end
 
-	local function chunkVisible(chunk, camPos, maxDist)
-		local min = chunk.aabbMin
-		local max = chunk.aabbMax
+	local function chunkVisible(chunk, camera, camPos, maxDist)
+		local toCenter = chunk.center - camPos
+		local distSq = toCenter:MagnitudeSquared()
+		local maxReach = maxDist + chunk.boundsRadius
+		if distSq > (maxReach * maxReach) then
+			return false
+		end
 
-		-- AABB center
-		local cx = (min.X + max.X) * 0.5
-		local cy = (min.Y + max.Y) * 0.5
-		local cz = (min.Z + max.Z) * 0.5
+		if not Workspace.EnableViewFrustumCulling then
+			return true
+		end
 
-		local dx = cx - camPos.X
-		local dy = cy - camPos.Y
-		local dz = cz - camPos.Z
+		local dist = math.sqrt(distSq)
+		if dist <= chunk.boundsRadius then
+			return true
+		end
 
-		return (dx * dx + dy * dy + dz * dz) <= (maxDist * maxDist)
+		local forward = camera.CFrame:GetLookVector()
+		local halfFov = math.rad(((camera.FieldOfView or 70) * 0.5) + (Workspace.ViewFrustumPadding or 0))
+		local cosHalfFov = math.cos(halfFov)
+		local facing = forward:Dot(toCenter) / dist
+		local radiusAllowance = math.min(1, chunk.boundsRadius / dist)
+
+		return facing >= (cosHalfFov - radiusAllowance)
 	end
 
 	local meshlib = renderer.Mesh
@@ -265,14 +340,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	Workspace.DescendantAdded:Connect(function(v)
 		pool[v.UniqueId] = v
+		IdPool[v.UniqueId] = v
 		if isRenderable(v) then
 			addPart(v)
 			watchRenderablePart(v)
 			signal:Fire("UpdatePart", v)
 			pool[v.UniqueId]._renderable = true
-			table.insert(renderablePool, v)
+			renderablePool[#renderablePool + 1] = v
+			rawset(v, "__workspaceRenderableIndex", #renderablePool)
 		end
-		IdPool = proptable.Pool.GetAllUniqueIds()
 	end)
 
 	Workspace.DescendantRemoving:Connect(function(v)
@@ -285,22 +361,30 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			removePart(v)
 		end
 		pool[v.UniqueId] = nil
-		IdPool = proptable.Pool.GetAllUniqueIds()
-		local idx = table.find(renderablePool, v)
+		IdPool[v.UniqueId] = nil
+		local idx = rawget(v, "__workspaceRenderableIndex")
 		if idx then
-			table.remove(renderablePool, idx)
+			local lastIndex = #renderablePool
+			local lastRenderable = renderablePool[lastIndex]
+			renderablePool[idx] = lastRenderable
+			renderablePool[lastIndex] = nil
+			if lastRenderable and lastRenderable ~= v then
+				rawset(lastRenderable, "__workspaceRenderableIndex", idx)
+			end
+			rawset(v, "__workspaceRenderableIndex", nil)
 		end
 	end)
 
 	for _, child in pairs(Workspace:GetDescendants()) do
 		pool[child.UniqueId] = child
+		IdPool[child.UniqueId] = child
 		if isRenderable(child) then
 			addPart(child)
 			watchRenderablePart(child)
 			pool[child.UniqueId]._renderable = true
-			table.insert(renderablePool, child)
+			renderablePool[#renderablePool + 1] = child
+			rawset(child, "__workspaceRenderableIndex", #renderablePool)
 		end
-		IdPool = proptable.Pool.GetAllUniqueIds()
 	end
 
 	local function loadMaterial(materialName, sync)
@@ -617,9 +701,25 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		return true
 	end
 
+	local function refreshChunkInstanceBuffers(chunk)
+		if not chunk or not chunk.batches then
+			return
+		end
+
+		for i = 1, #chunk.batchList do
+			local batch = chunk.batchList[i]
+			if #batch.parts >= Workspace.MinInstancesPerBatch then
+				uploadBatchInstances(batch)
+			end
+		end
+
+		chunk.instanceDataDirty = false
+	end
+
 	local function rebuildChunkBatches(chunk)
 		unloadChunkBatches(chunk)
 		chunk.batches = {}
+		chunk.batchList = {}
 		chunk.singleParts = {}
 
 		for i = 1, #chunk.parts do
@@ -680,6 +780,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						capacity = 0,
 					}
 					chunk.batches[key] = batch
+					chunk.batchList[#chunk.batchList + 1] = batch
 				end
 				table.insert(batch.parts, part)
 			else
@@ -687,7 +788,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end
 
-		for _, batch in pairs(chunk.batches) do
+		for i = 1, #chunk.batchList do
+			local batch = chunk.batchList[i]
 			if #batch.parts >= Workspace.MinInstancesPerBatch then
 				local ok = uploadBatchInstances(batch)
 				if not ok then
@@ -699,6 +801,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		chunk.dirty = false
+		chunk.instanceDataDirty = false
 	end
 
 	local function drawChunks()
@@ -718,50 +821,90 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		local camPos = Kinemium_camera.CFrame.Position
+		local camLook = Kinemium_camera.CFrame:GetLookVector()
+		local refreshDistance = Workspace.VisibilityRefreshDistance or 0
+		local refreshDistanceSq = refreshDistance * refreshDistance
+		local refreshDotThreshold = Workspace.VisibilityRefreshDotThreshold or 0.9925
+		local settingsKey = table.concat({
+			tostring(Workspace.MAX_VIEW_DISTANCE),
+			tostring(Workspace.EnableViewFrustumCulling),
+			tostring(Workspace.ViewFrustumPadding),
+		}, "|")
 
-		for _, chunk in pairs(chunks) do
-			if chunkVisible(chunk, camPos, Workspace.MAX_VIEW_DISTANCE) then
-				if forceDirty or chunk.dirty then
-					rebuildChunkBatches(chunk)
+		local shouldRefreshVisibleChunks = forceDirty
+			or visibleChunkCacheDirty
+			or lastVisibleChunkSettingsKey ~= settingsKey
+			or lastVisibilityMaxDistance ~= Workspace.MAX_VIEW_DISTANCE
+			or lastVisibilityCameraPos == nil
+			or lastVisibilityCameraLook == nil
+
+		if not shouldRefreshVisibleChunks then
+			local cameraDelta = camPos - lastVisibilityCameraPos
+			if cameraDelta:MagnitudeSquared() >= refreshDistanceSq then
+				shouldRefreshVisibleChunks = true
+			elseif camLook:Dot(lastVisibilityCameraLook) <= refreshDotThreshold then
+				shouldRefreshVisibleChunks = true
+			end
+		end
+
+		if shouldRefreshVisibleChunks then
+			table.clear(visibleChunks)
+			for i = 1, #chunkList do
+				local chunk = chunkList[i]
+				if chunk and chunkVisible(chunk, Kinemium_camera, camPos, Workspace.MAX_VIEW_DISTANCE) then
+					visibleChunks[#visibleChunks + 1] = chunk
 				end
+			end
 
-				local r3dAABB = structs.BoundingBox:new({
-					min = vector.create(chunk.aabbMin.X, chunk.aabbMin.Y, chunk.aabbMin.Z),
-					max = vector.create(chunk.aabbMax.X, chunk.aabbMax.Y, chunk.aabbMax.Z),
-				})
+			visibleChunkCacheDirty = false
+			lastVisibleChunkSettingsKey = settingsKey
+			lastVisibilityCameraPos = camPos
+			lastVisibilityCameraLook = camLook
+			lastVisibilityMaxDistance = Workspace.MAX_VIEW_DISTANCE
+		end
 
-				for i = 1, #chunk.singleParts do
-					queueSinglePartDraw(chunk.singleParts[i], r3dAABB)
-				end
+		for i = 1, #visibleChunks do
+			local chunk = visibleChunks[i]
+			if forceDirty or chunk.dirty then
+				rebuildChunkBatches(chunk)
+			elseif chunk.instanceDataDirty then
+				refreshChunkInstanceBuffers(chunk)
+			end
 
-				for _, batch in pairs(chunk.batches) do
-					if #batch.parts >= Workspace.MinInstancesPerBatch then
-						if not batch.instanceBuffer then
-							local ok = uploadBatchInstances(batch)
-							if not ok then
-								for i = 1, #batch.parts do
-									queueSinglePartDraw(batch.parts[i], r3dAABB)
-								end
-								continue
+			local r3dAABB = chunk.r3dAABB
+
+			for singleIndex = 1, #chunk.singleParts do
+				queueSinglePartDraw(chunk.singleParts[singleIndex], r3dAABB)
+			end
+
+			for batchIndex = 1, #chunk.batchList do
+				local batch = chunk.batchList[batchIndex]
+				if #batch.parts >= Workspace.MinInstancesPerBatch then
+					if not batch.instanceBuffer then
+						local ok = uploadBatchInstances(batch)
+						if not ok then
+							for partIndex = 1, #batch.parts do
+								queueSinglePartDraw(batch.parts[partIndex], r3dAABB)
 							end
+							continue
 						end
+					end
 
-						renderer.MeshPool.DrawMeshInstanced(
-							batch.mesh,
-							batch.material,
-							batch.instanceBuffer,
-							batch.count,
-							function()
-								rlib.R3D_BeginCluster(r3dAABB)
-							end,
-							function()
-								rlib.R3D_EndCluster()
-							end
-						)
-					else
-						for i = 1, #batch.parts do
-							queueSinglePartDraw(batch.parts[i], r3dAABB)
+					renderer.MeshPool.DrawMeshInstanced(
+						batch.mesh,
+						batch.material,
+						batch.instanceBuffer,
+						batch.count,
+						function()
+							rlib.R3D_BeginCluster(r3dAABB)
+						end,
+						function()
+							rlib.R3D_EndCluster()
 						end
+					)
+				else
+					for partIndex = 1, #batch.parts do
+						queueSinglePartDraw(batch.parts[partIndex], r3dAABB)
 					end
 				end
 			end
@@ -774,10 +917,203 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 	Workspace:SetProperties(proptable)
 
+	local activeRaycasts = {}
+
+	function Workspace:Raycast(origin, direction, raycastParams)
+		raycastParams = raycastParams or {}
+		local FilterType = Enum.RaycastFilterType
+		local filterType = raycastParams.FilterType or FilterType.Exclude
+		local filterInstances = type(raycastParams.FilterDescendantsInstances) == "table"
+				and raycastParams.FilterDescendantsInstances
+			or {}
+
+		local maxDistance = direction:Magnitude()
+		local unitDir = direction:Unit()
+
+		local ray = structs.Ray:new({
+			position = vector.create(origin.X, origin.Y, origin.Z),
+			direction = vector.create(unitDir.X, unitDir.Y, unitDir.Z),
+		})
+
+		local bestPart = nil
+		local bestPoint = nil
+		local bestNormal = nil
+		local bestDist = maxDistance + 0.001
+		local bestMat = nil
+
+		local preloadedMeshes = renderer.Mesh
+			and renderer.Mesh.GetPreloadedMeshes
+			and renderer.Mesh.GetPreloadedMeshes()
+
+		for _, part in ipairs(renderablePool) do
+			local isFiltered = false
+
+			if #filterInstances > 0 then
+				local current = part
+				while current do
+					if table.find(filterInstances, current) then
+						isFiltered = true
+						break
+					end
+					current = current.Parent
+				end
+			end
+
+			if filterType == FilterType.Include then
+				if not isFiltered then
+					continue
+				end
+			else -- Exclude
+				if isFiltered then
+					continue
+				end
+			end
+
+			local cpuMeshData = nil
+			if part:IsA("MeshPart") and part.MeshObject then
+				cpuMeshData = part.MeshObject._cpuMeshData
+			else
+				local shapeName = part.Shape and part.Shape.Name and string.lower(part.Shape.Name)
+				if shapeName == "ball" then
+					shapeName = "sphere"
+				end
+
+				if shapeName and preloadedMeshes then
+					local entry = preloadedMeshes[shapeName]
+					if entry then
+						cpuMeshData = entry[1]
+					end
+				end
+			end
+
+			if not cpuMeshData then
+				continue
+			end
+
+			local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, structs)
+
+			local ok, collision = pcall(rlib.R3D_RaycastMesh, ray, cpuMeshData, matrix)
+			if not ok or not collision then
+				continue
+			end
+
+			local hit = buffer.readu8(collision, structs.RayCollision:offset("hit"))
+			local distance = buffer.readf32(collision, structs.RayCollision:offset("distance"))
+
+			if hit == 1 and distance <= maxDistance and distance < bestDist then
+				bestDist = distance
+				bestPart = part
+				bestPoint = Vector3.new(
+					buffer.readf32(collision, structs.RayCollision:offset("point")),
+					buffer.readf32(collision, structs.RayCollision:offset("point") + 4),
+					buffer.readf32(collision, structs.RayCollision:offset("point") + 8)
+				)
+				bestNormal = Vector3.new(
+					buffer.readf32(collision, structs.RayCollision:offset("normal")),
+					buffer.readf32(collision, structs.RayCollision:offset("normal") + 4),
+					buffer.readf32(collision, structs.RayCollision:offset("normal") + 8)
+				)
+				bestMat = part.Material
+			end
+		end
+
+		if raycastParams.VisualizeRay == true then
+			table.insert(activeRaycasts, {
+				org = origin,
+				direction = direction,
+				point = bestPoint or (origin + direction),
+			})
+		end
+
+		local terrain = Workspace:FindFirstChild("Terrain")
+		if terrain and terrain._chunks then
+			local terrainFiltered = false
+			if #filterInstances > 0 then
+				local current = terrain
+				while current do
+					if table.find(filterInstances, current) then
+						terrainFiltered = true
+						break
+					end
+					current = current.Parent
+				end
+			end
+
+			local shouldTestTerrain = true
+			if filterType == FilterType.Include then
+				if not terrainFiltered then
+					shouldTestTerrain = false
+				end
+			else
+				if terrainFiltered then
+					shouldTestTerrain = false
+				end
+			end
+
+			if shouldTestTerrain then
+				local identity = raylib.lib.MatrixIdentity()
+				for _, chunk in pairs(terrain._chunks) do
+					if chunk._cpuMeshData then
+						local ok, collision = pcall(rlib.R3D_RaycastMesh, ray, chunk._cpuMeshData, identity)
+						if ok and collision then
+							local hitValue = buffer.readu8(collision, structs.RayCollision:offset("hit"))
+							local distValue = buffer.readf32(collision, structs.RayCollision:offset("distance"))
+
+							if hitValue == 1 and distValue <= maxDistance and distValue < bestDist then
+								bestDist = distValue
+								bestPart = terrain
+								bestPoint = Vector3.new(
+									buffer.readf32(collision, structs.RayCollision:offset("point")),
+									buffer.readf32(collision, structs.RayCollision:offset("point") + 4),
+									buffer.readf32(collision, structs.RayCollision:offset("point") + 8)
+								)
+								bestNormal = Vector3.new(
+									buffer.readf32(collision, structs.RayCollision:offset("normal")),
+									buffer.readf32(collision, structs.RayCollision:offset("normal") + 4),
+									buffer.readf32(collision, structs.RayCollision:offset("normal") + 8)
+								)
+								local matName = chunk.dominantMaterial or "Grass"
+								bestMat = Enum.Material[string.upper(string.sub(matName, 1, 1)) .. string.sub(
+									matName,
+									2
+								)] or Enum.Material.Grass
+							end
+						end
+					end
+				end
+			end
+		end
+
+		if bestPart then
+			return RaycastResult.new(bestPart, bestPoint, bestNormal, bestMat, bestDist)
+		end
+
+		return nil
+	end
+
 	if not IsHeadless then
 		repeat
 			task.wait()
 		until renderer
+
+		renderer.Pool.new("gizmo", function()
+			for i, active in pairs(activeRaycasts) do
+				local origin = active.org
+				local hitPoint = active.point or (origin + active.direction)
+
+				raylib.lib.DrawCylinderEx(
+					vector.create(origin.X, origin.Y, origin.Z),
+					vector.create(hitPoint.X, hitPoint.Y, hitPoint.Z),
+					0.1,
+					0.1,
+					8,
+					raylib.structs.Color:new({ r = 0, g = 0, b = 255, a = 255 })
+				)
+
+				activeRaycasts[i] = nil
+			end
+		end)
+
 		renderer.Pool.new("3d", drawChunks)
 	end
 end

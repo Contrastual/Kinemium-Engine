@@ -18,6 +18,11 @@ enumTable.KinemiumUpscaleMode = {
 	Lanczos = 4,
 }
 
+enumTable.RigType = {
+	K17 = 1,
+	Custom = 2,
+}
+
 enumTable.KinemiumBloomMode = {
 	Mix = 1,
 	Additive = 2,
@@ -222,6 +227,16 @@ enumTable.KeyCode = {
 	Apps = 348,
 }
 
+enumTable.GraphicsLevel = {
+	Automatic = 0,
+	Compatibility = 1,
+	Performance = 2,
+	Low = 3,
+	Medium = 4,
+	High = 5,
+	Ultra = 6,
+}
+
 enumTable.MachineNetworkOwner = {
 	Server = 0,
 	Client = 1,
@@ -272,6 +287,18 @@ enumTable.PartType = {
 enumTable.ActuatorRelativeTo = {
 	World = 0,
 	Attachment0 = 1,
+	Attachment1 = 2,
+}
+
+enumTable.ForceLimitMode = {
+	Magnitude = 0,
+	PerAxis = 1,
+}
+
+enumTable.VelocityConstraintMode = {
+	Vector = 0,
+	Line = 1,
+	Plane = 2,
 }
 
 enumTable.Material = {
@@ -387,13 +414,15 @@ enumTable.Font = {
 	SpecialElite = "SpecialElite",
 	TitilliumWeb = "TitilliumWeb",
 	Ubuntu = "Ubuntu",
-	BuilderSans = "BuilderSans",
-	BuilderSansMedium = "BuilderSansMedium",
-	BuilderSansBold = "BuilderSansBold",
-	BuilderSansExtraBold = "BuilderSansExtraBold",
+
 	Arimo = "Arimo",
 	ArimoBold = "ArimoBold",
 	Unknown = "Unknown",
+}
+
+enumTable.MultiplayerMode = {
+	None = 0,
+	Singleplayer = 1,
 }
 
 enumTable.Language = {
@@ -401,6 +430,28 @@ enumTable.Language = {
 	JavaScript = 2,
 	Python = 3,
 	WASM = 4,
+}
+
+enumTable.PredictionMode = {
+	Off = 0,
+	Automatic = 1,
+	On = 2,
+}
+
+enumTable.PredictionStatus = {
+	NotPredicted = 0,
+	Predicted = 1,
+}
+
+enumTable.AuthorityMode = {
+	Client = 0,
+	Server = 1,
+}
+
+enumTable.StepFrequency = {
+	Hz60 = 60,
+	Hz120 = 120,
+	Hz240 = 240,
 }
 
 enumTable.TextXAlignment = {

@@ -28,6 +28,14 @@ return function(objects, data)
 
 	local wrapper = {}
 
+	wrapper.set = function(prop, value)
+		if type(config[prop]) == "function" then
+			return wrapper
+		end
+		config[prop] = value
+		return wrapper
+	end
+
 	wrapper.render = function(dt)
 		config.rotation = config.rotation + dt * 180
 		if config.rotation >= 360 then

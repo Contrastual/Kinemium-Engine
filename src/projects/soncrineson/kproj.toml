@@ -1,0 +1,18 @@
+[info]
+name = "soncrineson"
+
+[pointers]
+assets = "game.ReplicatedStorage"
+server = "game.ServerScriptService"
+client = "game.StarterPlayerScripts"
+gui = "game.StarterGui"
+objects = "game.Workspace"
+
+[sync]
+live = true
+debounce = 0.35
+ignore = [".git", ".vscode", "autosave"]
+
+[scripting]
+polyglot = true
+ntvcg = true

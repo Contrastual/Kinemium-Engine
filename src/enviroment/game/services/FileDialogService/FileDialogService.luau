@@ -32,6 +32,19 @@ FileDialogService.InitRenderer = function(renderer, renderer_signal)
 			end
 			return BufferUtils.string.ReadOSBased(outPath)
 		end,
+
+		RequestSaveFile = function(defaultName, filters)
+			local outPath = ffi.alloc(ffi.types.pointer:size())
+
+			local success: FFIPointer = lib.NFD_SaveDialogN(outPath, nil, nil, nil, defaultName)
+			local code = BufferUtils:readhexa(success)
+
+			if code == 2 then -- cancel
+				return ""
+			end
+
+			return BufferUtils.string.ReadOSBased(outPath)
+		end,
 	})
 
 	renderer_signal:Connect(function(route, dt) end)

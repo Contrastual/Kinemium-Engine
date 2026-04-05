@@ -87,6 +87,19 @@ return {
 			return rawVertices, indices
 		end
 
+		local function notifyLinkedMeshParts()
+			local workspace = game and game.Workspace or nil
+			if not workspace or not renderer or not renderer.EventBus then
+				return
+			end
+
+			for _, descendant in ipairs(workspace:GetDescendants()) do
+				if descendant:IsA("MeshPart") and descendant.MeshObject == instance then
+					renderer.EventBus:Fire("UpdatePart", descendant)
+				end
+			end
+		end
+
 		function instance:AddVertex(p: Vector3): number
 			local id = self._nextVertexId
 			self._nextVertexId += 1
@@ -546,7 +559,9 @@ return {
 
 			if #rawVertices == 0 then
 				self._meshgenHandle = nil
+				self._cpuMeshData = nil
 				self._geometryDirty = false
+				notifyLinkedMeshParts()
 				return
 			end
 
@@ -572,8 +587,17 @@ return {
 				end
 			end
 
-			self._meshgenHandle = meshgen.buildMesh(rawVertices, indices, buildOpts)
+			-- Use buildMeshWithData to retain the CPU-side R3D_MeshData for raycasting.
+			local result = meshgen.buildMeshWithData(rawVertices, indices, buildOpts)
+			if result then
+				self._cpuMeshData = result[1]
+				self._meshgenHandle = result[2]
+			else
+				self._cpuMeshData = nil
+				self._meshgenHandle = nil
+			end
 			self._geometryDirty = false
+			notifyLinkedMeshParts()
 		end
 
 		function instance:FlushIfDirty(opts: any?)
