@@ -42,7 +42,7 @@ function kinemium_http:Init(renderer)
             flex-direction: column;
         }
 
-        /* ── Top bar ── */
+        /*  Top bar  */
         .topbar {
             display: flex;
             align-items: center;
@@ -134,7 +134,7 @@ function kinemium_http:Init(renderer)
             color: var(--accent);
         }
 
-        /* ── Table wrapper ── */
+        /*  Table wrapper  */
         .table-wrap {
             flex: 1;
             overflow-x: auto;
@@ -198,7 +198,7 @@ function kinemium_http:Init(renderer)
             font-weight: 400;
         }
 
-        /* ── Footer ── */
+        /*  Footer  */
         .footer {
             display: flex;
             align-items: center;

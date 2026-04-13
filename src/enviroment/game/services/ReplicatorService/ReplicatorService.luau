@@ -12,9 +12,16 @@ ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 	task.spawn(function()
 		task.wait(4)
 
+		local networkService
 		repeat
 			task.wait()
-		until game.SerializationService and game.NetworkService
+			networkService = game.NetworkService or (game.GetService and game:GetService("NetworkService"))
+		until game.SerializationService
+			and networkService
+			and type(networkService.RegisterMessageHandler) == "function"
+			and type(networkService.SendToServer) == "function"
+			and type(networkService.SendToClient) == "function"
+			and type(networkService.Broadcast) == "function"
 
 		ReplicatorService:SetProperties({
 			RegisterStateAdapter = function(self, name, adapter)
@@ -28,7 +35,7 @@ ReplicatorService.InitRenderer = function(renderer, renderer_signal, game)
 			game = game,
 			ReplicatorService = ReplicatorService,
 			SerializationService = game:GetService("SerializationService"),
-			NetworkService = game:GetService("NetworkService"),
+			NetworkService = networkService,
 			renderer = renderer,
 			signal = renderer_signal,
 			StateRegistry = StateRegistry,

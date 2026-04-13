@@ -10,6 +10,8 @@ local buttonProps = {
 	Name = "ImageButton",
 }
 
+ImageLabel.inherit(buttonProps)
+
 local function createSignals()
 	return {
 		MouseButton1Click = signal.new(),

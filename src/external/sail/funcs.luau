@@ -17,6 +17,7 @@ export type Fns = {
 
 	-- Codec bundle functions
 	sail_codec_bundle_list: () -> FFIPointer,
+	sail_set_log_barrier: (level: int) -> (),
 
 	-- Codec info functions
 	sail_codec_info_by_magic_number_from_io: (io: FFIPointer, codec_info: FFIPointer) -> FFIPointer,

@@ -7,10 +7,14 @@ if RunService:IsServer() then
 	return
 end
 
+if not RunService:IsClient() then
+	return
+end
+
 local CAM_SENS = 0.35
 local CAM_MIN_Y = -80
 local CAM_MAX_Y = 80
-local CAM_ZOOM_MIN = 3
+local CAM_ZOOM_MIN = 0.1
 local CAM_ZOOM_MAX = 50
 local CAM_ZOOM_MUL = 1.15
 local CAM_LERP = 10
@@ -21,7 +25,6 @@ local function flushDelta()
 	UserInputService:GetMouseDelta()
 end
 
-local humanoids
 local CharacterModel
 local player = Players.LocalPlayer
 
@@ -36,8 +39,7 @@ if game.MultiplayerMode == Enum.MultiplayerMode.SinglePlayer and not RunService:
 
 	local humanoid = Instance.new("Humanoid")
 	humanoid.DisplayName = player.Name
-	humanoid.WalkSpeed = player.WalkSpeed
-	humanoid.JumpPower = player.JumpPower
+	humanoid.JumpQueueWindow = 0.05
 	humanoid.Parent = CharacterModel
 
 	local networkController = Instance.new("NetworkController")
@@ -201,15 +203,26 @@ RunService.RenderStepped:Connect(function(dt)
 	local cameraBasis = CFrame.fromEulerAnglesYXZ(yaw, 0, 0)
 	humanoid:MoveRelative(moveInput, cameraBasis)
 	humanoid:SetSprinting(UserInputService:IsKeyDown(Enum.KeyCode.LeftShift))
-	humanoid:SetCrouching(UserInputService:IsKeyDown(Enum.KeyCode.LeftControl))
 
-	humanoid:Face(Vector3.new(moveInput.X, 0, moveInput.Z))
+	local head = character.Head
+	local focusPos = head.CFrame.Position
 
-	local focusPos = character.Head.CFrame.Position
-	local camOffset = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0) * Vector3.new(0, 0, zoomDist)
-	local targetCamPos = focusPos + camOffset
+	local isFirstPerson = zoomDist <= 0.5
+	local targetCamPos
+	if zoomDist <= 0.5 then
+		targetCamPos = focusPos
+	else
+		local camOffset = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0) * Vector3.new(0, 0, zoomDist)
+		targetCamPos = focusPos + camOffset
+	end
 	local alpha = math.min(1, dt * CAM_LERP)
 	smoothCamPos = (smoothCamPos or targetCamPos):Lerp(targetCamPos, alpha)
+
+	if zoomDist <= 0.5 then
+		character.Head.Transparency = 1
+	else
+		character.Head.Transparency = 0
+	end
 
 	local rayVector = smoothCamPos - focusPos
 	local finalCamPos = smoothCamPos

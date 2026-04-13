@@ -168,6 +168,7 @@ function KiRend.new(config: KiRendConf)
 		fonts = {},
 		sounds = {},
 	}
+	local renderer_font_resolver
 	local renderer_watching_keys = {}
 	local renderer_draw_calls = {}
 	local renderer_instanced_draw_calls = {}
@@ -256,6 +257,10 @@ function KiRend.new(config: KiRendConf)
 		},
 
 		Font = {
+			SetResolver = function(resolver)
+				renderer_font_resolver = resolver
+			end,
+
 			new = function(name, fontPath, size)
 				if renderer_storage.fonts[name] then
 					return renderer_storage.fonts[name]
@@ -269,7 +274,18 @@ function KiRend.new(config: KiRendConf)
 			end,
 
 			Get = function(name)
-				return renderer_storage.fonts[name]
+				local font = renderer_storage.fonts[name]
+				if font or not renderer_font_resolver then
+					return font
+				end
+
+				local success, result = pcall(renderer_font_resolver, name)
+				if not success then
+					warn(result)
+					return nil
+				end
+
+				return renderer_storage.fonts[name] or result
 			end,
 
 			getFontTexture = function(name)

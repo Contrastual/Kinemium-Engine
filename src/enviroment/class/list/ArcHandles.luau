@@ -16,28 +16,6 @@ local function toVector(v)
 	return vector.create(v.X, v.Y, v.Z)
 end
 
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local function DrawGridAt(pos, size, spacing, color)
-	local half = size * 0.5
-
-	for i = -half, half, spacing do
-		-- X lines
-		lib.DrawLine3D(toVector(pos + Vector3.new(i, 0, -half)), toVector(pos + Vector3.new(i, 0, half)), color)
-
-		-- Z lines
-		lib.DrawLine3D(toVector(pos + Vector3.new(-half, 0, i)), toVector(pos + Vector3.new(half, 0, i)), color)
-	end
-end
-
 local function drawArcRing(center, radius, axis, segments, color)
 	segments = segments or 64
 	local step = (math.pi * 2) / segments

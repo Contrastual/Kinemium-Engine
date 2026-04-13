@@ -6,10 +6,10 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-local renderer = KinemiumRaylib.renderer
-local rl = KinemiumRaylib.lib
+local renderer = KinemiumRaylib.GetRenderer()
+local rl = KinemiumRaylib.GetLib()
 local Selection = game:GetService("Selection")
-local structs = KinemiumRaylib.structs
+local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local PropertyCategories = require("@PropertyCategories")
 local Theme = game:GetService("StudioThemeService").SelectedTheme
@@ -20,13 +20,14 @@ local SecondaryBackgroundColor = Theme.SecondaryBackgroundColor:ToRaylib(Theme.S
 if game.Context ~= Enum.GameContext.Editor then
 	return
 end
-if FlagExists("client") then
-	return
-end
+
 if FlagExists("cli") then
 	return
 end
 if FlagExists("headless") then
+	return
+end
+if FlagExists("client") then
 	return
 end
 
@@ -568,7 +569,7 @@ datatypes["CFrame"] = {
 	end,
 }
 
--- ── filtering
+--  filtering
 
 local function isBlacklisted(propName, propValue)
 	if table.find(blacklisted, propName) then
@@ -662,7 +663,7 @@ local function buildBuckets(selected)
 	return buckets, order
 end
 
--- ── selection
+--  selection
 
 Selection.SelectionAdded:Connect(function(selected)
 	table.clear(editorComps)
@@ -724,7 +725,7 @@ Selection.SelectionAdded:Connect(function(selected)
 	end
 end)
 
--- ── draw category header ──────────────────────────────────────────────────────
+--  draw category header
 
 local function drawCategoryHeader(winX, winW, y, label, isOpen, mousePos)
 	local w = winW - 12
@@ -772,7 +773,7 @@ local function drawCategoryHeader(winX, winW, y, label, isOpen, mousePos)
 	return false
 end
 
--- ── draw property row ─────────────────────────────────────────────────────────
+--  draw property row
 
 local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, mousePos)
 	local rw = winW - 12
@@ -850,7 +851,7 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 	end
 end
 
--- ── main loop
+--  main loop
 
 window.stepped = function(windowData)
 	for _, ov in pairs(overlapping) do
@@ -872,6 +873,8 @@ window.stepped = function(windowData)
 
 	if
 		mouseWheel ~= 0
+		and windowObject
+		and windowData.Focused == true
 		and mousePos.x >= winX
 		and mousePos.x <= winX + winW
 		and mousePos.y >= winY

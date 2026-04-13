@@ -52,7 +52,7 @@ return {
 callback = function(instance, renderer, game)
 		instance:SetMetadata("IsMovable", true)
 
-		local KinemiumPhysicsService = game:GetService("JoltPhysicsService")
+		local KinemiumPhysicsService = game:GetService("UnifiedPhysicsService")
 		local syncingTransform = false
 
 		local function syncFromCFrame(cf)

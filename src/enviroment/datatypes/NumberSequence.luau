@@ -58,6 +58,9 @@ end
 
 function NumberSequence:ToTable()
 	local keypoints = {}
+	if not self.Keypoints then
+		return {}
+	end
 	for _, kp in ipairs(self.Keypoints) do
 		table.insert(keypoints, kp:ToTable())
 	end

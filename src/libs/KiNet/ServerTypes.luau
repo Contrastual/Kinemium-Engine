@@ -40,12 +40,18 @@ export type PendingAck = {
 	fragments: { Fragment },
 	attempts: number,
 	lastSent: number,
+	channel: string?,
+	kind: string?,
+	fragmentCount: number?,
 }
 
 export type FragmentBuffer = {
-	fragments: { [number]: string },
+	fragments: { [number]: buffer | string },
 	totalFragments: number,
 	received: number,
+	totalBytes: number?,
+	createdAt: number?,
+	lastUpdated: number?,
 }
 
 export type ConnectedClient = {
@@ -56,6 +62,11 @@ export type ConnectedClient = {
 	connectedAt: number,
 	lastHeartbeat: number,
 	lastSequence: number?,
+	recentSequences: { [number]: boolean }?,
+	recentSequenceOrder: { number }?,
+	highestSequence: number?,
+	processedReliableMessages: { [string]: boolean }?,
+	processedReliableOrder: { string }?,
 	rateLimitWindow: { number },
 	fragmentBuffer: { [string]: FragmentBuffer },
 	pendingAcks: { [string]: PendingAck },
@@ -77,6 +88,7 @@ export type Server = {
 	ConnectedClients: { [string]: ConnectedClient },
 	_onNewClient: ((addr: Address) -> ())?,
 	_onClientRemoved: ((addr: Address) -> ())?,
+	_onPreAuthMessage: ((addr: Address, data: MessageData) -> boolean)?,
 
 	Init: (self: Server, address: string?, port: number?, allowedTokens: { string }?) -> Socket,
 	GenerateSessionId: (self: Server) -> string,
@@ -90,6 +102,7 @@ export type Server = {
 	OnRecieve: (self: Server, callback: (addr: Address, data: MessageData) -> ()) -> (),
 	OnNewClient: (self: Server, callback: (addr: Address) -> ()) -> (),
 	OnClientRemoved: (self: Server, callback: (addr: Address) -> ()) -> (),
+	OnPreAuthMessage: (self: Server, callback: (addr: Address, data: MessageData) -> boolean) -> (),
 	SendAll: (self: Server, data: MessageData, reliable: boolean?) -> (),
 	Shutdown: (self: Server) -> (),
 	SendReliable: (self: Server, client: ConnectedClient, data: MessageData) -> (),

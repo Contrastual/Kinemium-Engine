@@ -34,12 +34,18 @@ export type PendingAck = {
 	fragments: { Fragment },
 	attempts: number,
 	lastSent: number,
+	channel: string?,
+	kind: string?,
+	fragmentCount: number?,
 }
 
 export type FragmentBuffer = {
-	fragments: { [number]: string },
+	fragments: { [number]: buffer | string },
 	totalFragments: number,
 	received: number,
+	totalBytes: number?,
+	createdAt: number?,
+	lastUpdated: number?,
 }
 
 export type Client = {
@@ -52,6 +58,10 @@ export type Client = {
 	LastHeartbeat: number,
 	MessageSequence: number,
 	ReceivedSequences: { [number]: boolean },
+	ReceivedSequenceOrder: { number },
+	HighestReceivedSequence: number,
+	ProcessedReliableMessages: { [string]: boolean }?,
+	ProcessedReliableOrder: { string }?,
 	RateLimitWindow: { number },
 	MaxMessagesPerSecond: number,
 	PendingAcks: { [string]: PendingAck },

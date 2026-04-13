@@ -17,28 +17,28 @@ local dllName = "sail." .. ffi.suffix
 if zembed.IsEmbedded() then
 	if zune.fs.stat("./" .. dllName).kind == "none" then
 		if zune.platform.os == "linux" then
-			print(
+			log(
 				"SAIL Binaries might not work on Linux, if you see an error after the installation, Please report it in the Kinemium Engine Discord Server, Thank you!"
 			)
 		end
-		print("Downloading SAIL...")
-		print("Downloading from link " .. downloadLink)
+		log("Downloading SAIL...")
+		log("Downloading from link " .. downloadLink)
 		Packager.downloadAndExtract(downloadLink, "./")
-		print("Please run the engine again")
+		log("Please run the engine again")
 		zune.process.exit(0)
 	end
 else
 	if zune.fs.stat("./src/external/sail/bin").kind == "none" then
 		if zune.platform.os == "linux" then
-			print(
+			log(
 				"SAIL Binaries might not work on Linux, if you see an error after the installation, Please report it in the Kinemium Engine Discord Server, Thank you!"
 			)
 		end
-		print("Downloading SAIL...")
-		print("Downloading from link " .. downloadLink)
+		log("Downloading SAIL...")
+		log("Downloading from link " .. downloadLink)
 		local extracted = "./src/external/sail"
 		Packager.downloadAndExtract(downloadLink, zembed.IsEmbedded() and "./" or extracted)
-		print("Please run the engine again")
+		log("Please run the engine again")
 		zune.process.exit(0)
 	end
 end
@@ -83,8 +83,6 @@ local structs = require("./sail/structs")
 local funcs = require("./sail/funcs")
 local constants = require("./sail/constants")
 local sail: funcs.Fns = ffi.dlopen(dll .. "sail." .. ffi.suffix, funcs)
-
-print(sail)
 
 return {
 	lib = sail,

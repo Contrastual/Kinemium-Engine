@@ -38,6 +38,9 @@ end
 comps.button = function(data)
 	return create("./objects/button", data)
 end
+comps.servercard = function(data)
+	return create("./objects/serverCard", data)
+end
 comps.keyboard = function(data)
 	return create("./objects/keyboard", data)
 end

@@ -352,7 +352,7 @@ function joints.solveWheel(joint: WheelJoint, bodyA: any, bodyB: any, dt: number
 	if joint.motor then
 		local torqueAxis = Vector3Double.new(-joint.axis.Z, 0, joint.axis.X)
 		if torqueAxis.Magnitude > 1e-9 then
-			torqueAxis = torqueAxis.Unit
+			torqueAxis = torqueAxis:Unit()
 			local torqueImpulse = torqueAxis * joint.motor.torque * dt
 			if bodyB.bodyType ~= "static" then
 				bodyB.angularVelocity = bodyB.angularVelocity + torqueImpulse * (invMassB > 0 and invMassB or 1)

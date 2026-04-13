@@ -3,7 +3,7 @@ local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local RunService = game:GetService("RunService")
 local PlaytestService = game:GetService("PlaytestService")
 
-local rl = KinemiumRaylib.lib
+local rl = KinemiumRaylib.GetLib()
 local structs = KinemiumRaylib.structs
 local renderer = KinemiumRaylib.renderer
 
@@ -16,7 +16,7 @@ evalJS = raylibTex.evalJS
 local view = raylibTex.view
 local lastULms = 0
 
--- ── Icon map ─────────────────────────────────────────────────────────────────
+--  Icon map 
 
 local function getIcon(className)
 	local icons = {
@@ -47,7 +47,7 @@ local function getIcon(className)
 	return icons[className] or "📦"
 end
 
--- ── State ────────────────────────────────────────────────────────────────────
+--  State 
 
 local selectedId = nil
 local instanceById = {} -- UniqueId → instance
@@ -65,7 +65,7 @@ local function rebuildInstanceLookup()
 	end
 end
 
--- ── JSON helpers ─────────────────────────────────────────────────────────────
+--  JSON helpers 
 
 -- Escape a Lua string into a JSON double-quoted string literal
 local function jStr(s)
@@ -86,7 +86,7 @@ local function jNum(n)
 	return tostring(tonumber(n) or 0)
 end
 
--- ── Tree building ─────────────────────────────────────────────────────────────
+--  Tree building 
 
 local function serializeNode(node)
 	local childParts = {}
@@ -166,7 +166,7 @@ local function sendTree()
 	evalJS(view, "loadPropertiesMap({" .. table.concat(mapParts, ",") .. "})")
 end
 
--- ── Property inspection ───────────────────────────────────────────────────────
+--  Property inspection 
 
 local function getPropType(value, key)
 	if type(value) == "boolean" then
@@ -366,7 +366,7 @@ local function sendInspector(inst)
 	evalJS(view, "updateInspector(" .. payload .. ")")
 end
 
--- ── Logging ───────────────────────────────────────────────────────────────────
+--  Logging 
 
 local function uiLog(text, level, src)
 	local t = string.format("%.3f", rl.GetTime())
@@ -382,7 +382,7 @@ local function uiLog(text, level, src)
 	)
 end
 
--- ── HTML callback wiring (Native via WebCore bindings) ────────────────────────
+--  HTML callback wiring (Native via WebCore bindings) 
 
 local UltraLight = require("@Ultralight")
 local ffi = zune.ffi
@@ -538,7 +538,7 @@ local function setupHtmlCallbacks()
 	table.insert(_KEEP_ALIVE_CLOSURES, cb)
 end
 
--- ── Initialisation ────────────────────────────────────────────────────────────
+--  Initialisation 
 
 local function initializeUI()
 	-- Default selection: Workspace
@@ -565,10 +565,10 @@ task.delay(0.5, function()
 	end)
 end)
 
--- ── Render loop ───────────────────────────────────────────────────────────────
+--  Render loop 
 
 renderer.Pool.new("2d", function(data)
-	rl.DrawTexture(raylibTex.texture, 0, 0, KinemiumRaylib.const.WHITE)
+	rl.DrawTexture(raylibTex.texture, 0, 0, KinemiumRaylib.GetConst().WHITE)
 
 	local stats = renderer.PerfStats
 

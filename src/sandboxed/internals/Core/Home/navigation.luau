@@ -5,7 +5,7 @@ end
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local lib = raylib.lib
-local renderer = rlservice.renderer
+local renderer = rlservice.GetRenderer()
 local aereon = import("@Aereon")
 local gui = aereon.gui
 
@@ -17,19 +17,10 @@ local vend = KinemiumFontService.GetDefaultFont()
 local arect = require("@Arect")(raylib.lib)
 
 local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
-local TextColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(StudioThemeService.SelectedTheme.TextTransparency)
-local GuiHandlesColor =
-	StudioThemeService.SelectedTheme.GuiHandlesColor:ToRaylib(StudioThemeService.SelectedTheme.GuiHandlesTransparency)
 local SecondaryBackgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor
 local SecondaryBackgroundColorRaylib = StudioThemeService.SelectedTheme.SecondaryBackgroundColor:ToRaylib(
 	StudioThemeService.SelectedTheme.SecondaryBackgroundColorTransparency
 )
-local SecondaryTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor:ToRaylib(
-	StudioThemeService.SelectedTheme.SecondaryTextTransparency
-)
-local ImageColor =
-	StudioThemeService.SelectedTheme.ImageColor:ToRaylib(StudioThemeService.SelectedTheme.ImageTransparency)
-local ThirdBackgroundColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor
 
 local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 local frame = gui.frame({ x = 0, y = 0, width = 0, height = 0 })
@@ -63,6 +54,7 @@ nav.addItem("settings", "icon", "Settings", KinemiumIconLoader.ToTexture("./src/
 nav.addItem("credits", "icon", "Credits", KinemiumIconLoader.ToTexture("./src/assets/images/info.png"))
 nav.addItem("marketplace", "icon", "Marketplace", KinemiumIconLoader.ToTexture("./src/assets/images/marketplace.png"))
 nav.addItem("marketplace", "icon", "API", KinemiumIconLoader.ToTexture("./src/assets/images/api.png"))
+nav.addItem("play", "icon", "Join", KinemiumIconLoader.ToTexture("./src/assets/images/play-white.png"))
 
 ishared.EnableHomescreen = true
 

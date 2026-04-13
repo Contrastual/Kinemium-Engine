@@ -10,11 +10,13 @@ repeat
 until ishared.NewCategoryToolbar
 local NewCategoryToolbar = ishared.NewCategoryToolbar
 
+local playerCount = 1
+
 NewCategoryToolbar:Fire("Playtest", {
 	elements = {
 		{
 			type = "ImageButton",
-			text = "Playtest",
+			text = "Play Test",
 			callback = function()
 				if IsPlaytesting then
 					return
@@ -38,7 +40,6 @@ NewCategoryToolbar:Fire("Playtest", {
 				if not IsPlaytesting then
 					return
 				end
-				print("Stopping the simulation")
 
 				playtestService.StopCurrentPlaytest()
 				IsPlaytesting = false
@@ -49,28 +50,20 @@ NewCategoryToolbar:Fire("Playtest", {
 			roundness = 0.2,
 			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Pause.svg"),
 		},
+
 		{
 			type = "ImageButton",
-			text = "Run Multiple",
+			text = "New Client",
 			callback = function()
-				table.insert(
-					clients,
-					task.spawn(function()
-						zune.process.create(zune.fs.getExePath(), {
-							"run",
-							"game",
-							"--client",
-							"--dhs",
-						})
-					end)
-				)
-
 				task.spawn(function()
 					zune.process.create(zune.fs.getExePath(), {
 						"run",
 						"game",
-						"--server",
+						"--client",
+						"--username",
+						"Player" .. playerCount,
 					})
+					playerCount += 1
 				end)
 			end,
 			hoverTransparency = 0.5,

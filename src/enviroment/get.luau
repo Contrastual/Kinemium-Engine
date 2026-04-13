@@ -25,6 +25,7 @@ return function(renderer, Kinemium_camera)
 	}
 
 	data.Filesystem = zune.fs
+	data.newproxy = {}
 
 	data.buffer = {
 		copy = buffer.copy,

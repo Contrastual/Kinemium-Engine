@@ -119,7 +119,18 @@ local function applyPositions(world, lib)
 end
 
 OdePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
-	OdePhysicsService:SetProperties({})
+	local propTable = {}
+
+	task.spawn(function()
+		repeat
+			task.wait()
+		until game.GetService
+
+		local UPS = game:GetService("UnifiedPhysicsService")
+		if UPS then
+			UPS:RegisterEngine("ODE", propTable)
+		end
+	end)
 
 	--[[
 	local ode = require("@ode")

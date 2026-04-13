@@ -7,13 +7,13 @@ local ProjectLoaderService = game:GetService("ProjectLoaderService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
-local rl = KinemiumRaylib.lib
-local renderer = KinemiumRaylib.renderer
-local structs = KinemiumRaylib.structs
+local rl = KinemiumRaylib.GetLib()
+local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local currentlySelected = ""
 local Theme = game:GetService("StudioThemeService").SelectedTheme
 local renderFileMenu = false
+local fileService = game:GetService("KineFileService")
 
 if FlagExists("client") then
 	return
@@ -63,7 +63,7 @@ end)
 
 local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
-local aRect = require("@Arect")(KinemiumRaylib.lib)
+local aRect = require("@Arect")(KinemiumRaylib.GetLib())
 local gui = aereon.gui
 
 local tooltipState = {
@@ -138,16 +138,16 @@ local fileMenu = gui.menu({
 			label = "Export Game",
 			submenu = {
 				{
-					label = "Export as .EXE",
+					label = "Export as Executable",
 					onClick = function()
-						print("Export as EXE")
+						print("Export as Executable")
 					end,
 				},
 
 				{
 					label = "Export as .KINE",
 					onClick = function()
-						print("Export as KINE")
+						fileService.ExportGameAsFile(ishared.GameName or "KinemiumProject")
 					end,
 				},
 			},
@@ -176,7 +176,7 @@ local fileMenu = gui.menu({
 			label = "Exit",
 			shortcut = "Alt+F4",
 			onClick = function()
-				KinemiumRaylib.lib.CloseWindow()
+				KinemiumRaylib.GetLib().CloseWindow()
 			end,
 		},
 	},
@@ -198,7 +198,7 @@ local function create_window(title, frame)
 			{
 				name = "File",
 				render = function(windowData)
-					local dt = KinemiumRaylib.lib.GetFrameTime()
+					local dt = KinemiumRaylib.GetLib().GetFrameTime()
 					local menuRect = aRect.new(windowData.x, windowData.y + 60, 200, 300)
 
 					fileMenu:show()
@@ -588,7 +588,7 @@ end)
 
 propback.stepped = function(propback)
 	if propback.title == "Toolbar" then
-		local dt = KinemiumRaylib.lib.GetFrameTime()
+		local dt = KinemiumRaylib.GetLib().GetFrameTime()
 		local currentX = 15
 		local category = categoryRegistry[currentlySelected]
 

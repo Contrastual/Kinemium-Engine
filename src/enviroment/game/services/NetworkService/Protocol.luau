@@ -1,6 +1,6 @@
 local Protocol = {}
 
-Protocol.MAGIC = "kinetica_net_v2"
+Protocol.MAGIC = "KEN (Kinemium Engine Network)"
 
 Protocol.Channels = {
 	Control = "control",
@@ -20,6 +20,9 @@ Protocol.Kinds = {
 	TerrainSnapshot = "terrain_snapshot",
 	TerrainChunkBatch = "terrain_chunk_batch",
 	RemoteEvent = "remote_event",
+	RemoteFunctionRequest = "remote_function_request",
+	RemoteFunctionResponse = "remote_function_response",
+	RemoteDataUpdate = "remote_data_update",
 	ControllerInput = "controller_input",
 	OwnedStateBatch = "owned_state_batch",
 	OwnedPatchBatch = "owned_patch_batch",
@@ -37,7 +40,10 @@ function Protocol.MakeEnvelope(channel, kind, payload, tick)
 end
 
 function Protocol.IsEnvelope(packet)
-	return type(packet) == "table" and packet.__network == Protocol.MAGIC and packet.channel ~= nil and packet.kind ~= nil
+	return type(packet) == "table"
+		and packet.__network == Protocol.MAGIC
+		and packet.channel ~= nil
+		and packet.kind ~= nil
 end
 
 return Protocol

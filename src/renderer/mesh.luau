@@ -13,7 +13,7 @@ local function LoadMesh(meshId: string, filePath: string)
 	local model = lib.LoadModel(filePath)
 	if lib.IsModelValid(model) == 1 then
 		modelRegistry[filePath] = model
-		print(`Loaded mesh: {meshId} from {filePath}`)
+		log(`Loaded mesh: {meshId} from {filePath}`)
 		return model
 	else
 		warn(`Failed to load mesh: {filePath}`)
@@ -27,7 +27,7 @@ local function UnloadMesh(meshId: string)
 		lib.UnloadModel(model)
 		modelRegistry[meshId] = nil
 		meshDataRegistry[meshId] = nil
-		print(`Unloaded mesh: {meshId}`)
+		log(`Unloaded mesh: {meshId}`)
 	end
 end
 
@@ -52,7 +52,8 @@ local function GenerateMesh(meshId: string, params: any)
 		meshData = r3d.R3D_GenMeshDataPlane(params.width or 10, params.length or 10, params.resX or 1, params.resZ or 1)
 		gpuMesh = r3d.R3D_LoadMesh(4, meshData, ffi.null, 0)
 	elseif meshId == "torus" then
-		meshData = r3d.R3D_GenMeshDataTorus(params.radius or 1, params.size or 0.3, params.radSeg or 16, params.sides or 16)
+		meshData =
+			r3d.R3D_GenMeshDataTorus(params.radius or 1, params.size or 0.3, params.radSeg or 16, params.sides or 16)
 		gpuMesh = r3d.R3D_LoadMesh(4, meshData, ffi.null, 0)
 	elseif meshId == "wedge" then
 		meshData = r3d.R3D_GenMeshDataSlope(
@@ -106,7 +107,7 @@ local function GenerateMesh(meshId: string, params: any)
 		return nil
 	end
 
-	print(`Generated mesh: {meshId} ({meshId})`)
+	log(`Generated mesh: {meshId} ({meshId})`)
 	return { meshData, gpuMesh }
 end
 

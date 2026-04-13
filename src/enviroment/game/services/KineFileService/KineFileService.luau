@@ -156,11 +156,15 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		ExportObject = function(instance, path, name)
 			local SerializationService = datamodel:GetService("SerializationService")
-			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
+			local serialized = SerializationService.SerializeInstancesAsync({ instance })
 			if serialized then
-				fs.writeFile(path .. "/" .. name .. ".kineobj", serialized)
+				fs.writeFile(path .. "/" .. name .. ".kine", serialized)
 			end
 			return serialized, true
+		end,
+
+		ExportGameAsFile = function(gameName: string)
+			return KineFileService.ExportObject(datamodel, "./", gameName)
 		end,
 
 		DecodeFile = function(filePath)
@@ -169,6 +173,9 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			if read then
 				local deserialized = SerializationService.Deserialize(read)
 				if deserialized then
+					if #deserialized == 1 then
+						return deserialized[1]
+					end
 					return deserialized
 				end
 			end

@@ -10,6 +10,7 @@ local SEGMENTS = 16
 local CORNER_SEGMENTS = 8
 local SQUIRCLE_SEGMENTS = 10
 local ZERO_V = vector.create(0, 0, 0)
+local MAX_AUTOMATIC_SIZE_DEPTH = 8
 
 local function resolveBlendMode(raylib, value)
 	if type(value) == "number" then
@@ -91,21 +92,139 @@ local function drawRoundedRectangleEx(lib, x, y, w, h, tl, tr, bl, br, color)
 	end
 end
 
-local function GetAbsoluteSize(object, lib)
+local function resolveAutomaticSizeAxes(mode)
+	if mode == Enum.AutomaticSize.XY then
+		return true, true
+	elseif mode == Enum.AutomaticSize.X then
+		return true, false
+	elseif mode == Enum.AutomaticSize.Y then
+		return false, true
+	end
+
+	local name = type(mode) == "table" and mode.Name or mode
+	if name == "XY" then
+		return true, true
+	elseif name == "X" then
+		return true, false
+	elseif name == "Y" then
+		return false, true
+	end
+
+	return false, false
+end
+
+local function resolvePaddingBounds(object, parentSize)
+	local left, right, top, bottom = 0, 0, 0, 0
+
+	for _, child in ipairs(object:GetChildren()) do
+		if child.ClassName == "UIPadding" and child.GetResolvedPadding then
+			local padding = child:GetResolvedPadding(parentSize)
+			left += padding.Left or 0
+			right += padding.Right or 0
+			top += padding.Top or 0
+			bottom += padding.Bottom or 0
+		end
+	end
+
+	return left, right, top, bottom
+end
+
+local function getContentMetrics(object, size)
+	if not object or object.BaseClass == "UIContainer" then
+		return ZERO_V, size
+	end
+
+	local left, right, top, bottom = resolvePaddingBounds(object, size)
+	return vector.create(left, top, 0), vector.create(
+		math.max(0, size.X - left - right),
+		math.max(0, size.Y - top - bottom),
+		0
+	)
+end
+
+local function precomputeLayoutChildren(object, lib, dt, structs, renderer)
+	if not lib then
+		return
+	end
+
+	for _, child in ipairs(object:GetChildren()) do
+		local className = child.ClassName
+		local isLayout = type(className) == "string" and string.sub(className, -6) == "Layout"
+		if isLayout and child.render and child.Enabled ~= false then
+			child.render(lib, child, dt or 0, structs, renderer)
+		end
+	end
+end
+
+local function calculateResolvedSize(object, parentSize, lib, dt, structs, renderer, depth)
+	local size = object.Size:ToPixels(parentSize)
+	local autoX, autoY = resolveAutomaticSizeAxes(object.AutomaticSize)
+
+	if (not autoX and not autoY) or (depth or 0) >= MAX_AUTOMATIC_SIZE_DEPTH then
+		return size
+	end
+
+	precomputeLayoutChildren(object, lib, dt, structs, renderer)
+
+	local left, right, top, bottom = resolvePaddingBounds(object, size)
+	local contentSize = vector.create(math.max(0, size.X - left - right), math.max(0, size.Y - top - bottom), 0)
+	local maxX, maxY = left, top
+	local hasGuiChild = false
+
+	for _, child in ipairs(object:GetChildren()) do
+		if child.BaseClass == "GuiObject" and child.Visible ~= false and child.Size then
+			hasGuiChild = true
+
+			local childSize = calculateResolvedSize(child, contentSize, lib, dt, structs, renderer, (depth or 0) + 1)
+			local anchor = child.AnchorPoint or ZERO_V
+			local relX, relY
+
+			if child._LayoutControlled and child._LayoutRelativePosition then
+				relX = child._LayoutRelativePosition.X - childSize.X * anchor.X
+				relY = child._LayoutRelativePosition.Y - childSize.Y * anchor.Y
+			elseif child.Position and child.Position.ToPixels then
+				local childPos = child.Position:ToPixels(contentSize)
+				relX = left + childPos.X - childSize.X * anchor.X
+				relY = top + childPos.Y - childSize.Y * anchor.Y
+			end
+
+			if relX and relY then
+				maxX = math.max(maxX, relX + childSize.X)
+				maxY = math.max(maxY, relY + childSize.Y)
+			end
+		end
+	end
+
+	if hasGuiChild then
+		maxX += right
+		maxY += bottom
+	else
+		maxX = left + right
+		maxY = top + bottom
+	end
+
+	return vector.create(autoX and math.max(0, maxX) or size.X, autoY and math.max(0, maxY) or size.Y, 0)
+end
+
+local function GetAbsoluteSize(object, lib, dt, structs, renderer, depth)
 	if object.BaseClass == "UIContainer" then
 		return vector.create(object.Size.X.Offset, object.Size.Y.Offset, 0)
 	end
-	return object.Size:ToPixels(GetAbsoluteSize(object.Parent, lib))
+
+	local parentSize = GetAbsoluteSize(object.Parent, lib, dt, structs, renderer, (depth or 0) + 1)
+	local _, parentContentSize = getContentMetrics(object.Parent, parentSize)
+	return calculateResolvedSize(object, parentContentSize, lib, dt, structs, renderer, depth)
 end
 
-local function getAbsoluteDrawPos(object, lib)
+local function getAbsoluteDrawPos(object, lib, dt, structs, renderer, depth)
 	if object.BaseClass == "UIContainer" then
 		return object.RenderOffset
 	end
 	local parent = object.Parent
-	local parentAbsPos = getAbsoluteDrawPos(parent, lib)
-	local parentSize = GetAbsoluteSize(parent, lib)
-	local size = object.Size:ToPixels(parentSize)
+	local parentAbsPos = getAbsoluteDrawPos(parent, lib, dt, structs, renderer, (depth or 0) + 1)
+	local parentSize = GetAbsoluteSize(parent, lib, dt, structs, renderer, (depth or 0) + 1)
+	local parentPaddingOffset, parentContentSize = getContentMetrics(parent, parentSize)
+	local size = calculateResolvedSize(object, parentContentSize, lib, dt, structs, renderer, depth)
 	local anchor = object.AnchorPoint or ZERO_V
 	local drawPos
 
@@ -116,8 +235,13 @@ local function getAbsoluteDrawPos(object, lib)
 			0
 		)
 	else
-		local pos = object.Position:ToPixels(parentSize)
-		drawPos = vector.create(parentAbsPos.X + pos.X - size.X * anchor.X, parentAbsPos.Y + pos.Y - size.Y * anchor.Y, 0)
+		local pos = object.Position:ToPixels(parentContentSize)
+		drawPos =
+			vector.create(
+				parentAbsPos.X + parentPaddingOffset.X + pos.X - size.X * anchor.X,
+				parentAbsPos.Y + parentPaddingOffset.Y + pos.Y - size.Y * anchor.Y,
+				0
+			)
 	end
 
 	if parent and parent.ClassName == "ScrollingFrame" then
@@ -133,17 +257,18 @@ local function isMouseInRect(mousePos, drawPos, size)
 		and mousePos.Y <= drawPos.Y + size.Y
 end
 
-local function calculateDrawParams(object, lib)
-	local parentSize = GetAbsoluteSize(object.Parent, lib)
+local function calculateDrawParams(object, lib, dt, structs, renderer, depth)
+	local parentSize = GetAbsoluteSize(object.Parent, lib, dt, structs, renderer, (depth or 0) + 1)
+	local _, parentContentSize = getContentMetrics(object.Parent, parentSize)
 	local size, drawPos, anchor
 
 	if object._EditorOverride then
 		size = object.AbsoluteSize or ZERO_V
 		drawPos = object.AbsolutePosition or ZERO_V
 	elseif object._LayoutControlled and object._LayoutRelativePosition then
-		size = object.Size:ToPixels(parentSize)
+		size = calculateResolvedSize(object, parentContentSize, lib, dt, structs, renderer, depth)
 		anchor = object.AnchorPoint or ZERO_V
-		local parentDrawPos = getAbsoluteDrawPos(object.Parent, lib)
+		local parentDrawPos = getAbsoluteDrawPos(object.Parent, lib, dt, structs, renderer, (depth or 0) + 1)
 		drawPos = vector.create(
 			parentDrawPos.X + object._LayoutRelativePosition.X - size.X * anchor.X,
 			parentDrawPos.Y + object._LayoutRelativePosition.Y - size.Y * anchor.Y,
@@ -153,8 +278,8 @@ local function calculateDrawParams(object, lib)
 			drawPos = vector.create(drawPos.X, drawPos.Y - (object.Parent.CanvasPosition or 0), 0)
 		end
 	else
-		size = object.Size:ToPixels(parentSize)
-		drawPos = getAbsoluteDrawPos(object, lib)
+		size = calculateResolvedSize(object, parentContentSize, lib, dt, structs, renderer, depth)
+		drawPos = getAbsoluteDrawPos(object, lib, dt, structs, renderer, depth)
 	end
 
 	return drawPos, size
@@ -211,11 +336,19 @@ local function isTweenBusy(tween)
 		return false
 	end
 
-	return tween.PlaybackState ~= Enum.PlaybackState.Completed
-		and tween.PlaybackState ~= Enum.PlaybackState.Cancelled
+	return tween.PlaybackState ~= Enum.PlaybackState.Completed and tween.PlaybackState ~= Enum.PlaybackState.Cancelled
 end
 
-local function playGuiTween(object, propertyNames, properties, easingDirection, easingStyle, duration, override, callback)
+local function playGuiTween(
+	object,
+	propertyNames,
+	properties,
+	easingDirection,
+	easingStyle,
+	duration,
+	override,
+	callback
+)
 	local tweenService = game and game.GetService and game:GetService("TweenService") or nil
 	if not tweenService then
 		return false, nil
@@ -232,7 +365,8 @@ local function playGuiTween(object, propertyNames, properties, easingDirection, 
 		end
 	end
 
-	local tweenInfo = TweenInfo.new(duration or 1, easingStyle or Enum.EasingStyle.Quad, easingDirection or Enum.EasingDirection.Out)
+	local tweenInfo =
+		TweenInfo.new(duration or 1, easingStyle or Enum.EasingStyle.Quad, easingDirection or Enum.EasingDirection.Out)
 	local tween = tweenService:Create(object, tweenInfo, properties)
 
 	for _, propertyName in ipairs(propertyNames) do
@@ -257,9 +391,12 @@ end
 
 local function resolveCornerRadii(corner, minDim)
 	local base = corner.CornerRadius.Scale * minDim + corner.CornerRadius.Offset
+	local function isDefaultCornerValue(prop)
+		return prop and prop.Scale == 0 and prop.Offset == 15
+	end
 
 	local function resolve(prop)
-		if prop then
+		if prop and not isDefaultCornerValue(prop) then
 			local v = prop.Scale * minDim + prop.Offset
 			return v > 0 and v or base
 		end
@@ -274,7 +411,7 @@ local function resolveCornerRadii(corner, minDim)
 	local uniform = tl == tr and tl == bl and tl == br
 
 	local function isDifferent(prop)
-		return prop and prop.Offset ~= 15
+		return prop and not isDefaultCornerValue(prop)
 	end
 
 	local useIndividual = isDifferent(corner.TopLeftRadius)
@@ -407,6 +544,11 @@ local function drawShadow(lib, structs, object, shadow, drawPos, size, corner, s
 		tl, tr, bl, br, base, useIndividual = resolveCornerRadii(corner, minDim)
 	end
 
+	local isCircleShadow = corner
+		and not useIndividual
+		and math.abs(size.X - size.Y) < 0.01
+		and base >= (minDim * 0.5 - 0.01)
+
 	for i = 1, passes do
 		local expansion = spread + (passes - i)
 		local alphaScale = i / passes
@@ -431,6 +573,12 @@ local function drawShadow(lib, structs, object, shadow, drawPos, size, corner, s
 
 		if object.Rotation ~= 0 then
 			lib.DrawRectanglePro(rec, ZERO_V, object.Rotation, layerColor)
+		elseif isCircleShadow then
+			lib.DrawCircleV(
+				vector.create(shadowX + shadowW * 0.5, shadowY + shadowH * 0.5, 0),
+				math.max(0, math.min(shadowW, shadowH) * 0.5),
+				layerColor
+			)
 		elseif squircle then
 			drawSquircleFilled(
 				lib,
@@ -446,22 +594,18 @@ local function drawShadow(lib, structs, object, shadow, drawPos, size, corner, s
 				layerColor
 			)
 		elseif corner then
-			if useIndividual then
-				drawRoundedRectangleEx(
-					lib,
-					shadowX,
-					shadowY,
-					shadowW,
-					shadowH,
-					tl + expansion,
-					tr + expansion,
-					bl + expansion,
-					br + expansion,
-					layerColor
-				)
-			else
-				lib.DrawRectangleRounded(rec, math.min((base + expansion) / layerMinDim, 0.5), SEGMENTS, layerColor)
-			end
+			drawRoundedRectangleEx(
+				lib,
+				shadowX,
+				shadowY,
+				shadowW,
+				shadowH,
+				(tl > 0 and tl or base) + expansion,
+				(tr > 0 and tr or base) + expansion,
+				(bl > 0 and bl or base) + expansion,
+				(br > 0 and br or base) + expansion,
+				layerColor
+			)
 		else
 			lib.DrawRectangleRec(rec, layerColor)
 		end
@@ -703,6 +847,7 @@ local propTable = {
 	AbsolutePosition = nil,
 	Anchored = true,
 	AbsoluteSize = nil,
+	AutomaticSize = Enum.AutomaticSize.None,
 	ClipsDescendants = false,
 	ZIndex = 1,
 	AnchorPoint = ZERO_V,
@@ -750,10 +895,28 @@ local propTable = {
 		end
 	end,
 	TweenPosition = function(self, endPosition, easingDirection, easingStyle, time, override, callback)
-		return playGuiTween(self, { "Position" }, { Position = endPosition }, easingDirection, easingStyle, time, override, callback)
+		return playGuiTween(
+			self,
+			{ "Position" },
+			{ Position = endPosition },
+			easingDirection,
+			easingStyle,
+			time,
+			override,
+			callback
+		)
 	end,
 	TweenSize = function(self, endSize, easingDirection, easingStyle, time, override, callback)
-		return playGuiTween(self, { "Size" }, { Size = endSize }, easingDirection, easingStyle, time, override, callback)
+		return playGuiTween(
+			self,
+			{ "Size" },
+			{ Size = endSize },
+			easingDirection,
+			easingStyle,
+			time,
+			override,
+			callback
+		)
 	end,
 	TweenSizeAndPosition = function(self, endSize, endPosition, easingDirection, easingStyle, time, override, callback)
 		return playGuiTween(
@@ -773,7 +936,7 @@ local propTable = {
 			return
 		end
 
-		local drawPos, size = calculateDrawParams(object, lib)
+		local drawPos, size = calculateDrawParams(object, lib, dt, structs, renderer)
 		local mousePos = vector.create(lib.GetMouseX(), lib.GetMouseY(), 0)
 		local mouseIsInObject = isMouseInRect(mousePos, drawPos, size)
 		local tilt = object:FindFirstChildOfClass("UITilt")
@@ -824,7 +987,9 @@ local propTable = {
 		if gradient then
 			local steps = 50
 			local stepHeight = size.Y / steps
-			local cornerRadius = shapeModifier and (shapeModifier.CornerRadius.Scale * minDim + shapeModifier.CornerRadius.Offset) or 0
+			local cornerRadius = shapeModifier
+					and (shapeModifier.CornerRadius.Scale * minDim + shapeModifier.CornerRadius.Offset)
+				or 0
 			cornerRadius = math.min(cornerRadius, minDim / 2)
 
 			for i = 0, steps - 1 do
@@ -893,19 +1058,7 @@ local propTable = {
 				if object.Rotation ~= 0 then
 					lib.DrawRectanglePro(rec, origin, object.Rotation, color)
 				else
-					drawSquircleFilled(
-						lib,
-						drawPos.X,
-						drawPos.Y,
-						size.X,
-						size.Y,
-						tl,
-						tr,
-						bl,
-						br,
-						shapeExponent,
-						color
-					)
+					drawSquircleFilled(lib, drawPos.X, drawPos.Y, size.X, size.Y, tl, tr, bl, br, shapeExponent, color)
 				end
 			end
 
@@ -1059,7 +1212,7 @@ return {
 	end,
 
 	calculatePositions = function(lib, object, dt, structs, renderer)
-		local drawPos, size = calculateDrawParams(object, lib)
+		local drawPos, size = calculateDrawParams(object, lib, dt, structs, renderer)
 		local mousePos = vector.create(lib.GetMouseX(), lib.GetMouseY(), 0)
 		local mouseIsInObject = isMouseInRect(mousePos, drawPos, size)
 

@@ -86,6 +86,9 @@ end
 local function handleSky(skyObject, renderer)
 	if skyObject.ClassName == "Sky" then
 		loadSky(skyObject.Cubemap)
+		skyObject.Changed:Connect(function()
+			loadSky(skyObject.Cubemap)
+		end)
 	end
 end
 
@@ -166,6 +169,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			local envType = r3d.structs.R3D_Environment
 			local environment: FFIPointer = rlib.R3D_GetEnvironment()
 			environment:write(envType:offset(map.offset), effect:GetMetadata("EffectObject"), 0, map.struct:size())
+			rlib.R3D_SetEnvironment(environment)
 		end
 	end
 
@@ -238,6 +242,9 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		rlib.R3D_SetLightActive(light, Lighting.GlobalShadows)
 	end, -1048576) -- why is this number so big???
 
+	for _, child in pairs(Lighting:GetChildren()) do
+		handleLightingChild(child)
+	end
 	Lighting.ChildAdded:Connect(handleLightingChild)
 end
 

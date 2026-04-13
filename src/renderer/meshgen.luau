@@ -160,7 +160,7 @@ function meshgen.autoSmooth(vertices: { any }, indices: { number }?, opts: any?)
 	local tolerance = opts.tolerance or EPSILON
 	local tol2 = tolerance * tolerance
 
-	-- ── 1. make sure we have zero-based indices ──────────────────────────────
+	--  1. make sure we have zero-based indices
 	local idxs
 	if indices then
 		idxs = indices
@@ -171,7 +171,7 @@ function meshgen.autoSmooth(vertices: { any }, indices: { number }?, opts: any?)
 		end
 	end
 
-	-- ── 2. position-weld: map every original vertex to a canonical position id
+	--  2. position-weld: map every original vertex to a canonical position id
 	--       so we can know which triangles truly share a corner in space.
 	local posId = table.create(#vertices) -- posId[vertIdx+1] = canonical pos id
 	local posList = {} -- list of {x,y,z}
@@ -216,7 +216,7 @@ function meshgen.autoSmooth(vertices: { any }, indices: { number }?, opts: any?)
 		end
 	end
 
-	-- ── 3. compute per-face flat normal ──────────────────────────────────────
+	--  3. compute per-face flat normal
 	local triCount = #idxs // 3
 	local faceNormals = table.create(triCount)
 
@@ -232,7 +232,7 @@ function meshgen.autoSmooth(vertices: { any }, indices: { number }?, opts: any?)
 		faceNormals[t + 1] = { nx, ny, nz }
 	end
 
-	-- ── 4. for each position, collect the faces that touch it ─────────────────
+	--  4. for each position, collect the faces that touch it
 	local posToFaces = {} -- posToFaces[posId] = { faceIdx, ... }
 	for t = 0, triCount - 1 do
 		for k = 1, 3 do
@@ -245,7 +245,7 @@ function meshgen.autoSmooth(vertices: { any }, indices: { number }?, opts: any?)
 		end
 	end
 
-	-- ── 5. for each (face, corner), accumulate normals from neighbouring faces
+	--  5. for each (face, corner), accumulate normals from neighbouring faces
 	--       whose angle with the current face is within the threshold.
 	--       Each unique (face, corner-posId) that shares a smooth group becomes
 	--       one output vertex.

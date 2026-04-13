@@ -17,7 +17,7 @@ end
 
 local lib = raylib.lib
 local const = raylib.const
-local renderer = rlservice.renderer
+local renderer = rlservice.GetRenderer()
 local Selection = game:GetService("Selection")
 local freecam = renderer.Freecam
 local _focusTargetCF = nil

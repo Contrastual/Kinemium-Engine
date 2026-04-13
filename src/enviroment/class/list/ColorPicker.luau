@@ -8,6 +8,8 @@ local signal = require("@Kinemium.signal")
 local Color4 = require("@Color4")
 local arect = aereon.rect()
 local UDim2 = require("@UDim2")
+local Enum = require("@EnumMap")
+local lib = raylib.lib
 
 local propTable = {
 	Name = "ColorPicker",
@@ -15,10 +17,13 @@ local propTable = {
 	AbsoluteSize = nil,
 	AbsolutePosition = nil,
 	Size = UDim2.new(0, 250, 0, 400),
+	Font = Enum.Font.DefaultEngineFont,
 	SelectedColor = nil,
 	OnColorSelect = signal.new(),
 	Visible = true,
 }
+
+local defaultFont = lib.GetFontDefault()
 
 GuiObject.inherit(propTable)
 
@@ -26,6 +31,12 @@ return {
 	class = "ColorPicker",
 
 	callback = function(instance, renderer, game)
+		local function resolveFont(fontEnum)
+			local name = fontEnum.Value
+			local resolvedFont = renderer.Font.Get(name) or defaultFont
+			return resolvedFont
+		end
+
 		local picker = gui.colorPicker({
 			x = 0,
 			y = 0,
@@ -47,6 +58,7 @@ return {
 			picker.set("obj_rect", arect.new(pos.X, pos.Y, size.X, size.Y))
 			picker.set("backgroundColor", object.BackgroundColor3)
 			picker.set("backgroundTransparency", object.BackgroundTransparency)
+			picker.set("font", resolveFont(object.Font))
 
 			picker.render(dt)
 

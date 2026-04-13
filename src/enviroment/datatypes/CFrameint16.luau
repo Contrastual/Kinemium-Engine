@@ -71,6 +71,9 @@ function CFrameint16:__tostring()
 end
 
 function CFrameint16:ToTable()
+	if not self.Position then
+		return {}
+	end
 	return {
 		type = "CFrameint16",
 		Position = self.Position:ToTable(),

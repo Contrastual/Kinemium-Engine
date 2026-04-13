@@ -4,28 +4,24 @@ Shader.__index = Shader
 local raylib = require("@raylib")
 local util = require("@kineshader")
 
+function Shader.fromMemory(vs, fs)
+	local shader = raylib.lib.LoadShaderFromMemory(vs, fs)
+	return Shader.new({ _shader = shader })
+end
+
 function Shader.new(source)
 	local self = setmetatable({}, Shader)
 
 	self._vertex = source.vertex
 	self._fragment = source.fragment
-	self._shader = raylib.lib.LoadShader(source.vertex, source.fragment)
+	self._shader = source._shader or raylib.lib.LoadShader(source.vertex, source.fragment)
 	return self
 end
 
-function Shader:SetUniform(name, value, isFloat: boolean)
+function Shader:SetUniform(name, value)
 	if self._shader then
 		if type(value) == "number" then
-			if isFloat then
-				util.SetShaderValueRaw(
-					self._shader,
-					name,
-					value,
-					raylib.const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT
-				)
-			else
-				util.SetShaderValueRaw(self._shader, name, value, raylib.const.ShaderUniformDataType.SHADER_UNIFORM_INT)
-			end
+			util.SetShaderValueRaw(self._shader, name, value, raylib.const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
 		elseif type(value) == "table" then
 			if value.__type then
 				if value.__type == "Vector3" then

@@ -9,7 +9,9 @@ local function renderCaret(showCaret, object, renderer, lib)
 		if not object.AbsolutePosition then
 			return
 		end
-		local font = renderer.GetFont(object.Font.Value)
+		local fontValue = object.Font
+		local fontName = if type(fontValue) == "table" then fontValue.Value else fontValue
+		local font = renderer.Font and renderer.Font.Get and renderer.Font.Get(fontName)
 		if not font then
 			font = lib.GetFontDefault()
 		end

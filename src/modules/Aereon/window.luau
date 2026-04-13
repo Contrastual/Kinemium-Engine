@@ -29,14 +29,14 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
 	end
 
-	local MAC_BTN_RADIUS = 6
-	local MAC_BTN_SPACING = 8
-	local MAC_BTN_LEFT = 12
-	local MAC_BTN_SYM_R = 2.5
-	local MAC_TAB_PAD_X = 14
-	local MAC_TAB_MIN_W = 80
-	local MAC_STATUSBAR_H = 18
-	local MAC_SEP_H = 1
+	local BTN_RADIUS = 6
+	local BTN_SPACING = 8
+	local BTN_LEFT = 12
+	local BTN_SYM_R = 2.5
+	local TAB_PAD_X = 14
+	local TAB_MIN_W = 80
+	local STATUSBAR_H = 18
+	local SEP_H = 1
 
 	local TL_RED = Color3.new(0.988, 0.369, 0.333)
 	local TL_YEL = Color3.new(0.988, 0.733, 0.173)
@@ -141,7 +141,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 	local function measureTabWidth(text, fontSize)
 		local m = raylib.MeasureTextEx(vend, text, fontSize, 1)
-		return m.x + MAC_TAB_PAD_X * 2
+		return m.x + TAB_PAD_X * 2
 	end
 
 	local function getTabBarHeight(window)
@@ -165,7 +165,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		end
 		local curX = window.x
 		for i, tab in ipairs(window.tabs) do
-			local tw = math.max(measureTabWidth(tab.name, fontSize), MAC_TAB_MIN_W)
+			local tw = math.max(measureTabWidth(tab.name, fontSize), TAB_MIN_W)
 			if mousePos.x >= curX and mousePos.x <= curX + tw then
 				return i
 			end
@@ -186,9 +186,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 	local function trafficLightCentres(window)
 		local cy = window.y + window._titleBarH / 2
-		local cx1 = window.x + MAC_BTN_LEFT
-		local cx2 = cx1 + MAC_BTN_RADIUS * 2 + MAC_BTN_SPACING
-		local cx3 = cx2 + MAC_BTN_RADIUS * 2 + MAC_BTN_SPACING
+		local cx1 = window.x + BTN_LEFT
+		local cx2 = cx1 + BTN_RADIUS * 2 + BTN_SPACING
+		local cx3 = cx2 + BTN_RADIUS * 2 + BTN_SPACING
 		return cx1, cx2, cx3, cy
 	end
 
@@ -196,7 +196,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		local cx1, cx2, cx3, cy = trafficLightCentres(window)
 		local cx = which == 1 and cx1 or which == 2 and cx2 or cx3
 		local dx, dy = mousePos.x - cx, mousePos.y - cy
-		return (dx * dx + dy * dy) <= (MAC_BTN_RADIUS + 3) ^ 2
+		return (dx * dx + dy * dy) <= (BTN_RADIUS + 3) ^ 2
 	end
 
 	module.OutlineColor = TL_GRN
@@ -778,7 +778,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					raylib.DrawLineEx(
 						vector.create(wx, wy + titleBarH),
 						vector.create(wx + ww, wy + titleBarH),
-						MAC_SEP_H,
+						SEP_H,
 						sepColor:ToRaylib(tr(titlebarTr))
 					)
 				end
@@ -790,24 +790,24 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					return Color3.new(base.R, base.G, base.B):ToRaylib(1 - alpha)
 				end
 
-				raylib.DrawCircleV(vector.create(cx1, cy), MAC_BTN_RADIUS, tlColor(btnRed))
+				raylib.DrawCircleV(vector.create(cx1, cy), BTN_RADIUS, tlColor(btnRed))
 				if showSymbols then
-					local r = MAC_BTN_SYM_R
+					local r = BTN_SYM_R
 					local sc = TL_SYM_R:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx1 - r, cy - r), vector.create(cx1 + r, cy + r), 1.2, sc)
 					raylib.DrawLineEx(vector.create(cx1 + r, cy - r), vector.create(cx1 - r, cy + r), 1.2, sc)
 				end
 
-				raylib.DrawCircleV(vector.create(cx2, cy), MAC_BTN_RADIUS, tlColor(btnYel))
+				raylib.DrawCircleV(vector.create(cx2, cy), BTN_RADIUS, tlColor(btnYel))
 				if showSymbols then
-					local r = MAC_BTN_SYM_R
+					local r = BTN_SYM_R
 					local sc = TL_SYM_Y:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx2 - r, cy), vector.create(cx2 + r, cy), 1.2, sc)
 				end
 
-				raylib.DrawCircleV(vector.create(cx3, cy), MAC_BTN_RADIUS, tlColor(btnGrn))
+				raylib.DrawCircleV(vector.create(cx3, cy), BTN_RADIUS, tlColor(btnGrn))
 				if showSymbols then
-					local r = MAC_BTN_SYM_R - 0.5
+					local r = BTN_SYM_R - 0.5
 					local sc = TL_SYM_G:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx3 - r, cy + r), vector.create(cx3, cy), 1.1, sc)
 					raylib.DrawLineEx(vector.create(cx3 - r, cy), vector.create(cx3 - r, cy + r), 1.1, sc)
@@ -827,7 +827,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 				if wd.Minimized then
 					local minimizedLabel = "Minimized"
-					local leftEdge = wx + MAC_BTN_LEFT + (MAC_BTN_RADIUS * 2 + MAC_BTN_SPACING) * 3 + 8
+					local leftEdge = wx + BTN_LEFT + (BTN_RADIUS * 2 + BTN_SPACING) * 3 + 8
 					raylib.DrawTextEx(
 						vend,
 						minimizedLabel,
@@ -855,7 +855,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 					local curX = wx
 					for i, tab in ipairs(wd.tabs) do
-						local tw = math.max(measureTabWidth(tab.name, titleFontSz), MAC_TAB_MIN_W)
+						local tw = math.max(measureTabWidth(tab.name, titleFontSz), TAB_MIN_W)
 						local isActive = wd.activeTab == i
 
 						raylib.DrawRectangleRec(
@@ -871,7 +871,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 							raylib.DrawLineEx(
 								vector.create(curX + 1, tabBarY + tabAreaH),
 								vector.create(curX + tw - 1, tabBarY + tabAreaH),
-								MAC_SEP_H + 0.5,
+								SEP_H + 0.5,
 								tabActiveColor:ToRaylib(tr(titlebarTr))
 							)
 						end
@@ -901,12 +901,12 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					raylib.DrawLineEx(
 						vector.create(wx, tabBarY + tabAreaH),
 						vector.create(wx + ww, tabBarY + tabAreaH),
-						MAC_SEP_H,
+						SEP_H,
 						sepColor:ToRaylib(tr(titlebarTr))
 					)
 				end
 
-				local statusBarH = wd.showStatusBar and MAC_STATUSBAR_H or 0
+				local statusBarH = wd.showStatusBar and STATUSBAR_H or 0
 				if wd.showStatusBar then
 					local sbY = wy + wd.height - statusBarH
 					raylib.DrawRectangleRec(
@@ -916,7 +916,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					raylib.DrawLineEx(
 						vector.create(wx, sbY),
 						vector.create(wx + ww, sbY),
-						MAC_SEP_H,
+						SEP_H,
 						sepColor:ToRaylib(tr(titlebarTr))
 					)
 					if wd.statusText and wd.statusText ~= "" then
@@ -952,7 +952,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			if not anim.closing and not wd.Minimized then
 				local hasTabs = wd.tabs and #wd.tabs > 0
 				local tabAreaH = hasTabs and tabBarH or 0
-				local statusBarH = wd.showStatusBar and MAC_STATUSBAR_H or 0
+				local statusBarH = wd.showStatusBar and STATUSBAR_H or 0
 				local contentOffsetY = titleBarH + tabAreaH
 				local contentH = wd.height - contentOffsetY - statusBarH
 

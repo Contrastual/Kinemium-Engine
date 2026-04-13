@@ -17,6 +17,8 @@ function RaycastParams.new()
 		RespectCanCollide = false,
 		BruteForceAllSlow = false,
 		VisualizeRay = false,
+		ExcludeInstances = {},
+		IncludeInstances = {},
 	}, RaycastParams)
 end
 
@@ -45,6 +47,8 @@ function RaycastParams:ToTable()
 		RespectCanCollide = self.RespectCanCollide,
 		BruteForceAllSlow = self.BruteForceAllSlow,
 		VisualizeRay = self.VisualizeRay,
+		ExcludeInstances = self.ExcludeInstances,
+		IncludeInstances = self.IncludeInstances,
 	}
 end
 
@@ -83,6 +87,12 @@ function RaycastParams.FromTable(tbl)
 	end
 	if tbl.VisualizeRay ~= nil then
 		rp.VisualizeRay = tbl.VisualizeRay
+	end
+	if tbl.ExcludeInstances ~= nil then
+		rp.ExcludeInstances = tbl.ExcludeInstances
+	end
+	if tbl.IncludeInstances ~= nil then
+		rp.IncludeInstances = tbl.IncludeInstances
 	end
 
 	return rp

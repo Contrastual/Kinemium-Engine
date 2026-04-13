@@ -1,7 +1,7 @@
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local lib = raylib.lib
-local renderer = rlservice.renderer
+local renderer = rlservice.GetRenderer()
 local aereon = require("@Aereon")
 local gui = aereon.gui
 local rect = require("@Arect")(lib)
@@ -20,7 +20,7 @@ local vend = KinemiumFontService.GetDefaultFontSmall()
 local arect = require("@Arect")(raylib.lib)
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
-local defaultKinemiumIcon = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
+local defaultKinemiumIcon = "./src/assets/images/kinemium/KinemiumWhite.png"
 local logoIcon = KinemiumIconLoader.ToTexture(defaultKinemiumIcon)
 
 local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
@@ -33,7 +33,8 @@ local SecondaryBackgroundColorRaylib = StudioThemeService.SelectedTheme.Secondar
 )
 local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
+KinemiumIconLoader.new("Add", "./src/assets/images/plus.png")
+
 local addIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Add"))
 
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
@@ -69,6 +70,8 @@ local dimension = gui.dropdown({
 		print("Selected:", index, value)
 	end,
 })
+
+local project_prompt_active = false
 
 local group
 group = aereon.create({
@@ -112,6 +115,7 @@ group = aereon.create({
 		zindex = 3,
 
 		onClick = function()
+			project_prompt_active = true
 			group.newProjectPrompt.show()
 		end,
 	},
@@ -125,11 +129,15 @@ group = aereon.create({
 		font = vend,
 		backgroundColor = SecondaryBackgroundColor,
 		title = "NEW PROJECT",
+		onClose = function()
+			project_prompt_active = false
+		end,
 		buttons = {
 			{
 				text = "CREATE",
 				color = Color3.new(0.368627, 0.368627, 0.368627),
 				onClick = function()
+					project_prompt_active = false
 					local gnInput = gameNameInput:getText()
 					local projInput = projectPath:getText()
 
@@ -211,7 +219,7 @@ group = aereon.create({
 
 group.frame.setTransparency(1)
 
-local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
+local logoPath = "./src/assets/images/kinemium/KinemiumWhite.png"
 local kilLogo = KinemiumIconLoader.ToTexture(logoPath)
 
 local projects = ProjectLoaderService.GetProjects() or {}
@@ -244,6 +252,9 @@ for _, projectData in pairs(projects) do
 		font = vend,
 		zindex = 3,
 		onClick = function()
+			if project_prompt_active then
+				return
+			end
 			ishared.GameName = projectData.name
 			ishared.FolderPath = projectData.path
 			ishared.GameIcon = projectData.icon

@@ -4,6 +4,7 @@ local UDim2 = require("@UDim2")
 local signal = require("@Kinemium.signal")
 
 local Aereon = require("@Aereon")
+local Enum = require("@Enum")
 local gui = Aereon.gui
 local arect = Aereon.rect()
 
@@ -17,6 +18,7 @@ local propTable = {
 	ActiveIndex = 1,
 	ActiveTab = "Tab 1",
 	TextSize = 16,
+	Font = Enum.Font.DefaultEngineFont,
 	BackgroundTransparency = 0,
 	BackgroundColor3 = Color3.new(0.15, 0.15, 0.15),
 	ActiveColor3 = Color3.new(0.02, 0.5, 1),
@@ -40,10 +42,20 @@ end
 
 GuiObject.inherit(propTable)
 
+local raylib = require("@raylib")
+local lib = raylib.lib
+local defaultFont = lib.GetFontDefault()
+
 return {
 	class = "UITabs",
 
 	callback = function(instance, renderer, game)
+		local function resolveFont(fontEnum)
+			local name = fontEnum.Value
+			local resolvedFont = renderer.Font.Get(name) or defaultFont
+			return resolvedFont
+		end
+
 		local onTabChanged = signal.new()
 		local tabs = gui.tabs({
 			x = 0,
@@ -86,6 +98,7 @@ return {
 			tabs.set("activeColor", object.ActiveColor3)
 			tabs.set("textColor", object.TextColor3)
 			tabs.set("fontSize", object.TextSize)
+			tabs.set("font", resolveFont(object.Font))
 			tabs.set("backgroundTransparency", object.BackgroundTransparency)
 			tabs.render(dt)
 

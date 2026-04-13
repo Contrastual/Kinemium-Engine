@@ -1001,7 +1001,7 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 			chunk.dominantMaterial = nil
 			chunk.dirty = false
 
-			local PhysicsService = datamodel:GetService("JoltPhysicsService")
+			local PhysicsService = datamodel:GetService("UnifiedPhysicsService")
 			if PhysicsService then
 				local k = chunkKey(cx, cy, cz)
 				PhysicsService.UpdateTerrainChunk(k, nil, nil)
@@ -1053,7 +1053,7 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 		chunk.mesh = result[2]
 		chunk.dirty = false
 
-		local PhysicsService = datamodel:GetService("JoltPhysicsService")
+		local PhysicsService = datamodel:GetService("UnifiedPhysicsService")
 		if PhysicsService then
 			local k = chunkKey(cx, cy, cz)
 			PhysicsService.UpdateTerrainChunk(k, sv, si)

@@ -181,7 +181,15 @@ end
 
 StateRegistry.RegisterAdapter("BasePart", {
 	matches = function(object)
-		return isBasePart(object)
+		if not isBasePart(object) then
+			return false
+		end
+
+		if object.GetAttribute and object:GetAttribute("__humanoidRigSkipOwnedState") == true then
+			return false
+		end
+
+		return true
 	end,
 
 	capture = function(object)

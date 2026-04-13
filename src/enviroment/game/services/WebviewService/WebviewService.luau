@@ -126,7 +126,7 @@ WebviewService.InitRenderer = function(renderer, renderer_signal)
 					end)
 
 					renderer.Hook.new("Renderstep", function()
-						-- ── INPUT FIRST (before render so UL processes it this frame) ──
+						--  INPUT FIRST (before render so UL processes it this frame)
 						local mx = raylib.lib.GetMouseX()
 						local my = raylib.lib.GetMouseY()
 

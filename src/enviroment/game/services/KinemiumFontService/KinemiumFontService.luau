@@ -1,6 +1,5 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local fs = zune.fs
 
 local KinemiumFontService = Instance.new("KinemiumFontService")
 KinemiumFontService.ExplorerHidden = true
@@ -8,33 +7,127 @@ KinemiumFontService.ExplorerHidden = true
 local FontRemoved = signal.new()
 local FontAdded = signal.new()
 
-local function transformFontName(v: string)
-	v = string.gsub(v, "%.ttf$", "") -- remove .ttf (literal)
-	v = string.gsub(v, "%-.*$", "") -- remove weight after first dash
-	return v
-end
+local DEFAULT_FONT_PATH = "./src/assets/fonts/Montserrat-Medium.ttf"
+local DEFAULT_CODE_FONT_PATH = "./src/assets/fonts/JetBrainsMono-Light.ttf"
+
+local ENGINE_FONT_FILES = {
+	Legacy = DEFAULT_FONT_PATH,
+	Arial = "./src/assets/fonts/Arimo-Regular.ttf",
+	ArialBold = "./src/assets/fonts/Arimo-Bold.ttf",
+	SourceSans = "./src/assets/fonts/SourceSansPro-Regular.ttf",
+	SourceSansBold = "./src/assets/fonts/SourceSansPro-Bold.ttf",
+	SourceSansLight = "./src/assets/fonts/SourceSansPro-Light.ttf",
+	SourceSansItalic = "./src/assets/fonts/SourceSansPro-It.ttf",
+	Bodoni = "./src/assets/fonts/AccanthisADFStd-Regular.otf",
+	Garamond = "./src/assets/fonts/Guru-Regular.otf",
+	Cartoon = "./src/assets/fonts/ComicNeue-Angular-Bold.ttf",
+	Code = "./src/assets/fonts/GoogleSansCode-Regular.ttf",
+	GoogleSansCode = "./src/assets/fonts/GoogleSansCode-Regular.ttf",
+	DefaultEngineFont = DEFAULT_FONT_PATH,
+	DefaultCodeEngineFont = DEFAULT_CODE_FONT_PATH,
+	Highway = "./src/assets/fonts/HWYGOTH.ttf",
+	SciFi = "./src/assets/fonts/Zekton.ttf",
+	Arcade = "./src/assets/fonts/PressStart2P-Regular.ttf",
+	Fantasy = "./src/assets/fonts/Balthazar-Regular.ttf",
+	Antique = "./src/assets/fonts/RomanAntique.otf",
+	SourceSansSemibold = "./src/assets/fonts/SourceSansPro-Semibold.ttf",
+	Gotham = "./src/assets/fonts/Montserrat-Regular.ttf",
+	GothamMedium = DEFAULT_FONT_PATH,
+	GothamBold = "./src/assets/fonts/Montserrat-Bold.ttf",
+	GothamBlack = "./src/assets/fonts/Montserrat-Black.ttf",
+	BuilderSans = "./src/assets/fonts/Montserrat-Regular.ttf",
+	BuilderSansMedium = DEFAULT_FONT_PATH,
+	BuilderSansBold = "./src/assets/fonts/Montserrat-Bold.ttf",
+	BuilderSansExtraBold = "./src/assets/fonts/Montserrat-Black.ttf",
+	Vend = "./src/assets/fonts/Vend.ttf",
+	VCR = "./src/assets/fonts/VCR.ttf",
+	Bembo = "./src/assets/fonts/Bembo.otf",
+	Beyno = "./src/assets/fonts/Beyno.ttf",
+	Avenir = "./src/assets/fonts/Avenir.otf",
+	Atiba = "./src/assets/fonts/Atiba.ttf",
+	Aerova = "./src/assets/fonts/Aerova.otf",
+	["Duskfall Gothic"] = "./src/assets/fonts/Duskfall Gothic.ttf",
+	DuskfallGothic = "./src/assets/fonts/Duskfall Gothic.ttf",
+	Filted = "./src/assets/fonts/Filted.ttf",
+	GillSans = "./src/assets/fonts/GillSans.otf",
+	Curlz = "./src/assets/fonts/Curlz.ttf",
+	AmaticSC = "./src/assets/fonts/AmaticSC-Regular.ttf",
+	Bangers = "./src/assets/fonts/Bangers-Regular.ttf",
+	Creepster = "./src/assets/fonts/Creepster-Regular.ttf",
+	DenkOne = "./src/assets/fonts/DenkOne-Regular.ttf",
+	Fondamento = "./src/assets/fonts/Fondamento-Regular.ttf",
+	Audiowide = "./src/assets/fonts/Audiowide-Regular.ttf",
+	AudiowideRegular = "./src/assets/fonts/Audiowide-Regular.ttf",
+	FredokaOne = "./src/assets/fonts/FredokaOne-Regular.ttf",
+	GrenzeGotisch = "./src/assets/fonts/GrenzeGotisch-Regular.ttf",
+	IndieFlower = "./src/assets/fonts/IndieFlower-Regular.ttf",
+	JosefinSans = "./src/assets/fonts/JosefinSans-Regular.ttf",
+	Jura = "./src/assets/fonts/Jura-Regular.ttf",
+	Kalam = "./src/assets/fonts/Kalam-Regular.ttf",
+	LuckiestGuy = "./src/assets/fonts/LuckiestGuy-Regular.ttf",
+	Merriweather = "./src/assets/fonts/Merriweather-Regular.ttf",
+	Michroma = "./src/assets/fonts/Michroma-Regular.ttf",
+	Nunito = "./src/assets/fonts/Nunito-Regular.ttf",
+	Oswald = "./src/assets/fonts/Oswald-Regular.ttf",
+	Exo = "./src/assets/fonts/Exo-Regular.ttf",
+	ExoRegular = "./src/assets/fonts/Exo-Regular.ttf",
+	ExoBold = "./src/assets/fonts/Exo-Bold.ttf",
+	ExoItalic = "./src/assets/fonts/Exo-Italic.ttf",
+	PatrickHand = "./src/assets/fonts/PatrickHand-Regular.ttf",
+	PermanentMarker = "./src/assets/fonts/PermanentMarker-Regular.ttf",
+	Roboto = "./src/assets/fonts/Roboto-Regular.ttf",
+	RobotoCondensed = "./src/assets/fonts/RobotoCondensed-Regular.ttf",
+	RobotoMono = "./src/assets/fonts/RobotoMono-Regular.ttf",
+	Sarpanch = "./src/assets/fonts/Sarpanch-Regular.ttf",
+	SpecialElite = "./src/assets/fonts/SpecialElite-Regular.ttf",
+	TitilliumWeb = "./src/assets/fonts/TitilliumWeb-Regular.ttf",
+	Ubuntu = "./src/assets/fonts/Ubuntu-Regular.ttf",
+	Arimo = "./src/assets/fonts/Arimo-Regular.ttf",
+	ArimoBold = "./src/assets/fonts/Arimo-Bold.ttf",
+	Unknown = DEFAULT_FONT_PATH,
+}
 
 local zembed = require("@zembed")
-local engine_fonts
 local fontCount = 0
 
-if zembed.IsEmbedded() then
-	engine_fonts = zembed.GetFilesThatHas([[.ttf]])
-else
-	engine_fonts = "./src/assets/fonts"
+local function resolveFontPath(path: string)
+	if zembed.IsEmbedded() then
+		return "." .. path
+	end
+	return path
 end
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
-	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
-	local code_font = "./src/assets/fonts/JetBrainsMono-Light.ttf"
+	local loadedFonts = {}
+	local loadingFonts = {}
 
-	if zembed.IsEmbedded() then
-		default_font = "." .. default_font
-		code_font = "." .. code_font
+	local function loadEngineFont(name: string, size: number?)
+		if loadedFonts[name] then
+			return loadedFonts[name]
+		end
+		if loadingFonts[name] then
+			return nil
+		end
+
+		local path = ENGINE_FONT_FILES[name]
+		if not path then
+			return nil
+		end
+
+		loadingFonts[name] = true
+		local loaded = renderer.Font.new(name, resolveFontPath(path), size or 64)
+		loadingFonts[name] = nil
+		loadedFonts[name] = loaded
+		FontAdded:Fire(name, path)
+		return loaded
 	end
 
-	local font = renderer.Font.new("DefaultEngineFont", default_font, 32)
-	local loaded_cf = renderer.Font.new("DefaultCodeEngineFont", code_font, 32)
+	renderer.Font.SetResolver(function(name)
+		return loadEngineFont(name)
+	end)
+
+	local font = loadEngineFont("DefaultEngineFont", 32)
+	local loaded_cf = loadEngineFont("DefaultCodeEngineFont", 32)
 
 	KinemiumFontService:SetProperties({
 		LoadFont = function(self, name, fontPath)
@@ -42,9 +135,11 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 			FontAdded:Fire(name, fontPath)
 
-			fontInstance.Font = renderer.Font.new(name, fontPath)
+			fontInstance.Font = renderer.Font.new(name, fontPath, 64)
+			loadedFonts[name] = fontInstance.Font
 			fontInstance.Unload = function()
 				renderer.Font.Remove(name)
+				loadedFonts[name] = nil
 				FontRemoved:Fire(fontPath)
 			end
 			return fontInstance
@@ -64,26 +159,23 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 		LoadAllEngineFonts = function()
 			local fontsLoadStart = os.clock()
-			local cache = {}
+			local loaded = 0
 
-			for _, font in pairs(type(engine_fonts) == "string" and fs.entries(engine_fonts) or engine_fonts) do
+			for name, _ in pairs(ENGINE_FONT_FILES) do
 				local fontLoadStart = os.clock()
-				local path = zembed.IsEmbedded() and "../" .. font or engine_fonts .. "/" .. font.name
-				local transformed = transformFontName(zembed.IsEmbedded() and zune.fs.path.basename(path) or font.name)
-				if cache[transformed] then
-					continue
-				end
-				cache[transformed] = true
-				renderer.Font.new(transformed, path, 64)
-				fontCount += 1
-				print(
-					string.format(
-						"FONTSERVICE | Loaded font %s in %.3fms",
-						transformed,
-						(os.clock() - fontLoadStart) * 1000
+				if loadEngineFont(name, 64) then
+					loaded += 1
+					print(
+						string.format(
+							"FONTSERVICE | Loaded font %s in %.3fms",
+							name,
+							(os.clock() - fontLoadStart) * 1000
+						)
 					)
-				)
+				end
 			end
+
+			fontCount = loaded
 			print(
 				string.format(
 					"FONTSERVICE | Loaded %i fonts in %.3fms",
@@ -95,8 +187,6 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		FontAdded = FontAdded,
 		FontRemoved = FontRemoved,
 	})
-
-	-- KinemiumFontService.LoadAllEngineFonts()
 end
 
 return KinemiumFontService

@@ -1,14 +1,13 @@
 -- devcell
 
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
-local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local rl = KinemiumRaylib.lib
+local rl = KinemiumRaylib.GetLib()
 local LogService = game:GetService("LogService")
-local structs = KinemiumRaylib.structs
+local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local Theme = game:GetService("StudioThemeService").SelectedTheme
 local arectlib = require("@Arect")(rl)
@@ -20,7 +19,6 @@ local lastLogCount = 0
 local syntax_highlighter = require("@syntax_highlighter")
 local syntax_autocomplete = require("@syntax_autocomplete")
 local aereon = require("@Aereon")
-local raylib = require("@raylib")
 
 local textbox = aereon.textbox(Theme, game)
 

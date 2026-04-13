@@ -1,76 +1,69 @@
 local Instance = require("@Instance")
-local signal = require("@Kinemium.signal")
-local Color3 = require("@Color3")
-
-local serialized = nil
-
 local PlaytestService = Instance.new("PlaytestService")
 PlaytestService.ExplorerHidden = true
+
+local function outputProcess(prefix, proc)
+	local buffer = ""
+	task.spawn(function()
+		while true do
+			local err = proc.stderr:read(1024)
+
+			if err and #err > 0 then
+				buffer ..= err
+
+				while true do
+					local lineEnd = string.find(buffer, "\n")
+
+					if not lineEnd then
+						break
+					end
+
+					local line = string.sub(buffer, 1, lineEnd - 1)
+					buffer = string.sub(buffer, lineEnd + 1)
+
+					if #line > 0 then
+						print(prefix, line)
+					end
+				end
+			end
+
+			task.wait(0.01)
+		end
+	end)
+end
+
+local server_process: ProcessChild
+local client_process: ProcessChild
 
 PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 	PlaytestService:SetProperties({
 		CreatePlaytestAsync = function()
-			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
+			local Process = datamodel:GetService("Process")
 
-			-- 1. Snapshot BEFORE scripts touch anything
-			serialized = datamodel:Clone(true)
+			task.spawn(function()
+				server_process = Process.CreateKinemiumServerProcess()
+				outputProcess("[SERVER]", server_process)
+			end)
 
-			-- 2. Then run scripts against the live datamodel
-			for _, script in pairs(datamodel:GetDescendants()) do
-				if script.ClassName == "Script" then
-					log("Running script ", script)
-					ScriptRunnerService.RunScript(script)
-				end
-			end
+			task.wait(2)
 
-			PlaytestService.IsPlaytesting = true
+			task.spawn(function()
+				client_process = Process.CreateKinemiumClientProcess()
+				outputProcess("[CLIENT]", client_process)
+			end)
 		end,
 
 		StopCurrentPlaytest = function()
-			local ScriptRunnerService = datamodel:GetService("ScriptRunnerService")
-			local PhysicsService = datamodel:GetService("KinemiumPhysicsService")
-
-			ScriptRunnerService.Clear()
-			PlaytestService.IsPlaytesting = false
-
-			if PhysicsService and PhysicsService.Unload then
-				pcall(PhysicsService.Unload)
+			if client_process then
+				client_process:kill()
 			end
-
-			datamodel:RestoreFrom(serialized)
-
-			serialized:Destroy()
-			serialized = nil
+			if server_process then
+				server_process:kill()
+			end
 		end,
 
-		IsPlaytesting = false,
+		IsPlaytesting = true,
 	})
-end
-
-PlaytestService.GetToolbarCategory = function(renderer, renderer_signal, datamodel)
-	local toggle = true
-
-	local Category = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function(object)
-					if toggle == true then
-						PlaytestService.CreatePlaytestAsync()
-					else
-						PlaytestService.StopCurrentPlaytest()
-					end
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				--\\texture = PlayIcon,
-			},
-		},
-	}
-
-	return Category
 end
 
 return PlaytestService

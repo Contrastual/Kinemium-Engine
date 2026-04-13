@@ -2,6 +2,7 @@ local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 local KiNet = require("@KiNet")
 local Protocol = require("./Protocol")
+local ServerPreview = require("./ServerPreview")
 local GuiMirror = require("../../runtime/GuiMirror")
 
 local NetworkService = Instance.new("NetworkService")
@@ -18,6 +19,20 @@ local packetHandlers = {}
 local pendingPackets = {}
 local sessionsByKey = {}
 local sessionsByUserId = {}
+local trafficStats = {
+	sent = {
+		total = 0,
+		reliable = 0,
+		unreliable = 0,
+		byMessage = {},
+	},
+	received = {
+		total = 0,
+		reliable = 0,
+		unreliable = 0,
+		byMessage = {},
+	},
+}
 
 local currentTick = 0
 local tickRate = 30
@@ -25,9 +40,120 @@ local tickInterval = 1 / tickRate
 local tickAccumulator = 0
 local tickLoopBound = false
 
+local previewStartedAt = os.time()
+local previewMetadata = {
+	name = "Kinemium Server",
+	motd = "A Kinemium server is online.",
+	maxPlayers = 16,
+	tags = {},
+	extra = {},
+}
+
 local datamodelRef = nil
 local connectedTo = {}
 local localPlayerUserId = nil
+
+local function cloneTable(source)
+	local copy = {}
+	for key, value in pairs(source or {}) do
+		copy[key] = value
+	end
+	return copy
+end
+
+local function updatePreviewMetadata(data)
+	if type(data) ~= "table" then
+		return cloneTable(previewMetadata)
+	end
+
+	for key, value in pairs(data) do
+		previewMetadata[key] = value
+	end
+
+	return cloneTable(previewMetadata)
+end
+
+local function clonePublicSession(session)
+	if type(session) ~= "table" then
+		return nil
+	end
+
+	return {
+		key = if session.userId ~= nil then `user_{session.userId}` else session.name,
+		name = session.name,
+		userId = session.userId,
+		connectedAt = session.connectedAt,
+		lastInputSequence = session.lastInputSequence,
+		lastAppliedInputSequence = session.lastAppliedInputSequence,
+		lastAcknowledgedInputSequence = session.lastAcknowledgedInputSequence,
+		player = session.player,
+	}
+end
+
+local function getTrafficBucket(direction, channel, kind)
+	local key = `{channel}:{kind}`
+	local bucket = trafficStats[direction].byMessage[key]
+	if not bucket then
+		bucket = {
+			channel = channel,
+			kind = kind,
+			total = 0,
+			reliable = 0,
+			unreliable = 0,
+		}
+		trafficStats[direction].byMessage[key] = bucket
+	end
+
+	return bucket
+end
+
+local function recordTraffic(direction, envelope, reliable)
+	local stats = trafficStats[direction]
+	stats.total += 1
+	if reliable then
+		stats.reliable += 1
+	else
+		stats.unreliable += 1
+	end
+
+	local bucket = getTrafficBucket(direction, envelope.channel, envelope.kind)
+	bucket.total += 1
+	if reliable then
+		bucket.reliable += 1
+	else
+		bucket.unreliable += 1
+	end
+end
+
+local function cloneTrafficSnapshot(snapshot)
+	local copy = {
+		total = snapshot.total,
+		reliable = snapshot.reliable,
+		unreliable = snapshot.unreliable,
+		byMessage = {},
+	}
+
+	for key, bucket in pairs(snapshot.byMessage) do
+		copy.byMessage[key] = {
+			channel = bucket.channel,
+			kind = bucket.kind,
+			total = bucket.total,
+			reliable = bucket.reliable,
+			unreliable = bucket.unreliable,
+		}
+	end
+
+	return copy
+end
+
+local function resetTrafficStats()
+	for _, direction in ipairs({ "sent", "received" }) do
+		trafficStats[direction].total = 0
+		trafficStats[direction].reliable = 0
+		trafficStats[direction].unreliable = 0
+		trafficStats[direction].byMessage = {}
+	end
+end
 
 local function clientKey(client)
 	return `{client.address}:{client.port}`
@@ -66,6 +192,7 @@ local function dispatchPacket(sender, envelope)
 
 	local channelHandlers = packetHandlers[envelope.channel]
 	local kindHandlers = channelHandlers and channelHandlers[envelope.kind]
+	recordTraffic("received", envelope, envelope.reliable == true)
 	if not kindHandlers or #kindHandlers == 0 then
 		queuePendingPacket(sender, envelope)
 		return true
@@ -100,10 +227,31 @@ local function registerMessageHandler(channel, kind, callback)
 	packetHandlers[channel][kind] = packetHandlers[channel][kind] or {}
 	table.insert(packetHandlers[channel][kind], callback)
 	flushPendingPackets(channel, kind)
+	return function()
+		local handlers = packetHandlers[channel] and packetHandlers[channel][kind]
+		if not handlers then
+			return
+		end
+
+		for index = #handlers, 1, -1 do
+			if handlers[index] == callback then
+				table.remove(handlers, index)
+			end
+		end
+
+		if #handlers == 0 then
+			packetHandlers[channel][kind] = nil
+			if next(packetHandlers[channel]) == nil then
+				packetHandlers[channel] = nil
+			end
+		end
+	end
 end
 
 local function sendEnvelope(sendFn, recipient, channel, kind, payload, reliable)
 	local envelope = Protocol.MakeEnvelope(channel, kind, payload, currentTick)
+	envelope.reliable = reliable == true
+	recordTraffic("sent", envelope, reliable == true)
 	if recipient then
 		sendFn(normalizeRecipient(recipient), envelope, reliable == true)
 	else
@@ -227,6 +375,7 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		function NetworkService:StartServer(address, port, allowedTokens)
 			KiNet.Server:Init(address, port, allowedTokens)
+			previewStartedAt = os.time()
 			KiNet.Server:Listen()
 		end
 
@@ -248,6 +397,33 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end)
 
 			KiNet.Client:Listen()
+		end
+
+		local function ensureClientPlayerInstance(payload)
+			if type(payload) ~= "table" then
+				return nil
+			end
+
+			local players = datamodel:GetService("Players")
+			if not players or not payload.name or not payload.id then
+				return nil
+			end
+
+			local player = players:GetPlayerByUserId(payload.id) or players:GetPlayerByName(payload.name)
+			if player then
+				player.Name = payload.name
+				player.UserId = payload.id
+				if player.Parent ~= players then
+					player.Parent = players
+				end
+				return player
+			end
+
+			if players.AddPlayer then
+				return players:AddPlayer(payload.name, payload.id, datamodel)
+			end
+
+			return nil
 		end
 
 		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.PlayerProfile, function(_, payload)
@@ -281,9 +457,15 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				withMouseInjection(player, renderer, datamodel)
 				NetworkService.IsClientConnected = true
 			end)
+
+			for _, existingPlayer in ipairs(payload.existingPlayers or {}) do
+				ensureClientPlayerInstance(existingPlayer)
+			end
 		end)
 
-		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.PlayerJoined, function() end)
+		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.PlayerJoined, function(_, payload)
+			ensureClientPlayerInstance(payload)
+		end)
 
 		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.PlayerLeft, function(_, payload)
 			local players = datamodel:GetService("Players")
@@ -311,6 +493,7 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				port = client.port,
 				name = name,
 				userId = userId,
+				connectedAt = os.time(),
 				lastInputSequence = 0,
 				lastAppliedInputSequence = 0,
 				lastAcknowledgedInputSequence = -1,
@@ -371,6 +554,20 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			}, true)
 
 			clientRemovedSignal:Fire(session)
+		end)
+
+		KiNet.Server:OnPreAuthMessage(function(addr, msg)
+			return ServerPreview.HandleRequest(KiNet.Server.Socket, addr, msg, {
+				datamodel = datamodel,
+				sessions = sessionsByKey,
+				previewData = previewMetadata,
+				address = KiNet.Server and KiNet.Server.Address,
+				port = KiNet.Server and KiNet.Server.Port,
+				tickRate = tickRate,
+				currentTick = currentTick,
+				startedAt = previewStartedAt,
+				requiresAuth = KiNet.Server and KiNet.Server.AllowedTokens and #KiNet.Server.AllowedTokens > 0,
+			})
 		end)
 
 		local authToken = GetFlagValue("auth_token")
@@ -437,7 +634,30 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			TickRate = tickRate,
 			TickInterval = tickInterval,
 			RegisterMessageHandler = function(self, channel, kind, callback)
-				registerMessageHandler(channel, kind, callback)
+				return registerMessageHandler(channel, kind, callback)
+			end,
+			UnregisterMessageHandler = function(self, channel, kind, callback)
+				local handlers = packetHandlers[channel] and packetHandlers[channel][kind]
+				if not handlers then
+					return false
+				end
+
+				local removed = false
+				for index = #handlers, 1, -1 do
+					if handlers[index] == callback then
+						table.remove(handlers, index)
+						removed = true
+					end
+				end
+
+				if #handlers == 0 then
+					packetHandlers[channel][kind] = nil
+					if next(packetHandlers[channel]) == nil then
+						packetHandlers[channel] = nil
+					end
+				end
+
+				return removed
 			end,
 			SendToServer = function(self, channel, kind, payload, reliable)
 				sendToServer(channel, kind, payload, reliable)
@@ -458,14 +678,41 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				return localPlayerUserId
 			end,
 			GetSessionByUserId = function(self, userId)
-				return sessionsByUserId[userId]
+				local session = sessionsByUserId[userId]
+				if IsClient then
+					return clonePublicSession(session)
+				end
+				return session
 			end,
 			GetSessions = function()
 				local list = {}
 				for _, session in pairs(sessionsByKey) do
-					table.insert(list, session)
+					if IsClient then
+						table.insert(list, clonePublicSession(session))
+					else
+						table.insert(list, session)
+					end
 				end
 				return list
+			end,
+			GetStatsSnapshot = function()
+				return {
+					tick = currentTick,
+					sent = cloneTrafficSnapshot(trafficStats.sent),
+					received = cloneTrafficSnapshot(trafficStats.received),
+				}
+			end,
+			Ping = function(self, address, port, options)
+				return ServerPreview.Ping(address, port, options)
+			end,
+			SetPreviewData = function(self, data)
+				return updatePreviewMetadata(data)
+			end,
+			GetPreviewData = function()
+				return cloneTable(previewMetadata)
+			end,
+			ResetStats = function()
+				resetTrafficStats()
 			end,
 		})
 	end)

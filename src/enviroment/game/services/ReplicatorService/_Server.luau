@@ -1,5 +1,6 @@
 local Server = {}
 
+local KiNet = require("@KiNet")
 local Protocol = require("../NetworkService/Protocol")
 local Shared = require("./Shared")
 local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
@@ -8,6 +9,10 @@ local InputActionService = require("../InputActionService/InputActionService")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 2
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
+local REPLICATION_TARGET_BYTES = 48 * 1024
+local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
+local MAX_SNAPSHOT_STATES_PER_MESSAGE = 96
+local MAX_CREATE_ROOTS_PER_MESSAGE = 24
 
 local function packArgs(...)
 	return table.pack(...)
@@ -17,6 +22,7 @@ function Server.init(context)
 	local game = context.game
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
+	local transportSerializer = KiNet.Serializer
 	local stateRegistry = context.StateRegistry
 	local networkOwnership = context.NetworkOwnership
 	local userdata = serializationService.userdata
@@ -42,6 +48,8 @@ function Server.init(context)
 	local workspace = game.Workspace or game:GetService("Workspace")
 	local terrain = workspace and workspace:FindFirstChild("Terrain")
 	local humanoidRootDebugAt = {}
+	local remoteFunctionRequestId = 0
+	local pendingRemoteFunctionInvocations = {}
 
 	local function isHumanoidRootObject(object)
 		if type(object) ~= "table" then
@@ -103,14 +111,14 @@ function Server.init(context)
 			return
 		end
 
-		local owner = object.NetworkOwner and object.NetworkOwner.Name or "Server"
-		local livePos = object.CFrame and object.CFrame.Position or object.Position
+		--[[
 		local statePos = decodeStatePosition(state)
 		print(
 			`[HumanoidDebug][Server][{stage}] session={sessionKey or "global"} object={object.Name}#{object.NetworkId or "?"} owner={owner} live={formatVector3(
 				livePos
 			)} state={formatVector3(statePos)} {extra or ""}`
 		)
+			--]]
 	end
 
 	local function getOwnershipState(root)
@@ -121,6 +129,74 @@ function Server.init(context)
 		end
 
 		return state
+	end
+
+	local function copyArray(source)
+		local copy = {}
+		for index, value in ipairs(source or {}) do
+			copy[index] = value
+		end
+		return copy
+	end
+
+	local function shallowCopy(source)
+		local copy = {}
+		for key, value in pairs(source or {}) do
+			copy[key] = value
+		end
+		return copy
+	end
+
+	local function measurePayloadSize(payload)
+		local ok, encoded = pcall(transportSerializer.Serialize, payload)
+		if not ok then
+			return math.huge
+		end
+
+		local sizeOk, size = pcall(buffer.len, encoded)
+		if not sizeOk then
+			return math.huge
+		end
+
+		return size
+	end
+
+	local function buildListPayloads(fieldName, items, basePayload, maxItems, maxBytes)
+		if #items == 0 then
+			return {}
+		end
+
+		local payloads = {}
+		local current = {}
+
+		local function flushCurrent()
+			if #current == 0 then
+				return
+			end
+
+			local payload = shallowCopy(basePayload)
+			payload[fieldName] = copyArray(current)
+			table.insert(payloads, payload)
+			current = {}
+		end
+
+		for _, item in ipairs(items) do
+			table.insert(current, item)
+
+			local candidate = shallowCopy(basePayload)
+			candidate[fieldName] = current
+			local tooManyItems = #current > maxItems
+			local tooLarge = measurePayloadSize(candidate) > maxBytes
+
+			if #current > 1 and (tooManyItems or tooLarge) then
+				local overflow = table.remove(current)
+				flushCurrent()
+				current = { overflow }
+			end
+		end
+
+		flushCurrent()
+		return payloads
 	end
 
 	local function markOwnershipCooldown(root, duration, blockedUserId)
@@ -237,6 +313,8 @@ function Server.init(context)
 			object.NetworkId = 2
 		elseif object.ClassName == "ReplicatedStorage" then
 			object.NetworkId = 3
+		elseif object.ClassName == "InternalStorage" then
+			object.NetworkId = 6
 		elseif object.ClassName == "StarterGui" then
 			object.NetworkId = 4
 		elseif object.ClassName == "CoreGui" then
@@ -299,7 +377,7 @@ function Server.init(context)
 		if object.NetworkId == nil or object.CanReplicate == false then
 			return
 		end
-		if not Shared.ShouldReplicateProperty(prop) then
+		if not Shared.ShouldReplicatePropertyForObject(object, prop) then
 			return
 		end
 
@@ -312,6 +390,10 @@ function Server.init(context)
 		dirtyPatches[object.NetworkId][prop] = encoded
 	end
 
+	local injectRemoteEventHooks
+	local injectRemoteFunctionHooks
+	local injectRemoteDataHooks
+
 	local function monitor(object)
 		if monitors[object] then
 			return
@@ -319,6 +401,24 @@ function Server.init(context)
 
 		monitors[object] = object.Changed:Connect(function(prop, value)
 			queuePatch(object, prop, value)
+		end)
+	end
+
+	local function trackTree(root)
+		visitTree(root, function(object)
+			trackObject(object)
+			registerOwnershipRoot(object)
+			monitor(object)
+			injectRemoteEventHooks(object)
+			injectRemoteFunctionHooks(object)
+			injectRemoteDataHooks(object)
+		end)
+	end
+
+	local function untrackTree(root)
+		visitTree(root, function(object)
+			unregisterOwnershipRoot(object)
+			untrackObject(object)
 		end)
 	end
 
@@ -402,14 +502,20 @@ function Server.init(context)
 			return
 		end
 
-		if recipient then
-			networkService:SendToClient(recipient, Protocol.Channels.Replication, Protocol.Kinds.PatchBatch, {
-				entries = entries,
-			}, true)
-		else
-			networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.PatchBatch, {
-				entries = entries,
-			}, true)
+		for _, payload in
+			ipairs(buildListPayloads("entries", entries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE, REPLICATION_TARGET_BYTES))
+		do
+			if recipient then
+				networkService:SendToClient(
+					recipient,
+					Protocol.Channels.Replication,
+					Protocol.Kinds.PatchBatch,
+					payload,
+					true
+				)
+			else
+				networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.PatchBatch, payload, true)
+			end
 		end
 	end
 
@@ -419,28 +525,60 @@ function Server.init(context)
 			return
 		end
 
-		local serialized = serializeObjects(serializable)
-		local payload = { objects = serialized }
 		local recipientLabel = recipient and (recipient.key or (recipient.address .. ":" .. recipient.port))
 			or "broadcast"
-		local rootNames = {}
-		for _, object in ipairs(serializable) do
-			table.insert(rootNames, `{object.ClassName}:{object.Name}`)
+		local currentBatch = {}
+
+		local function flushCreateBatch(batch)
+			if #batch == 0 then
+				return
+			end
+
+			local serialized = serializeObjects(batch)
+			local rootNames = {}
+			for _, object in ipairs(batch) do
+				table.insert(rootNames, `{object.ClassName}:{object.Name}`)
+			end
+
+			print(
+				`[Replicator][Server] Create -> {recipientLabel}: objects={#batch}, bytes={buffer.len(serialized)}, names=[{table.concat(
+					rootNames,
+					", "
+				)}]`
+			)
+
+			local payload = { objects = serialized }
+			if recipient then
+				networkService:SendToClient(
+					recipient,
+					Protocol.Channels.Replication,
+					Protocol.Kinds.Create,
+					payload,
+					true
+				)
+			else
+				networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.Create, payload, true)
+			end
 		end
 
-		print(
-			`[Replicator][Server] Create -> {recipientLabel}: objects={#serializable}, bytes={buffer.len(serialized)}, names=[{table.concat(
-				rootNames,
-				", "
-			)}]`
-		)
+		for _, root in ipairs(serializable) do
+			table.insert(currentBatch, root)
 
-		if recipient then
-			networkService:SendToClient(recipient, Protocol.Channels.Replication, Protocol.Kinds.Create, payload, true)
-		else
-			networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.Create, payload, true)
+			local exceedsCount = #currentBatch > MAX_CREATE_ROOTS_PER_MESSAGE
+			local exceedsSize = false
+			if not exceedsCount then
+				local serialized = serializeObjects(currentBatch)
+				exceedsSize = buffer.len(serialized) > REPLICATION_TARGET_BYTES
+			end
+
+			if #currentBatch > 1 and (exceedsCount or exceedsSize) then
+				local overflow = table.remove(currentBatch)
+				flushCreateBatch(currentBatch)
+				currentBatch = { overflow }
+			end
 		end
 
+		flushCreateBatch(currentBatch)
 		sendPatchEntries(recipient, collectReferencePatchEntries(serializable))
 	end
 
@@ -480,6 +618,7 @@ function Server.init(context)
 			[3] = true,
 			[4] = true,
 			[5] = true,
+			[6] = true,
 		}
 
 		for _, object in ipairs(game:GetDescendants()) do
@@ -523,7 +662,7 @@ function Server.init(context)
 		end
 	end
 
-	local function injectRemoteEventHooks(object)
+	injectRemoteEventHooks = function(object)
 		if object.ClassName ~= "RemoteEvent" then
 			return
 		end
@@ -549,12 +688,116 @@ function Server.init(context)
 		})
 	end
 
+	local function completeRemoteFunctionInvocation(requestId, payload)
+		local pending = pendingRemoteFunctionInvocations[requestId]
+		if not pending then
+			return
+		end
+
+		pending.done = true
+		pending.payload = payload
+	end
+
+	local function waitForRemoteFunctionResponse(requestId, timeout)
+		local startedAt = os.clock()
+		while true do
+			local pending = pendingRemoteFunctionInvocations[requestId]
+			if not pending then
+				return nil
+			end
+
+			if pending.done then
+				pendingRemoteFunctionInvocations[requestId] = nil
+				return pending.payload
+			end
+
+			if os.clock() - startedAt >= timeout then
+				pendingRemoteFunctionInvocations[requestId] = nil
+				return {
+					success = false,
+					error = `RemoteFunction timed out after {string.format("%.2f", timeout)}s`,
+				}
+			end
+
+			task.wait()
+		end
+	end
+
+	injectRemoteFunctionHooks = function(object)
+		if object.ClassName ~= "RemoteFunction" then
+			return
+		end
+
+		object:SetProperties({
+			InvokeClient = function(self, player, ...)
+				local session = networkService:GetSessionByUserId(player.UserId)
+				if not session then
+					error(`RemoteFunction target player {player.Name} is not connected`)
+				end
+
+				remoteFunctionRequestId += 1
+				local requestId = remoteFunctionRequestId
+				pendingRemoteFunctionInvocations[requestId] = {
+					done = false,
+					payload = nil,
+				}
+
+				local timeout = math.max(0.1, tonumber(self.InvokeTimeout) or 10)
+				networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionRequest, {
+					object = self.NetworkId,
+					requestId = requestId,
+					args = packArgs(...),
+				}, true)
+
+				local response = waitForRemoteFunctionResponse(requestId, timeout)
+				if not response then
+					error("RemoteFunction invocation failed unexpectedly")
+				end
+
+				if response.success ~= true then
+					error(response.error or "RemoteFunction invocation failed")
+				end
+
+				local results = response.result or {}
+				return table.unpack(results, 1, results.n or #results)
+			end,
+		})
+	end
+
+	injectRemoteDataHooks = function(object)
+		if object.ClassName ~= "RemoteData" then
+			return
+		end
+
+		object:GetPropertyChangedSignal("Data"):Connect(function(value)
+			if object.NetworkId == nil then
+				return
+			end
+
+			local encoded = Shared.EncodePropertyValue(userdata, value)
+			if encoded == nil then
+				return
+			end
+
+			networkService:Broadcast(Protocol.Channels.Message, Protocol.Kinds.RemoteDataUpdate, {
+				object = object.NetworkId,
+				data = encoded,
+			}, true)
+		end)
+	end
+
 	local function applyOwnedPatchBatch(session, payload)
 		for _, entry in ipairs(payload.entries or {}) do
 			local object = lookup[entry.object]
 			if not object or object.Parent == nil then
 				continue
 			end
+
+			local _, controller = networkOwnership.GetControllerRoot(object)
+			if controller ~= nil then
+				continue
+			end
+
 			if not networkOwnership.IsOwnedByPlayer(object, session.player) then
 				continue
 			end
@@ -577,16 +820,15 @@ function Server.init(context)
 		registerOwnershipRoot(object)
 		monitor(object)
 		injectRemoteEventHooks(object)
+		injectRemoteFunctionHooks(object)
+		injectRemoteDataHooks(object)
 	end
 
 	game.DescendantAdded:Connect(function(object)
-		trackObject(object)
+		trackTree(object)
 		if object.ClassName == "NetworkController" and object.Parent then
 			trackObject(object.Parent)
 		end
-		registerOwnershipRoot(object)
-		monitor(object)
-		injectRemoteEventHooks(object)
 
 		task.spawn(function()
 			sendCreate(nil, { object })
@@ -598,8 +840,7 @@ function Server.init(context)
 			return
 		end
 
-		unregisterOwnershipRoot(object)
-		untrackObject(object)
+		untrackTree(object)
 		sendRemove(object.NetworkId)
 	end)
 
@@ -673,6 +914,70 @@ function Server.init(context)
 			local player = session and session.player or nil
 			local args = payload.args or {}
 			object.OnServerEvent:Fire(player, table.unpack(args, 1, args.n or #args))
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteFunctionRequest,
+		function(session, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "RemoteFunction" then
+				return
+			end
+
+			local player = session and session.player or nil
+			local invokeHandler = object.OnServerInvoke
+			local args = payload.args or {}
+			local ok, resultsOrError = pcall(function()
+				if type(invokeHandler) ~= "function" then
+					error(`RemoteFunction {object.Name} is missing OnServerInvoke`)
+				end
+
+				return packArgs(invokeHandler(player, table.unpack(args, 1, args.n or #args)))
+			end)
+
+			if ok then
+				networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionResponse, {
+					object = payload.object,
+					requestId = payload.requestId,
+					success = true,
+					result = resultsOrError,
+				}, true)
+			else
+				networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionResponse, {
+					object = payload.object,
+					requestId = payload.requestId,
+					success = false,
+					error = tostring(resultsOrError),
+				}, true)
+			end
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteFunctionResponse,
+		function(_, payload)
+			completeRemoteFunctionInvocation(payload.requestId, payload)
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteDataUpdate,
+		function(_, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "RemoteData" then
+				return
+			end
+
+			local decoded, ok = Shared.DecodePropertyValue(userdata, lookup, payload.data)
+			if not ok then
+				return
+			end
+
+			object.Data = decoded
 		end
 	)
 
@@ -973,11 +1278,28 @@ function Server.init(context)
 			local lastAck = session.lastAppliedOwnedStateSequence or 0
 			if #changedStates > 0 or cache.lastAck ~= lastAck then
 				cache.lastAck = lastAck
-				networkService:SendToClient(session, Protocol.Channels.Replication, Protocol.Kinds.Snapshot, {
-					tick = tick,
-					lastProcessedOwnedStateSequence = lastAck,
-					states = changedStates,
-				}, true)
+				local payloads = if #changedStates > 0
+					then buildListPayloads("states", changedStates, {
+						tick = tick,
+						lastProcessedOwnedStateSequence = lastAck,
+					}, MAX_SNAPSHOT_STATES_PER_MESSAGE, REPLICATION_TARGET_BYTES)
+					else {
+						{
+							tick = tick,
+							lastProcessedOwnedStateSequence = lastAck,
+							states = {},
+						},
+					}
+
+				for _, payload in ipairs(payloads) do
+					networkService:SendToClient(
+						session,
+						Protocol.Channels.Replication,
+						Protocol.Kinds.Snapshot,
+						payload,
+						false
+					)
+				end
 			end
 		end
 	end

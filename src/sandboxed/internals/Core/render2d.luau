@@ -4,8 +4,8 @@ local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local EngineSignal = game.EngineSignal
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local renderer = KinemiumRaylib.renderer
-local rl = KinemiumRaylib.lib
+local renderer = KinemiumRaylib.GetRenderer()
+local rl = KinemiumRaylib.GetLib()
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 

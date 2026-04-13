@@ -4,6 +4,8 @@ local GuiObject = require("@GuiObject")
 local rl = require("@raylib")
 local Color3 = require("@Color3")
 local aereon = require("@Aereon")
+local raylib = require("@raylib")
+local lib = raylib.lib
 
 local propTable = {
 	Name = "TextBox",
@@ -19,6 +21,7 @@ local propTable = {
 	PlaceholderColor3 = Color3.new(0.5, 0.5, 0.5),
 	FocusColor3 = Color3.new(0.02, 0.5, 1),
 	TextXAlignment = Enum.TextXAlignment.Left,
+	Font = Enum.Font.DefaultEngineFont,
 
 	TextYAlignment = Enum.TextYAlignment.Center,
 
@@ -131,7 +134,9 @@ local function resolveBlendMode(value)
 	return rl.const.BlendMode.BLEND_ALPHA
 end
 
-propTable.render = function(lib, object, dt, structs, renderer, datamodel)
+local defaultFont = lib.GetFontDefault()
+
+propTable.render = function(_, object, dt, structs, renderer, datamodel)
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
 	if not object.Visible or not framePos or not frameSize then
 		return
@@ -141,12 +146,19 @@ propTable.render = function(lib, object, dt, structs, renderer, datamodel)
 		local ai = object._aereonInput
 		local SyntaxHighlighter = object:FindFirstChildOfClass("SyntaxHighlighter")
 
+		local function resolveFont(fontEnum)
+			local name = fontEnum.Value
+			local resolvedFont = renderer.Font.Get(name) or defaultFont
+			return resolvedFont
+		end
+
 		ai.theme.background = object.BackgroundColor3:ToRaylib(0)
 		ai.theme.text = object.TextColor3:ToRaylib(0)
 		ai.theme.placeholder = object.PlaceholderColor3:ToRaylib(0)
 		ai.theme.focusBorder = object.FocusColor3:ToRaylib(0)
 		ai.placeholder = object.PlaceholderText
 		ai.fontSize = object.FontSize
+		ai.font = resolveFont(object.Font)
 		ai.multiline = object.MultiLine
 		ai.syntaxHighlighter = SyntaxHighlighter and SyntaxHighlighter:GetMetadata("Highlighter").highlight or nil
 		ai.readOnly = object.ReadOnly
@@ -371,6 +383,42 @@ return {
 		if instance.Text and #instance.Text > 0 then
 			instance._aereonInput.buffer:insertString(instance.Text)
 		end
+
+		instance.Changed:Connect(function(prop)
+			instance._aereonInput.onChange = function(text)
+				instance.Text = text
+				if instance.OnChange then
+					instance.OnChange(text)
+				end
+			end
+			instance._aereonInput.onSubmit = function(text)
+				if instance.OnSubmit then
+					instance.OnSubmit(text)
+				end
+			end
+			instance._aereonInput.onFocus = function()
+				instance.Focused = true
+				if instance.OnFocus then
+					instance.OnFocus()
+				end
+			end
+			instance._aereonInput.onBlur = function()
+				instance.Focused = false
+				if instance.OnBlur then
+					instance.OnBlur()
+				end
+			end
+			instance._aereonInput.onValidationError = function(err)
+				if instance.OnValidationError then
+					instance.OnValidationError(err)
+				end
+			end
+			instance._aereonInput.onSearch = function(query, count)
+				if instance.OnSearch then
+					instance.OnSearch(query, count)
+				end
+			end
+		end)
 
 		return instance
 	end,

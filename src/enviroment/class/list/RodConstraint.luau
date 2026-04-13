@@ -21,7 +21,7 @@ return {
 	class = "RodConstraint",
 
 	callback = function(instance, renderer, datamodel)
-		local KinemiumPhysicsService = datamodel:GetService("JoltPhysicsService")
+		local KinemiumPhysicsService = datamodel:GetService("UnifiedPhysicsService")
 		instance:SetProperties(propTable)
 
 		local _activeConstraint = nil

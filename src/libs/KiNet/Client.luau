@@ -9,16 +9,113 @@ local isQueueProcessing = false
 local MAX_QUEUE_SIZE = 1000
 
 local HEARTBEAT_INTERVAL = 5
-local MAX_MESSAGE_SIZE = 100000
+local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
+local MAX_LOGICAL_MESSAGE_SIZE = 4 * 1024 * 1024
 local MESSAGE_TIMEOUT = 10
-local MTU_SIZE = 1400
+local MTU_SIZE = 1000
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
+local FRAGMENT_TIMEOUT = 10
+local MAX_FRAGMENT_COUNT = 4096
+local MAX_SEQUENCE_WINDOW = 2048
+local MAX_PROCESSED_RELIABLE_MESSAGES = 2048
+
+local function createMessageId(prefix, sequence)
+	return `{prefix}_{sequence}_{math.floor(os.clock() * 1000)}`
+end
+
+local function trackReceivedSequence(self, sequence)
+	if type(sequence) ~= "number" then
+		return true
+	end
+
+	self.ReceivedSequences = self.ReceivedSequences or {}
+	self.ReceivedSequenceOrder = self.ReceivedSequenceOrder or {}
+	self.HighestReceivedSequence = self.HighestReceivedSequence or -math.huge
+
+	if self.ReceivedSequences[sequence] then
+		return false, "Duplicate message"
+	end
+
+	if self.HighestReceivedSequence ~= -math.huge and sequence <= self.HighestReceivedSequence - MAX_SEQUENCE_WINDOW then
+		return false, "Sequence too old"
+	end
+
+	self.ReceivedSequences[sequence] = true
+	table.insert(self.ReceivedSequenceOrder, sequence)
+
+	if sequence > self.HighestReceivedSequence then
+		self.HighestReceivedSequence = sequence
+	end
+
+	while #self.ReceivedSequenceOrder > MAX_SEQUENCE_WINDOW do
+		local oldest = table.remove(self.ReceivedSequenceOrder, 1)
+		if oldest and oldest <= self.HighestReceivedSequence - MAX_SEQUENCE_WINDOW then
+			self.ReceivedSequences[oldest] = nil
+		end
+	end
+
+	return true
+end
+
+local function cleanupFragmentBuffer(fragmentBuffer, now)
+	now = now or os.clock()
+	for messageId, state in pairs(fragmentBuffer or {}) do
+		if now - (state.lastUpdated or state.createdAt or now) > FRAGMENT_TIMEOUT then
+			fragmentBuffer[messageId] = nil
+		end
+	end
+end
+
+local function rememberReliableMessage(self, messageId)
+	if type(messageId) ~= "string" then
+		return true
+	end
+
+	self.ProcessedReliableMessages = self.ProcessedReliableMessages or {}
+	self.ProcessedReliableOrder = self.ProcessedReliableOrder or {}
+
+	if self.ProcessedReliableMessages[messageId] then
+		return false
+	end
+
+	self.ProcessedReliableMessages[messageId] = true
+	table.insert(self.ProcessedReliableOrder, messageId)
+
+	while #self.ProcessedReliableOrder > MAX_PROCESSED_RELIABLE_MESSAGES do
+		local oldest = table.remove(self.ProcessedReliableOrder, 1)
+		if oldest then
+			self.ProcessedReliableMessages[oldest] = nil
+		end
+	end
+
+	return true
+end
+
+local function resolveServerEndpoint(address, port)
+	local ok, addresses = pcall(net.getAddressList, address, port)
+	if not ok or type(addresses) ~= "table" or #addresses == 0 then
+		return address
+	end
+
+	for _, entry in ipairs(addresses) do
+		if entry.family == net.ADDRF.INET then
+			return entry.address
+		end
+	end
+
+	return address
+end
 
 function Client:Init(serverAddress, serverPort, authToken)
 	if self.Socket then
 		self:Disconnect()
 	end
+
+	serverAddress = serverAddress or "127.0.0.1"
+	serverPort = serverPort or 1234
+
+	local resolvedAddress = resolveServerEndpoint(serverAddress, serverPort)
 
 	local socket = net.createSocket(
 		net.ADDRF.INET,
@@ -26,11 +123,12 @@ function Client:Init(serverAddress, serverPort, authToken)
 		net.IPPROTO.UDP
 	)
 
-	socket:bindIp("127.0.0.1", 0)
+	socket:bindIp("0.0.0.0", 0)
 
 	self.Socket = socket
-	self.ServerAddress = serverAddress or "0.0.0.0"
-	self.ServerPort = serverPort or 1234
+	self.ServerAddress = resolvedAddress
+	self.ServerPort = serverPort
+	self.OriginalServerAddress = serverAddress
 	self.AuthToken = authToken or self:GenerateToken()
 	self.SessionId = nil
 	self.IsAuthenticated = false
@@ -42,6 +140,10 @@ function Client:Init(serverAddress, serverPort, authToken)
 	self.PendingAcks = {}
 	self.FragmentBuffer = {}
 	self.ReliableQueue = {}
+	self.ReceivedSequenceOrder = {}
+	self.HighestReceivedSequence = -math.huge
+	self.ProcessedReliableMessages = {}
+	self.ProcessedReliableOrder = {}
 	self._reliableQueueRunning = false
 	self._heartbeatRunning = false
 	self._listenRunning = false
@@ -49,7 +151,7 @@ function Client:Init(serverAddress, serverPort, authToken)
 	onRecieveConnections = {}
 	messageQueue = {}
 
-	print(`Created client socket with auth token`)
+	print(`Created client socket for {serverAddress} -> {resolvedAddress}`)
 	return socket
 end
 
@@ -78,10 +180,10 @@ function Client:ValidateMessage(data)
 	end
 
 	if data.sequence then
-		if self.ReceivedSequences[data.sequence] then
-			return false, "Duplicate message"
+		local accepted, err = trackReceivedSequence(self, data.sequence)
+		if not accepted then
+			return false, err
 		end
-		self.ReceivedSequences[data.sequence] = true
 	end
 
 	if data.sessionId and self.SessionId and data.sessionId ~= self.SessionId then
@@ -110,19 +212,27 @@ function Client:CheckRateLimit()
 	return true
 end
 
-function Client:FragmentMessage(data, messageId)
-	local buf = Serializer.Serialize(data)
+function Client:FragmentMessage(data, messageId, serializedBuffer, reliable)
+	local buf = serializedBuffer or Serializer.Serialize(data)
 
 	if buffer.len(buf) <= MTU_SIZE then
 		return { data }
 	end
 
+	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
+	if totalFragments > MAX_FRAGMENT_COUNT then
+		error(
+			`Message {messageId} requires {totalFragments} fragments which exceeds the limit of {MAX_FRAGMENT_COUNT}`
+		)
+	end
+
 	if data.kind then
-		print(`[KiNet][Client] Fragmenting {data.channel}:{data.kind} into {math.ceil(buffer.len(buf) / MTU_SIZE)} fragments ({buffer.len(buf)} bytes)`)
+		print(
+			`[KiNet][Client] Fragmenting {data.channel}:{data.kind} into {totalFragments} fragments ({buffer.len(buf)} bytes)`
+		)
 	end
 
 	local fragments = {}
-	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
 
 	for i = 0, totalFragments - 1 do
 		local startOffset = i * MTU_SIZE
@@ -132,7 +242,7 @@ function Client:FragmentMessage(data, messageId)
 
 		table.insert(fragments, {
 			fragment = true,
-			reliable = true,
+			reliable = reliable == true,
 			messageId = messageId,
 			fragmentIndex = i,
 			totalFragments = totalFragments,
@@ -145,25 +255,68 @@ end
 
 function Client:ReassembleFragments(fragmentData)
 	local msgId = fragmentData.messageId
+	if type(msgId) ~= "string" then
+		return nil
+	end
+
+	if type(fragmentData.totalFragments) ~= "number"
+		or fragmentData.totalFragments < 1
+		or fragmentData.totalFragments > MAX_FRAGMENT_COUNT
+	then
+		return nil
+	end
+
+	if type(fragmentData.fragmentIndex) ~= "number"
+		or fragmentData.fragmentIndex < 0
+		or fragmentData.fragmentIndex >= fragmentData.totalFragments
+	then
+		return nil
+	end
+
+	local chunkLengthOk, chunkLength = pcall(buffer.len, fragmentData.data)
+	if not chunkLengthOk then
+		return nil
+	end
+
+	cleanupFragmentBuffer(self.FragmentBuffer)
 
 	if not self.FragmentBuffer[msgId] then
 		self.FragmentBuffer[msgId] = {
 			fragments = {},
 			totalFragments = fragmentData.totalFragments,
 			received = 0,
+			totalBytes = 0,
+			createdAt = os.clock(),
+			lastUpdated = os.clock(),
 		}
 	end
 
 	local fragmentState = self.FragmentBuffer[msgId]
+	if fragmentState.totalFragments ~= fragmentData.totalFragments then
+		self.FragmentBuffer[msgId] = nil
+		return nil
+	end
+
+	fragmentState.lastUpdated = os.clock()
 
 	if not fragmentState.fragments[fragmentData.fragmentIndex] then
 		fragmentState.fragments[fragmentData.fragmentIndex] = fragmentData.data
 		fragmentState.received = fragmentState.received + 1
+		fragmentState.totalBytes += chunkLength
+		if fragmentState.totalBytes > MAX_LOGICAL_MESSAGE_SIZE then
+			self.FragmentBuffer[msgId] = nil
+			warn(`[KiNet][Client] Dropping fragmented message {msgId} because it exceeds {MAX_LOGICAL_MESSAGE_SIZE} bytes`)
+			return nil
+		end
 	end
 
 	if fragmentState.received == fragmentState.totalFragments then
 		local totalLength = 0
 		for i = 0, fragmentState.totalFragments - 1 do
+			if not fragmentState.fragments[i] then
+				self.FragmentBuffer[msgId] = nil
+				return nil
+			end
 			totalLength += buffer.len(fragmentState.fragments[i])
 		end
 
@@ -180,24 +333,46 @@ function Client:ReassembleFragments(fragmentData)
 
 		print(`[KiNet][Client] Reassembled fragmented message {msgId} ({fragmentState.totalFragments} fragments)`)
 
-		return Serializer.Deserialize(completeData)
+		local ok, decoded = pcall(Serializer.Deserialize, completeData)
+		if not ok then
+			warn(`[KiNet][Client] Failed to deserialize reassembled message {msgId}: {decoded}`)
+			return nil
+		end
+
+		return decoded
 	end
 
 	return nil
 end
 
 function Client:SendReliable(data)
-	local messageId = `reliable_{self.MessageSequence}`
+	local messageId = data.messageId or createMessageId("reliable", self.MessageSequence)
 	data.messageId = messageId
 	data.reliable = true
 	data.timestamp = os.time()
 
-	local fragments = self:FragmentMessage(data, messageId)
+	local ok, serialized = pcall(Serializer.Serialize, data)
+	if not ok then
+		warn(`[KiNet][Client] Failed to serialize reliable message {messageId}: {serialized}`)
+		return
+	end
+
+	if buffer.len(serialized) > MAX_LOGICAL_MESSAGE_SIZE then
+		warn(
+			`[KiNet][Client] Reliable message {messageId} is {buffer.len(serialized)} bytes which exceeds the logical limit of {MAX_LOGICAL_MESSAGE_SIZE}`
+		)
+		return
+	end
+
+	local fragments = self:FragmentMessage(data, messageId, serialized, true)
 
 	self.PendingAcks[messageId] = {
 		fragments = fragments,
 		attempts = 0,
 		lastSent = os.clock(),
+		channel = data.channel,
+		kind = data.kind or data.type,
+		fragmentCount = #fragments,
 	}
 
 	for _, fragment in ipairs(fragments) do
@@ -206,7 +381,10 @@ function Client:SendReliable(data)
 end
 
 function Client:SendRaw(data)
-	if not self:CheckRateLimit() then
+	local bypassRateLimit = type(data) == "table"
+		and (data.type == "ACK" or data.type == "HEARTBEAT" or data.type == "CONNECT" or data.type == "DISCONNECT")
+
+	if not bypassRateLimit and not self:CheckRateLimit() then
 		warn("Rate limit exceeded")
 		return
 	end
@@ -221,12 +399,15 @@ function Client:SendRaw(data)
 
 	local buf = Serializer.Serialize(data)
 
-	if buffer.len(buf) > MAX_MESSAGE_SIZE then
-		warn("Message too large")
-		return
+	if buffer.len(buf) > MAX_WIRE_MESSAGE_SIZE then
+		warn(
+			`[KiNet][Client] Datagram too large: {buffer.len(buf)} bytes (max: {MAX_WIRE_MESSAGE_SIZE}) for {data.kind or data.type or "packet"}`
+		)
+		return false
 	end
 
 	self.Socket:sendMsg(self.ServerPort, self.ServerAddress, buf)
+	return true
 end
 
 function Client:ProcessReliableQueue()
@@ -240,11 +421,14 @@ function Client:ProcessReliableQueue()
 			task.wait(0.1)
 
 			local currentTime = os.clock()
+			cleanupFragmentBuffer(self.FragmentBuffer, currentTime)
 
 			for msgId, ackData in pairs(self.PendingAcks) do
 				if currentTime - ackData.lastSent > ACK_TIMEOUT then
 					if ackData.attempts >= MAX_RETRIES then
-						warn(`Message {msgId} failed after {MAX_RETRIES} retries`)
+						warn(
+							`Message {msgId} failed after {MAX_RETRIES} retries (channel={ackData.channel or "?"}, kind={ackData.kind or "?"}, fragments={ackData.fragmentCount or 1})`
+						)
 						self.PendingAcks[msgId] = nil
 					else
 						ackData.attempts = ackData.attempts + 1
@@ -267,7 +451,8 @@ function Client:OnShutdown(v)
 end
 
 function Client:Connect(arguments)
-	log(`Connecting to server at {self.ServerAddress}:{self.ServerPort}`)
+	local displayAddress = self.OriginalServerAddress or self.ServerAddress
+	log(`Connecting to server at {displayAddress}:{self.ServerPort}`)
 	Client:Send({
 		type = "CONNECT",
 		authToken = self.AuthToken,
@@ -290,7 +475,8 @@ function Client:OnRecieve(callback)
 end
 
 function Client:Disconnect()
-	log(`Disconnecting from server at {self.ServerAddress}:{self.ServerPort}`)
+	local displayAddress = self.OriginalServerAddress or self.ServerAddress
+	log(`Disconnecting from server at {displayAddress}:{self.ServerPort}`)
 	if not self.Socket then
 		return
 	end
@@ -314,6 +500,10 @@ function Client:Disconnect()
 	self.FragmentBuffer = {}
 	self.ReliableQueue = {}
 	self.ReceivedSequences = {}
+	self.ReceivedSequenceOrder = {}
+	self.HighestReceivedSequence = -math.huge
+	self.ProcessedReliableMessages = {}
+	self.ProcessedReliableOrder = {}
 	self.RateLimitWindow = {}
 
 	if Client._OnShutdown then
@@ -327,6 +517,36 @@ function Client:Send(data, reliable)
 	if reliable then
 		self:SendReliable(data)
 	else
+		data.reliable = false
+
+		local ok, serialized = pcall(Serializer.Serialize, data)
+		if not ok then
+			warn(`[KiNet][Client] Failed to serialize message: {serialized}`)
+			return
+		end
+
+		if buffer.len(serialized) > MAX_LOGICAL_MESSAGE_SIZE then
+			warn(
+				`[KiNet][Client] Message is {buffer.len(serialized)} bytes which exceeds the logical limit of {MAX_LOGICAL_MESSAGE_SIZE}`
+			)
+			return
+		end
+
+		if buffer.len(serialized) > MTU_SIZE then
+			local messageId = data.messageId or createMessageId("fragmented", self.MessageSequence)
+			data.messageId = messageId
+			local largeOk, largeSerialized = pcall(Serializer.Serialize, data)
+			if not largeOk then
+				warn(`[KiNet][Client] Failed to serialize large fragmented message {messageId}: {largeSerialized}`)
+				return
+			end
+
+			for _, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
+				self:SendRaw(fragment)
+			end
+			return
+		end
+
 		self:SendRaw(data)
 	end
 end
@@ -410,7 +630,7 @@ function Client:Listen()
 			end
 
 			local success, addr, data = pcall(function()
-				return self.Socket:recvMsg(MAX_MESSAGE_SIZE)
+				return self.Socket:recvMsg(MAX_WIRE_MESSAGE_SIZE)
 			end)
 
 			if not success then
@@ -419,7 +639,11 @@ function Client:Listen()
 			end
 
 			if data then
-				local decoded = Serializer.Deserialize(data)
+				local decodedOk, decoded = pcall(Serializer.Deserialize, data)
+				if not decodedOk then
+					warn(`[KiNet][Client] Failed to deserialize incoming packet: {decoded}`)
+					continue
+				end
 
 				if decoded then
 					if decoded.fragment then
@@ -451,6 +675,10 @@ function Client:Listen()
 						continue
 					end
 
+					if decoded.reliable and decoded.messageId and not rememberReliableMessage(self, decoded.messageId) then
+						continue
+					end
+
 					Client._middleware(decoded, addr)
 
 					if #onRecieveConnections == 0 then
@@ -469,7 +697,6 @@ function Client:Listen()
 					end
 				end
 			end
-			task.wait()
 		end
 	end)
 end

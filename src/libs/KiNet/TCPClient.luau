@@ -10,7 +10,7 @@ local messageQueue = {}
 local MAX_QUEUE_SIZE = 1000
 
 local HEARTBEAT_INTERVAL = 5
-local MAX_MESSAGE_SIZE = 100000
+local MAX_MESSAGE_SIZE = 4 * 1024 * 1024
 local MESSAGE_TIMEOUT = 10
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5

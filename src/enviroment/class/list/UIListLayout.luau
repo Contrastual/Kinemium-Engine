@@ -3,59 +3,64 @@ local Enum = require("@EnumMap")
 local UDim = require("@UDim")
 
 local propTable = {
-	FillDirection = Enum.FillDirection.Vertical, -- "Horizontal" or "Vertical"
+	FillDirection = Enum.FillDirection.Vertical,
 	Padding = UDim.new(0, 5),
-	SortOrder = Enum.SortOrder.LayoutOrder, -- "LayoutOrder" or "None"
+	SortOrder = Enum.SortOrder.LayoutOrder,
 	HorizontalAlignment = Enum.HorizontalAlignment.Left,
 	VerticalAlignment = Enum.VerticalAlignment.Top,
 	Enabled = true,
 	Name = "UIListLayout",
 
+	Virtualized = true,
+	Overscan = 100,
+
 	render = function(lib, object, dt, structs)
 		if not object.Enabled then
 			return
 		end
+
 		local parent = object.Parent
 		if not parent then
 			return
 		end
 
+		--------------------------------------------------
+		-- Utility
+		--------------------------------------------------
 		local function GetAbsoluteSize(obj)
 			if obj.AbsoluteSize then
 				return obj.AbsoluteSize
 			end
 			if obj:IsA("ScreenGui") then
 				return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
-			else
-				local parentSize = GetAbsoluteSize(obj.Parent)
-				return obj.Size:ToPixels(parentSize)
 			end
+			local parentSize = GetAbsoluteSize(obj.Parent)
+			return obj.Size:ToPixels(parentSize)
 		end
 
 		local parentSize = GetAbsoluteSize(parent)
 
-		local totalPaddingX = 0
-		local totalPaddingY = 0
-
+		--------------------------------------------------
+		-- Padding
+		--------------------------------------------------
+		local paddingX, paddingY = 0, 0
 		for _, child in ipairs(parent:GetChildren()) do
 			if child.ClassName == "UIPadding" then
-				local padding = child.Padding
-				local paddingPixels = padding:ToPixels(parentSize)
-				totalPaddingX = totalPaddingX + paddingPixels.X
-				totalPaddingY = totalPaddingY + paddingPixels.Y
+				local px = child.Padding:ToPixels(parentSize)
+				paddingX += px.X
+				paddingY += px.Y
 			end
 		end
 
-		local effectiveWidth = parentSize.X - totalPaddingX * 2
-		local effectiveHeight = parentSize.Y - totalPaddingY * 2
-		effectiveWidth = math.max(0, effectiveWidth)
-		effectiveHeight = math.max(0, effectiveHeight)
-		local effectiveContainerSize = Vector2.new(effectiveWidth, effectiveHeight)
+		local containerSize =
+			Vector2.new(math.max(0, parentSize.X - paddingX * 2), math.max(0, parentSize.Y - paddingY * 2))
 
+		--------------------------------------------------
+		-- Collect children
+		--------------------------------------------------
 		local children = {}
-
 		for _, child in ipairs(parent:GetChildren()) do
-			if child.Visible and child ~= object and child.ClassName ~= "UIPadding" then
+			if child ~= object and child.Visible and child.ClassName ~= "UIPadding" then
 				table.insert(children, child)
 			end
 		end
@@ -67,82 +72,85 @@ local propTable = {
 		end
 
 		local paddingPx = object.Padding.Scale
-				* (object.FillDirection == Enum.FillDirection.Vertical and effectiveContainerSize.Y or effectiveContainerSize.X)
+				* (object.FillDirection == Enum.FillDirection.Vertical and containerSize.Y or containerSize.X)
 			+ object.Padding.Offset
-		local contentSpan = 0
-		local childSizes = {}
 
-		for index, child in ipairs(children) do
-			local size = child.Size:ToPixels(effectiveContainerSize)
-			childSizes[child] = size
-			contentSpan += object.FillDirection == Enum.FillDirection.Vertical and size.Y or size.X
+		local totalSpan = 0
+		for i, child in ipairs(children) do
+			local size = child.Size:ToPixels(containerSize)
+			local span = (object.FillDirection == Enum.FillDirection.Vertical) and size.Y or size.X
 
-			if index < #children then
-				contentSpan += paddingPx
+			totalSpan += span
+
+			if i > 1 then
+				totalSpan += paddingPx
 			end
 		end
 
-		local offset
+		--------------------------------------------------
+		-- Viewport culling bounds
+		--------------------------------------------------
+		local viewMin = -object.Overscan
+		local viewMax = (object.FillDirection == Enum.FillDirection.Vertical and containerSize.Y or containerSize.X)
+			+ object.Overscan
 
-		if object.FillDirection == Enum.FillDirection.Vertical then
-			offset = totalPaddingY
+		local cursor
 
-			if object.VerticalAlignment == Enum.VerticalAlignment.Center then
-				offset += math.max(0, (effectiveContainerSize.Y - contentSpan) * 0.5)
-			elseif object.VerticalAlignment == Enum.VerticalAlignment.Bottom then
-				offset += math.max(0, effectiveContainerSize.Y - contentSpan)
-			end
-		else
-			offset = totalPaddingX
+		if object.FillDirection == Enum.FillDirection.Horizontal then
+			cursor = paddingX
 
 			if object.HorizontalAlignment == Enum.HorizontalAlignment.Center then
-				offset += math.max(0, (effectiveContainerSize.X - contentSpan) * 0.5)
+				cursor += (containerSize.X - totalSpan) * 0.5
 			elseif object.HorizontalAlignment == Enum.HorizontalAlignment.Right then
-				offset += math.max(0, effectiveContainerSize.X - contentSpan)
+				cursor += (containerSize.X - totalSpan)
+			end
+		else
+			cursor = paddingY
+
+			if object.VerticalAlignment == Enum.VerticalAlignment.Center then
+				cursor += (containerSize.Y - totalSpan) * 0.5
+			elseif object.VerticalAlignment == Enum.VerticalAlignment.Bottom then
+				cursor += (containerSize.Y - totalSpan)
 			end
 		end
-
+		--------------------------------------------------
+		-- Layout loop (virtualized)
+		--------------------------------------------------
 		for _, child in ipairs(children) do
-			local size = childSizes[child]
+			local size = child.Size:ToPixels(containerSize)
+			local span = (object.FillDirection == Enum.FillDirection.Vertical) and size.Y or size.X
 
-			rawset(child, "_LayoutControlled", true)
-			rawset(child, "_LayoutAbsolutePosition", Vector2.new(0, 0))
+			local posStart = cursor
+			local posEnd = cursor + span
 
-			---------------------------
-			--   VERTICAL LAYOUT     --
-			---------------------------
-			if object.FillDirection == Enum.FillDirection.Vertical then
-				local alignedX = 0
+			if not object.Virtualized or (posEnd >= viewMin and posStart <= viewMax) then
+				rawset(child, "_LayoutControlled", true)
 
-				if object.HorizontalAlignment == Enum.HorizontalAlignment.Center then
-					alignedX = (effectiveContainerSize.X - size.X) * 0.5
-				elseif object.HorizontalAlignment == Enum.HorizontalAlignment.Right then
-					alignedX = effectiveContainerSize.X - size.X
+				if object.FillDirection == Enum.FillDirection.Vertical then
+					local x = 0
+					if object.HorizontalAlignment == Enum.HorizontalAlignment.Center then
+						x = (containerSize.X - size.X) * 0.5
+					elseif object.HorizontalAlignment == Enum.HorizontalAlignment.Right then
+						x = containerSize.X - size.X
+					end
+
+					rawset(child, "_LayoutRelativePosition", Vector2.new(x + paddingX, cursor))
+				else
+					local y = 0
+					if object.VerticalAlignment == Enum.VerticalAlignment.Center then
+						y = (containerSize.Y - size.Y) * 0.5
+					elseif object.VerticalAlignment == Enum.VerticalAlignment.Bottom then
+						y = containerSize.Y - size.Y
+					end
+
+					rawset(child, "_LayoutRelativePosition", Vector2.new(cursor, y + paddingY))
 				end
+			end
 
-				-- Add padding offset to position
-				local finalX = alignedX + totalPaddingX
-				rawset(child, "_LayoutRelativePosition", Vector2.new(finalX, offset))
+			cursor += span + paddingPx
 
-				offset = offset + size.Y + paddingPx
-
-			---------------------------
-			--   HORIZONTAL LAYOUT   --
-			---------------------------
-			else
-				local alignedY = 0
-
-				if object.VerticalAlignment == Enum.VerticalAlignment.Center then
-					alignedY = (effectiveContainerSize.Y - size.Y) * 0.5
-				elseif object.VerticalAlignment == Enum.VerticalAlignment.Bottom then
-					alignedY = effectiveContainerSize.Y - size.Y
-				end
-
-				-- Add padding offset to position
-				local finalY = alignedY + totalPaddingY
-				rawset(child, "_LayoutRelativePosition", Vector2.new(offset, finalY))
-
-				offset = offset + size.X + paddingPx
+			if object.Virtualized and cursor > viewMax then
+				break
 			end
 		end
 	end,

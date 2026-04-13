@@ -48,7 +48,7 @@ SoundService.InitRenderer = function(renderer, renderer_signal, datamodel)
 						end
 					end
 
-					local dirToSound = (pos - camPos).Unit
+					local dirToSound = (pos - camPos):Unit()
 					local rightDot = camRight:Dot(dirToSound)
 					-- pan: 0 = left, 1 = right, 0.5 = center
 					local pan = (rightDot + 1) / 2

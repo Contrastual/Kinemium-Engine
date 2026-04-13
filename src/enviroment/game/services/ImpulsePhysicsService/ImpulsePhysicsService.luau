@@ -35,7 +35,7 @@ local function createPhysicsBody(part, props)
 end
 
 ImpulsePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
-	ImpulsePhysicsService:SetProperties({})
+	local propTable = {}
 
 	task.spawn(function()
 		repeat
@@ -45,9 +45,9 @@ ImpulsePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		local workspace = game.Workspace
 
 		Impulse3D.physics.render = function(id, body, dt)
-			if workspace.PhysicsEngine ~= Enum.PhysicsEngine.Impulse3D then
-				return
-			end
+			--if workspace.PhysicsEngine ~= Enum.PhysicsEngine.Impulse3D then
+			--	return
+			--end
 			local pool = workspace.Pool.GetIdPool()
 			local partRefId = registered[id]
 			if not partRefId then
@@ -80,7 +80,7 @@ ImpulsePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 		end
 
-		renderer_signal:Connect(function(route, dt)
+		propTable.HandleRendererSignal = function(route, dt)
 			if route == "RenderStepped" then
 				local pool = workspace.Pool.GetIdPool()
 
@@ -100,6 +100,16 @@ ImpulsePhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 						end
 					end
 				end
+			end
+		end
+
+		task.spawn(function()
+			repeat
+				task.wait()
+			until game.GetService
+			local UPS = game:GetService("UnifiedPhysicsService")
+			if UPS then
+				UPS:RegisterEngine("Impulse3D", propTable)
 			end
 		end)
 	end)

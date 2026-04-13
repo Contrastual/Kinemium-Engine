@@ -423,7 +423,7 @@ function NetworkOwnership.ShouldReplicateProperty(object, prop)
 		return false
 	end
 
-	if not Shared.ShouldReplicateProperty(prop) then
+	if not Shared.ShouldReplicatePropertyForObject(object, prop) then
 		return false
 	end
 

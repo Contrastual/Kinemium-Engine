@@ -14,8 +14,6 @@ local propTable = {
 	Transparency = 0,
 }
 
-local cache = {}
-
 local function generateCursorImages(object)
 	object._cache = {}
 	local iconpack_path = object.IconPack

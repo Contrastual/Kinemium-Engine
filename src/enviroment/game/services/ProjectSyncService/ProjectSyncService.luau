@@ -250,13 +250,7 @@ local function syncDirectory(state, pointerName, dirPath, parentObject, isRoot, 
 		end
 
 		local dirName = fs.path.basename(dirPath)
-		container = makeScript(
-			descriptor.scriptType,
-			dirName,
-			source,
-			descriptor.language,
-			descriptor.runContext
-		)
+		container = makeScript(descriptor.scriptType, dirName, source, descriptor.language, descriptor.runContext)
 		tagManagedInstance(state, pointerName, container, initPath, relativePath)
 		container.Parent = parentObject
 	else
@@ -289,13 +283,7 @@ local function syncDirectory(state, pointerName, dirPath, parentObject, isRoot, 
 
 			local source = fs.readFile(entryPath)
 			local name = stripExtension(entry.name, descriptor.ext)
-			local child = makeScript(
-				descriptor.scriptType,
-				name,
-				source,
-				descriptor.language,
-				descriptor.runContext
-			)
+			local child = makeScript(descriptor.scriptType, name, source, descriptor.language, descriptor.runContext)
 			tagManagedInstance(state, pointerName, child, entryPath, entryRelativePath)
 			child.Parent = container
 		end

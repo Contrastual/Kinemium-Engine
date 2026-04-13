@@ -10,7 +10,7 @@ local rl = raylib.lib
 local gui = aereon.gui
 local rect = require("@arect")(rl)
 local vend = KinemiumFontService.GetDefaultFontSmall()
-local renderer = KinemiumRaylib.renderer
+local renderer = KinemiumRaylib.GetRenderer()
 
 local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
 local logoIcon = KinemiumIconLoader.ToTexture(logoPath)

@@ -24,7 +24,7 @@ return {
 		instance:SetProperties(propTable)
 		instance:SetMetadata("IsMovable", true)
 
-		local KinemiumPhysicsService = game and game:GetService("JoltPhysicsService") or nil
+		local KinemiumPhysicsService = game and game:GetService("UnifiedPhysicsService") or nil
 		instance.ApplyImpulse = function(self, v)
 			if KinemiumPhysicsService then
 				KinemiumPhysicsService.ApplyImpulse(instance, v)

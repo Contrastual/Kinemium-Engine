@@ -36,17 +36,20 @@ local propTable = {
 	Clock = 0,
 	SpeedScale = 1,
 	UseDefaultAnimations = true,
-	PoseLayers = {},
 	PoseProvider = nil,
 	DefaultProvider = nil,
-	State = {},
-	AnimationPlayed = signal.new(),
+	-- NOTE: PoseLayers, State, and AnimationPlayed are intentionally
+	-- NOT in this shared table; they are created fresh per instance below.
 }
 
 return {
 	class = "Animator",
 	callback = function(instance)
 		instance:SetProperties(propTable)
+		-- Create fresh per-instance values so they are never shared across instances.
+		instance.AnimationPlayed = signal.new()
+		instance.PoseLayers = {}
+		instance.State = {}
 
 		function instance:SetPoseProvider(provider)
 			instance.PoseProvider = provider

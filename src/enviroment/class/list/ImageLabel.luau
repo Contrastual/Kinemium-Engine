@@ -5,6 +5,7 @@ local _Enum = require("@EnumMap")
 local GuiObject = require("@GuiObject")
 local raylib = require("@raylib")
 local lib = raylib.lib
+local shaderlib = require("@kineshader")
 
 local function resolveBlendMode(value)
 	if type(value) == "number" then
@@ -30,6 +31,8 @@ local function resolveBlendMode(value)
 	return raylib.const.BlendMode.BLEND_ALPHA
 end
 
+local roundedShader
+
 local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 100, 0, 100),
@@ -39,6 +42,7 @@ local propTable = {
 	Image = "./src/assets/images/placeholder.png",
 	ImageColor3 = Color3.new(1, 1, 1),
 	ImageTransparency = 0,
+	Shader = nil,
 	--ScaleType = Enum.ScaleType.Stretch,
 	--SliceCenter = Rect.new(0, 0, 0, 0),
 	--SliceScale = 1,
@@ -50,6 +54,9 @@ local propTable = {
 }
 
 propTable.render = function(lib, object, dt, structs, renderer)
+	if not roundedShader then
+		roundedShader = lib.LoadShader(nil, "./src/assets/shaders/rounded.fs")
+	end
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
 	if not framePos or not frameSize then
 		return
@@ -95,14 +102,20 @@ propTable.render = function(lib, object, dt, structs, renderer)
 					a = a,
 				})
 
+				if object.Shader and object.Shader._shader then
+					raylib.lib.BeginShaderMode(object.Shader._shader)
+				end
 				lib.DrawTexturePro(
-					tex,
+					object._cached,
 					rec,
 					dest,
 					vector.create(0, 0), -- origin top-left
 					object.Rotation or 0,
 					rcol
 				)
+				if object.Shader and object.Shader._shader then
+					raylib.lib.EndShaderMode()
+				end
 			end
 		end
 	elseif object._cached then
@@ -131,6 +144,9 @@ propTable.render = function(lib, object, dt, structs, renderer)
 				a = a,
 			})
 
+			if object.Shader and object.Shader._shader then
+				raylib.lib.BeginShaderMode(object.Shader._shader)
+			end
 			lib.DrawTexturePro(
 				object._cached,
 				rec,
@@ -139,6 +155,9 @@ propTable.render = function(lib, object, dt, structs, renderer)
 				object.Rotation or 0,
 				rcol
 			)
+			if object.Shader and object.Shader._shader then
+				raylib.lib.EndShaderMode()
+			end
 		end
 	end
 

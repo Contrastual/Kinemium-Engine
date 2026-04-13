@@ -31,7 +31,7 @@ return {
 	callback = function(instance, renderer, game)
 		instance:SetProperties(propTable)
 
-		local PhysicsService = game:GetService("JoltPhysicsService")
+		local PhysicsService = game:GetService("UnifiedPhysicsService")
 
 		local function shouldApplyPhysics(part)
 			local replicator = game:GetService("ReplicatorService")

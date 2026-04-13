@@ -19,7 +19,6 @@ if zembed.IsEmbedded() then
 end
 
 --bindings
-local zembed = require("@zembed")
 local avcodec = require("./avcodec")
 local avformat = require("./avformat")
 local avutil = require("./avutil")
@@ -72,7 +71,7 @@ end
 local LIBRARY_PATH = fs.path.resolve(BIN_LOCATION, `avcodec-62.{ffi.suffix}`)
 
 if fs.stat(LIBRARY_PATH).kind == "none" then
-	print(`Downloading FFmpeg for {platform.os}-{platform.cpu.arch}...`)
+	log(`Downloading FFmpeg for {platform.os}-{platform.cpu.arch}...`)
 
 	local res = request(getDownloadURL(), {
 		method = "GET",
@@ -83,7 +82,7 @@ if fs.stat(LIBRARY_PATH).kind == "none" then
 		max_body_size = 1024 * 1024 * 5000, -- 5 GB
 	}, true)
 
-	print(res)
+	log(res)
 
 	if not res.ok then
 		error(`Failed to download FFmpeg: {res.status_code}`)
@@ -93,10 +92,10 @@ if fs.stat(LIBRARY_PATH).kind == "none" then
 
 	if zip.is(archive) then
 		local files = zip.read(archive)
-		print("Started ZIP")
+		log("Started ZIP")
 		for name, data in files do
 			if name:match("^.*/bin/") and not string.find(name, "exe") then
-				print(`Adding {name}`)
+				log(`Adding {name}`)
 
 				local filename = name:match("bin/(.+)$")
 				if filename then
@@ -107,11 +106,11 @@ if fs.stat(LIBRARY_PATH).kind == "none" then
 		end
 	else
 		local decompressed = serde.gzip.decompress(archive)
-		print("Started TAR")
+		log("Started TAR")
 
 		for name, data in tar.read(decompressed) do
 			if name:match("^.*/bin/") and not string.find(name, "exe") then
-				print(`Adding {name}`)
+				log(`Adding {name}`)
 
 				local filename = name:match("bin/(.+)$")
 				if filename then
@@ -128,15 +127,15 @@ local lib = {
 }
 
 local avutil_lib = ffi.dlopen(binPath .. "avutil-60." .. ffi.suffix, avutil.funcs)
-print("Loaded avutil")
+log("Loaded avutil")
 local swresample_lib = ffi.dlopen(binPath .. "swresample-6." .. ffi.suffix, swresample.funcs)
-print("Loaded swresample")
+log("Loaded swresample")
 local avcodec_lib = ffi.dlopen(binPath .. "avcodec-62." .. ffi.suffix, avcodec.funcs)
-print("Loaded avcodec")
+log("Loaded avcodec")
 local avformat_lib = ffi.dlopen(binPath .. "avformat-62." .. ffi.suffix, avformat.funcs)
-print("Loaded avformat")
+log("Loaded avformat")
 local swscale_lib = ffi.dlopen(binPath .. "swscale-9." .. ffi.suffix, swscale.funcs)
-print("Loaded swscale")
+log("Loaded swscale")
 
 lib.avcodec_structs = avcodec.structs :: typeof(avcodec.structs)
 lib.avformat_structs = avformat.structs :: typeof(avformat.structs)
@@ -147,6 +146,6 @@ lib.avcodec = avcodec_lib :: typeof(avcodec.funcs)
 lib.swresample = swresample_lib :: typeof(swresample.funcs)
 lib.swscale = swscale_lib :: typeof(swscale.funcs)
 
-print("Successfully loaded FFMpeg!")
+log("Successfully loaded FFMpeg!")
 
 return lib

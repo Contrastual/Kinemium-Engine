@@ -77,6 +77,9 @@ function CFrameQuat16:__tostring()
 end
 
 function CFrameQuat16:ToTable()
+	if not self.Position then
+		return {}
+	end
 	return {
 		type = "CFrameQuat16",
 		Position = self.Position:ToTable(),

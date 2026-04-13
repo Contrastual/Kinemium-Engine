@@ -47,6 +47,7 @@ export type Fns = {
 	rlFramebufferComplete: (id: uint) -> bool,
 	rlUnloadFramebuffer: (id: uint) -> (),
 	rlUnloadTexture: (id: uint) -> (),
+	rlSetClipPlanes: (near: float, far: float) -> (),
 	rlActiveDrawBuffers: (count: int) -> (),
 	rlGetMatrixProjection: () -> Matrix,
 	rlGetMatrixModelview: () -> Matrix,

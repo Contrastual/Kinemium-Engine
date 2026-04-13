@@ -8,6 +8,10 @@ local Vector3 = require("@Vector3")
 local Enum = require("@EnumMap")
 local InputActionService = require("../InputActionService/InputActionService")
 
+local function packArgs(...)
+	return table.pack(...)
+end
+
 function Client.init(context)
 	local game = context.game
 	local serializationService = context.SerializationService
@@ -43,6 +47,8 @@ function Client.init(context)
 	local terrain = game:GetService("Workspace"):FindFirstChild("Terrain")
 	local humanoidRootDebugAt = {}
 	local flushPendingSnapshot
+	local remoteFunctionRequestId = 0
+	local pendingRemoteFunctionInvocations = {}
 
 	local function isHumanoidRootObject(object)
 		if object == nil then
@@ -100,12 +106,14 @@ function Client.init(context)
 
 		local owner = object.NetworkOwner and object.NetworkOwner.Name or "Server"
 		local livePos = (object.CFrame and object.CFrame.Position) or object.Position
+		--[[
 		local statePos = decodeStatePosition(state)
 		print(
 			`[HumanoidDebug][Client][{stage}] object={object.Name}#{object.NetworkId or "?"} owner={owner} live={formatVector3(
 				livePos
 			)} state={formatVector3(statePos)} {extra or ""}`
 		)
+			--]]
 	end
 
 	local function applyInterpolatedBasePartTransform(object, cframe)
@@ -140,8 +148,8 @@ function Client.init(context)
 		["Workspace"] = game:GetService("Workspace"),
 		["Players"] = game:GetService("Players"),
 		["ReplicatedStorage"] = game:GetService("ReplicatedStorage"),
+		["InternalStorage"] = game:GetService("InternalStorage"),
 		["StarterGui"] = game:GetService("StarterGui"),
-		["CoreGui"] = game:GetService("CoreGui"),
 	}
 
 	for className, service in pairs(coreServices) do
@@ -152,8 +160,8 @@ function Client.init(context)
 	lookup[1] = game:GetService("Workspace")
 	lookup[2] = game:GetService("Players")
 	lookup[3] = game:GetService("ReplicatedStorage")
+	lookup[6] = game:GetService("InternalStorage")
 	lookup[4] = game:GetService("StarterGui")
-	lookup[5] = game:GetService("CoreGui")
 
 	local function withMutedObject(object, callback)
 		mutedObjects[object] = (mutedObjects[object] or 0) + 1
@@ -195,6 +203,12 @@ function Client.init(context)
 		if not networkOwnership.IsOwnedByPlayer(object, localPlayer) then
 			return
 		end
+
+		local _, controller = networkOwnership.GetControllerRoot(object)
+		if controller ~= nil then
+			return
+		end
+
 		if not networkOwnership.ShouldReplicateProperty(object, prop) then
 			return
 		end
@@ -222,12 +236,108 @@ function Client.init(context)
 		end)
 	end
 
+	local function injectRemoteDataHook(object)
+		if object.ClassName ~= "RemoteData" then
+			return
+		end
+
+		object:GetPropertyChangedSignal("Data"):Connect(function(value)
+			if mutedObjects[object] then
+				return
+			end
+			if object.NetworkId == nil then
+				return
+			end
+
+			local encoded = Shared.EncodePropertyValue(userdata, value)
+			if encoded == nil then
+				return
+			end
+
+			networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteDataUpdate, {
+				object = object.NetworkId,
+				data = encoded,
+			}, true)
+		end)
+	end
+
 	local function unmonitorObject(object)
 		local connection = monitors[object]
 		if connection then
 			connection:Disconnect()
 			monitors[object] = nil
 		end
+	end
+
+	local function completeRemoteFunctionInvocation(requestId, payload)
+		local pending = pendingRemoteFunctionInvocations[requestId]
+		if not pending then
+			return
+		end
+
+		pending.done = true
+		pending.payload = payload
+	end
+
+	local function waitForRemoteFunctionResponse(requestId, timeout)
+		local startedAt = os.clock()
+		while true do
+			local pending = pendingRemoteFunctionInvocations[requestId]
+			if not pending then
+				return nil
+			end
+
+			if pending.done then
+				pendingRemoteFunctionInvocations[requestId] = nil
+				return pending.payload
+			end
+
+			if os.clock() - startedAt >= timeout then
+				pendingRemoteFunctionInvocations[requestId] = nil
+				return {
+					success = false,
+					error = `RemoteFunction timed out after {string.format("%.2f", timeout)}s`,
+				}
+			end
+
+			task.wait()
+		end
+	end
+
+	local function injectRemoteFunctionHook(object)
+		if object.ClassName ~= "RemoteFunction" then
+			return
+		end
+
+		object:SetProperties({
+			InvokeServer = function(self, ...)
+				remoteFunctionRequestId += 1
+				local requestId = remoteFunctionRequestId
+				pendingRemoteFunctionInvocations[requestId] = {
+					done = false,
+					payload = nil,
+				}
+
+				local timeout = math.max(0.1, tonumber(self.InvokeTimeout) or 10)
+				networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionRequest, {
+					object = self.NetworkId,
+					requestId = requestId,
+					args = packArgs(...),
+				}, true)
+
+				local response = waitForRemoteFunctionResponse(requestId, timeout)
+				if not response then
+					error("RemoteFunction invocation failed unexpectedly")
+				end
+
+				if response.success ~= true then
+					error(response.error or "RemoteFunction invocation failed")
+				end
+
+				local results = response.result or {}
+				return table.unpack(results, 1, results.n or #results)
+			end,
+		})
 	end
 
 	local function flushDeferredReferencePatches()
@@ -282,6 +392,17 @@ function Client.init(context)
 		end
 
 		return entries
+	end
+
+	local function visitTree(rootObject, callback)
+		local stack = { rootObject }
+		while #stack > 0 do
+			local object = table.remove(stack)
+			callback(object)
+			for _, child in ipairs(object:GetChildren()) do
+				table.insert(stack, child)
+			end
+		end
 	end
 
 	local function reserveTreeEntries(entries)
@@ -363,6 +484,32 @@ function Client.init(context)
 		end
 
 		assignCharacterToPlayer(player, model)
+	end
+
+	local function restoreHumanoidRigForModel(model)
+		if not model or model.ClassName ~= "Model" or not model.FindFirstChildOfClass then
+			return
+		end
+
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			return
+		end
+
+		if humanoid.Character ~= model then
+			humanoid.Character = model
+		end
+
+		if (humanoid.RootPart == nil or humanoid.RootPart.Parent ~= model) and model.FindFirstChild then
+			local root = model:FindFirstChild("HumanoidRootPart")
+			if root then
+				humanoid.RootPart = root
+			end
+		end
+
+		if humanoid.RestoreRig then
+			humanoid:RestoreRig()
+		end
 	end
 
 	local function syncPlayerCharacterBindingForPlayer(player)
@@ -468,6 +615,7 @@ function Client.init(context)
 				syncPlayerCharacterBindingForPlayer(entry.object)
 			elseif entry.object.ClassName == "Model" then
 				syncPlayerCharacterBindingForModel(entry.object)
+				restoreHumanoidRigForModel(entry.object)
 			end
 			return true
 		end
@@ -501,6 +649,7 @@ function Client.init(context)
 				syncPlayerCharacterBindingForPlayer(entry.object)
 			elseif entry.object.ClassName == "Model" then
 				syncPlayerCharacterBindingForModel(entry.object)
+				restoreHumanoidRigForModel(entry.object)
 			end
 			-- Apply any snapshot state that arrived before this object was in lookup
 			flushPendingSnapshot(entry.object)
@@ -534,6 +683,13 @@ function Client.init(context)
 				withMutedObject(object, function()
 					object[prop] = decoded
 				end)
+				if
+					object.ClassName == "Humanoid"
+					and (prop == "Character" or prop == "RootPart" or prop == "RigDescriptor")
+					and object.RestoreRig
+				then
+					object:RestoreRig()
+				end
 			end
 		end
 	end
@@ -753,27 +909,35 @@ function Client.init(context)
 	end
 
 	game.DescendantAdded:Connect(function(object)
-		if object.NetworkId ~= nil then
-			lookup[object.NetworkId] = object
-		end
-		flushPendingSnapshot(object)
-		injectRemoteEventHook(object)
-		monitorObject(object)
+		visitTree(object, function(descendant)
+			if descendant.NetworkId ~= nil then
+				lookup[descendant.NetworkId] = descendant
+			end
+			flushPendingSnapshot(descendant)
+			injectRemoteEventHook(descendant)
+			injectRemoteFunctionHook(descendant)
+			injectRemoteDataHook(descendant)
+			monitorObject(descendant)
+		end)
 		flushDeferredReferencePatches()
 	end)
 
 	game.DescendantRemoving:Connect(function(object)
-		if object.NetworkId ~= nil then
-			lookup[object.NetworkId] = nil
-			remoteTargets[object.NetworkId] = nil
-			outboundOwnedPatchEntries[object.NetworkId] = nil
-			pendingSnapshots[object.NetworkId] = nil
-		end
-		unmonitorObject(object)
+		visitTree(object, function(descendant)
+			if descendant.NetworkId ~= nil then
+				lookup[descendant.NetworkId] = nil
+				remoteTargets[descendant.NetworkId] = nil
+				outboundOwnedPatchEntries[descendant.NetworkId] = nil
+				pendingSnapshots[descendant.NetworkId] = nil
+			end
+			unmonitorObject(descendant)
+		end)
 	end)
 
 	for _, object in ipairs(game:GetDescendants()) do
 		injectRemoteEventHook(object)
+		injectRemoteFunctionHook(object)
+		injectRemoteDataHook(object)
 		monitorObject(object)
 	end
 
@@ -835,13 +999,78 @@ function Client.init(context)
 		object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
 	end)
 
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteFunctionRequest,
+		function(_, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "RemoteFunction" then
+				return
+			end
+
+			local invokeHandler = object.OnClientInvoke
+			local args = payload.args or {}
+			local ok, resultsOrError = pcall(function()
+				if type(invokeHandler) ~= "function" then
+					error(`RemoteFunction {object.Name} is missing OnClientInvoke`)
+				end
+
+				return packArgs(invokeHandler(table.unpack(args, 1, args.n or #args)))
+			end)
+
+			if ok then
+				networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionResponse, {
+					object = payload.object,
+					requestId = payload.requestId,
+					success = true,
+					result = resultsOrError,
+				}, true)
+			else
+				networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteFunctionResponse, {
+					object = payload.object,
+					requestId = payload.requestId,
+					success = false,
+					error = tostring(resultsOrError),
+				}, true)
+			end
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteFunctionResponse,
+		function(_, payload)
+			completeRemoteFunctionInvocation(payload.requestId, payload)
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.RemoteDataUpdate,
+		function(_, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "RemoteData" then
+				return
+			end
+
+			local decoded, ok = Shared.DecodePropertyValue(userdata, lookup, payload.data)
+			if not ok then
+				return
+			end
+
+			withMutedObject(object, function()
+				object.Data = decoded
+			end)
+		end
+	)
+
 	runService:BindToSimulation(function(dt)
 		if workspace.ServerAuthority and workspace.ServerAuthority.AuthorityMode == Enum.AuthorityMode.Server then
 			local inputs = InputActionService:SampleLocalInputs()
 			networkService:SendToServer(Protocol.Channels.Input, Protocol.Kinds.ControllerInput, {
 				tick = runService:GetSimulationTick(),
 				inputs = inputs,
-			}, true)
+			}, false)
 		end
 	end)
 

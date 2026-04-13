@@ -4,7 +4,7 @@ local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local lib = raylib.lib
 local structs = raylib.structs
-local renderer = rlservice.renderer
+local renderer = rlservice.GetRenderer()
 local Selection = game:GetService("Selection")
 
 local KinemiumFontService = game:GetService("KinemiumFontService")

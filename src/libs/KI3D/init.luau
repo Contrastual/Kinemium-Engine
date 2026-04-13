@@ -5,7 +5,7 @@ local lib = raylib.lib
 local ki3d = {}
 local utils = require("@bufferutils")
 
--- ─── Types ────────────────────────────────────────────────────────────────────
+--  Types
 
 export type KI3DShader = {
 	name: string,
@@ -25,7 +25,7 @@ export type KI3DFilter = {
 	finish: (self: any, runtime: any) -> (),
 }
 
--- ─── G-Buffer Render Targets ──────────────────────────────────────────────────
+--  G-Buffer Render Targets
 --  sceneRT  – main RGBA colour pass
 --  normalRT – view-space normals (RGB encoded 0-1)
 --  depthRT  – depth values (R channel, hardware z)
@@ -71,7 +71,7 @@ local function makeRuntime(currentRT, w, h, filterObj)
 	}
 end
 
--- ─── Public API ───────────────────────────────────────────────────────────────
+--  Public API
 
 ki3d.color3 = function(x, y, z)
 	return { r = x, g = y, b = z }
@@ -138,7 +138,7 @@ ki3d.Frame = function(self, camera, drawFn)
 	local W = lib.GetRenderWidth()
 	local H = lib.GetRenderHeight()
 
-	-- ── Pass 1: Depth ──────────────────────────────────────────────────────
+	--  Pass 1: Depth
 	if _depthShader then
 		lib.BeginTextureMode(depthRT)
 		lib.ClearBackground(raylib.const.BLACK)
@@ -148,7 +148,7 @@ ki3d.Frame = function(self, camera, drawFn)
 		lib.EndTextureMode()
 	end
 
-	-- ── Pass 2: Normals ────────────────────────────────────────────────────
+	--  Pass 2: Normals
 	if _normalShader then
 		lib.BeginTextureMode(normalRT)
 		lib.ClearBackground(raylib.const.BLACK)
@@ -158,13 +158,13 @@ ki3d.Frame = function(self, camera, drawFn)
 		lib.EndTextureMode()
 	end
 
-	-- ── Pass 3: Main scene ─────────────────────────────────────────────────
+	--  Pass 3: Main scene
 	lib.BeginTextureMode(sceneRT)
 	lib.ClearBackground(raylib.const.BLACK)
 	drawFn()
 	lib.EndTextureMode()
 
-	-- ── Post-process filter chain ──────────────────────────────────────────
+	--  Post-process filter chain
 	if not ki3d.filtersEnabled then
 		self.finalRT = sceneRT
 		return
@@ -228,7 +228,7 @@ ki3d.Frame = function(self, camera, drawFn)
 	self.finalRT = currentRT
 end
 
--- ─── Final Blit to Screen ─────────────────────────────────────────────────────
+--  Final Blit to Screen
 
 ki3d.Draw = function(self, _camera)
 	if not self.finalRT then
@@ -251,7 +251,7 @@ ki3d.Draw = function(self, _camera)
 	lib.EndBlendMode()
 end
 
--- ─── Resize Support ───────────────────────────────────────────────────────────
+--  Resize Support
 
 ki3d.UpdateRenderTextures = function(screenWidth, screenHeight)
 	for _, rt in ipairs({ sceneRT, normalRT, depthRT, outputRT, swapRT }) do
@@ -267,7 +267,7 @@ ki3d.UpdateRenderTextures = function(screenWidth, screenHeight)
 	swapRT = lib.LoadRenderTexture(screenWidth, screenHeight)
 end
 
--- ─── Filter Control ───────────────────────────────────────────────────────────
+--  Filter Control
 
 ki3d.EnableFilters = function()
 	ki3d.filtersEnabled = true
@@ -276,13 +276,13 @@ ki3d.DisableFilters = function()
 	ki3d.filtersEnabled = false
 end
 
--- ─── G-Buffer Access ──────────────────────────────────────────────────────────
+--  G-Buffer Access
 
 ki3d.GetRenderTextures = function()
 	return { scene = sceneRT, normalRT = normalRT, depthRT = depthRT }
 end
 
--- ─── Legacy Stubs (backward compat) ──────────────────────────────────────────
+--  Legacy Stubs (backward compat)
 -- These are kept so older service code that calls Begin3D/End3D still compiles.
 -- The new pipeline is driven entirely by ki3d:Frame(); these are no-ops there.
 

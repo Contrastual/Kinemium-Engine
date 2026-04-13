@@ -105,7 +105,7 @@ local function buildExecutable(name, exec_ext, lib_ext)
 	if not exec.ok then
 		error("could not bundle executable: " .. tostring(exec.stderr))
 	end
-	print("succaessfully bundled at " .. l_exec)
+	print("successfully bundled at " .. l_exec)
 end
 
 if b_windows or zune.platform.os == "windows" then
@@ -121,10 +121,6 @@ if b_debian or zune.platform.os == "linux" then
 	buildExecutable("debian_x86-64", "", "so")
 end
 
--- There is no progress on proper FreeBSD support despite
--- an available native Zune executable.
--- Linux compatibility may need to be enabled by the user,
--- since the .so libraries are re-used from Linux.
 if b_freebsd or zune.platform.os == "freebsd" then
 	buildExecutable("freebsd_x86-64", "", "so")
 end

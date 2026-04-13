@@ -69,7 +69,7 @@ function registry.ClassValid(class)
 	end
 end
 
-function registry.new(class, renderer, datamodel)
+function registry.new(class, renderer, datamodel, force)
 	local found
 
 	for _, looped_class in pairs(listOfClasses) do
@@ -83,7 +83,7 @@ function registry.new(class, renderer, datamodel)
 	if not found then
 		return error("Class not found: " .. tostring(class))
 	end
-	if found.non_creatable then
+	if found.non_creatable and not force then
 		return error("Class is non-creatable: " .. tostring(class))
 	end
 

@@ -7,7 +7,9 @@ return {
 		instance:SetProperties({
 			WorldPivot = CFrame.new(0, 0, 0),
 			PrimaryPart = nil,
+			Visible = true,
 		})
+		instance:SetMetadata("IsMovable", true)
 
 		function instance:SetPrimaryPart(part)
 			self.PrimaryPart = part

@@ -412,7 +412,7 @@ end
 
 function NavMeshQuery:Raycast(origin: Vector3, direction: Vector3, maxDistance: number): RaycastResult
 	local origin2D = Vector2.new(origin.X, origin.Z)
-	local dir2D = Vector2.new(direction.X, direction.Z).Unit
+	local dir2D = Vector2.new(direction.X, direction.Z):Unit()
 
 	local closestHit = nil
 	local closestT = maxDistance
@@ -425,7 +425,7 @@ function NavMeshQuery:Raycast(origin: Vector3, direction: Vector3, maxDistance: 
 			local v2 = poly.vertices[j]
 
 			local edge = v2 - v1
-			local edgeNormal = Vector2.new(-edge.Y, edge.X).Unit
+			local edgeNormal = Vector2.new(-edge.Y, edge.X):Unit()
 
 			local denom = dir2D * edgeNormal
 			if math.abs(denom) > 0.0001 then

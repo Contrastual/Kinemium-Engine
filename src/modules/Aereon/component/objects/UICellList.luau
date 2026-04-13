@@ -15,6 +15,58 @@ return function(objects, data)
 		sections = data.sections or {},
 	}
 
+	local function createTitle(groupName, groupConfig, yOffset, font)
+		local titleText = groupConfig.title
+		if titleText == nil then
+			titleText = groupName
+		end
+		if titleText == false or titleText == "" then
+			return nil
+		end
+
+		local titleHeight = groupConfig.titleHeight or config.titleHeight or 28
+		local titleFont = groupConfig.titleFont or config.titleFont or font
+		local titleColor = groupConfig.titleColor or config.titleColor
+		local titleSize = groupConfig.titleSize or config.titleSize or 18
+		local titlePadL = groupConfig.titlePaddingLeft or config.titlePaddingLeft or 4
+
+		local titleObj = {
+			_isTitle = true,
+			_text = titleText,
+			_font = titleFont,
+			_color = titleColor or { r = 150, g = 150, b = 150, a = 200 },
+			_size = titleSize,
+			_paddingLeft = titlePadL,
+			_rect = arect.new(config.obj_rect.x, config.obj_rect.y + yOffset, config.obj_rect.width, titleHeight),
+		}
+
+		titleObj.set = function(prop, value)
+			if prop == "obj_rect" then
+				titleObj._rect = value
+			end
+		end
+
+		titleObj.getRect = function()
+			return titleObj._rect
+		end
+
+		titleObj.render = function(dt)
+			local r = titleObj._rect
+			local font = titleObj._font or raylib.lib.GetFontDefault()
+			local c = titleObj._color
+			raylib.lib.DrawTextEx(
+				font,
+				titleObj._text,
+				vector.create(r.x + titleObj._paddingLeft, r.y + (r.height - titleObj._size) / 2),
+				titleObj._size,
+				1,
+				raylib.const.WHITE
+			)
+		end
+
+		return titleObj, titleHeight
+	end
+
 	local function createCell(cellConfig, position, yOffset)
 		local cell = MergedCell(objects, {
 			x = cellConfig.x or config.obj_rect.x,
@@ -68,6 +120,14 @@ return function(objects, data)
 		local sections = config.sections
 
 		for groupName, groupConfig in pairs(sections) do
+			local font = groupConfig[1] and groupConfig[1].font
+			local titleObj, titleHeight = createTitle(groupName, groupConfig, currentY, font)
+			if titleObj then
+				table.insert(cells, titleObj)
+				table.insert(cellOffsets, currentY)
+				currentY = currentY + titleHeight
+			end
+
 			if type(groupConfig) == "table" then
 				local groupCells = {}
 				local groupItems = {}

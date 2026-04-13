@@ -16,7 +16,7 @@ local KinemiumPhysicsService = Instance.new("KinemiumPhysicsService")
 KinemiumPhysicsService.ExplorerHidden = true
 
 local function log(...)
-	print("[Physics]", ...)
+	log("[Physics]", ...)
 end
 
 local function roundVec3(v)
@@ -330,17 +330,17 @@ local function buildShapeForPart(part, halfSize, motionType)
 		local geometryPoints, geometryTriangles = getMeshPartGeometry(part)
 		if geometryPoints and geometryTriangles and part.CollisionFidelity ~= Enum.CollisionFidelity.Box then
 			if motionType == 2 then
-				print("rocking")
+				log("rocking")
 				return buildDynamicMeshFallbackShape(part, halfSize, convexRadius)
 			elseif part.CollisionFidelity == Enum.CollisionFidelity.Hull then
 				if #geometryPoints >= 4 then
 					local hullShape = bodyMaker.convexHullShape(geometryPoints, convexRadius)
 					if hullShape ~= ffi.null then
-						print("using convex hull for", part.Name)
+						log("using convex hull for", part.Name)
 						return hullShape
 					end
 				end
-				print("falling back to dynamic mesh for", part.Name)
+				log("falling back to dynamic mesh for", part.Name)
 				return buildDynamicMeshFallbackShape(part, halfSize, convexRadius)
 			else
 				local meshShape = bodyMaker.meshShape(geometryPoints, geometryTriangles)
@@ -607,7 +607,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					ffi.types.pointer, -- collisionResult (JPH_CollideShapeResult*)
 				},
 			}, function(body1, body2, baseOffset, collisionResult)
-				print("OnContactValidate")
+				log("OnContactValidate")
 				return utils:i32(1) -- JPH_ValidateResult_AcceptContact
 			end),
 			OnContactAdded = ffi.null,
@@ -1057,7 +1057,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end,
 
 			AddBody = function(part)
-				bodiesMap[part] = createBody(bodyInterface, part)
+				CreateBodyForPart(part)
 			end,
 
 			RegisterCollisionGroup = RegisterCollisionGroup,
@@ -2000,7 +2000,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 		end)
 
-		renderer_signal:Connect(function(route, data)
+		propTable.HandleRendererSignal = function(route, data)
 			if route == "UpdatePart" or route == "AddedPartToRenderPool" then
 				local bodyID = bodiesMap[data]
 				if not bodyID then
@@ -2015,10 +2015,18 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 					createSoftBody(bodyInterface, data)
 				end
 			end
-		end)
+		end
 
 		table.insert(game.ShutdownCallbacks, propTable.Unload)
 		KinemiumPhysicsService:SetProperties(propTable)
+
+		local UPS = game:GetService("UnifiedPhysicsService")
+		if UPS then
+			UPS:RegisterEngine("Jolt", propTable)
+			if not UPS:GetPrimaryEngineName() then
+				UPS:SetPrimaryEngine("Jolt")
+			end
+		end
 	end)
 end
 

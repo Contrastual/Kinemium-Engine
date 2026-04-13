@@ -199,6 +199,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.placeholder = config.placeholder or ""
 		self.fontSize = config.fontSize or 16
 		self.padding = config.padding or 5
+		self.font = config.font or vend
 		self.showLineNumbers = config.showLineNumbers and self.multiline
 		self.readOnly = config.readOnly or false
 		self.maxLength = config.maxLength
@@ -1237,12 +1238,12 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				end
 
 				-- Draw label
-				raylib.DrawTextEx(vend, item.label or "", vector.create(x + 12, itemY + 6), 14, 1, self.theme.text)
+				raylib.DrawTextEx(self.font, item.label or "", vector.create(x + 12, itemY + 6), 14, 1, self.theme.text)
 
 				-- Draw shortcut
 				if item.shortcut then
 					raylib.DrawTextEx(
-						vend,
+						self.font,
 						item.shortcut,
 						vector.create(x + menuWidth - 50, itemY + 6),
 						12,
@@ -1334,7 +1335,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				local previewText = #line > 0 and line:sub(1, math.min(#line, 30)) or ""
 				if #previewText > 0 then
 					raylib.DrawTextEx(
-						vend,
+						self.font,
 						previewText,
 						vector.create(minimapX + 2, lineY),
 						6,
@@ -1666,7 +1667,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if isEmpty and not self.isFocused and #self.placeholder > 0 then
 			-- Draw placeholder
 			raylib.DrawTextEx(
-				vend,
+				self.font,
 				self.placeholder,
 				vector.create(x + gutterWidth + self.padding, y + self.padding),
 				self.fontSize,
@@ -1686,7 +1687,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						or (i == self.buffer.cursor.line and self.isFocused) and self.theme.text
 						or Color3.new(0.5, 0.5, 0.5):ToRaylib(0)
 					raylib.DrawTextEx(
-						vend,
+						self.font,
 						lineNumberText,
 						vector.create(x + 5, yLine),
 						self.fontSize,
@@ -1724,18 +1725,18 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 					for _, tok in ipairs(tokens) do
 						raylib.DrawTextEx(
-							vend,
+							self.font,
 							tok.text,
 							vector.create(xPos, yLine),
 							self.fontSize,
 							spacing,
 							tok.color or self.theme.text
 						)
-						xPos += raylib.MeasureTextEx(vend, tok.text, self.fontSize, spacing).x
+						xPos += raylib.MeasureTextEx(self.font, tok.text, self.fontSize, spacing).x
 					end
 				else
 					raylib.DrawTextEx(
-						vend,
+						self.font,
 						displayLine,
 						vector.create(x + gutterWidth + self.padding, yLine),
 						self.fontSize,
@@ -1779,10 +1780,10 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			if self.validationError then
 				statusText = "❌ " .. self.validationError
-				raylib.DrawTextEx(vend, statusText, vector.create(x + 8, sbY + 5), 12, 1, self.theme.error)
+				raylib.DrawTextEx(self.font, statusText, vector.create(x + 8, sbY + 5), 12, 1, self.theme.error)
 			elseif #statusText > 0 then
 				raylib.DrawTextEx(
-					vend,
+					self.font,
 					statusText,
 					vector.create(x + 8, sbY + 5),
 					12,
@@ -1824,7 +1825,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					function(c, t)
 						return c:ToRaylib(t)
 					end,
-					vend,
+					self.font,
 					spacing,
 					self.TextColor or self.theme.text,
 					self.theme.popupBackground,
@@ -1910,7 +1911,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 						raylib.DrawRectangle(acX, itemY, acWidth, acItemHeight, Color3.new(0.2, 0.4, 0.8):ToRaylib(0))
 					end
 
-					raylib.DrawTextEx(vend, itemText, vector.create(acX + 5, itemY + 4), 14, 1, self.theme.text)
+					raylib.DrawTextEx(self.font, itemText, vector.create(acX + 5, itemY + 4), 14, 1, self.theme.text)
 				end
 			end
 		end
@@ -1943,7 +1944,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 
 			raylib.DrawTextEx(
-				vend,
+				self.font,
 				"Find: " .. self.search.query,
 				vector.create(boxX + 10, boxY + 12),
 				14,
@@ -1954,7 +1955,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			if #self.search.results > 0 then
 				local resText = string.format("%d/%d", self.search.currentIndex, #self.search.results)
 				raylib.DrawTextEx(
-					vend,
+					self.font,
 					resText,
 					vector.create(boxX + boxW - 50, boxY + 12),
 					14,
@@ -1965,7 +1966,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			if self.replace.active then
 				raylib.DrawTextEx(
-					vend,
+					self.font,
 					"Replace: " .. self.replace.query,
 					vector.create(boxX + 10, boxY + 52),
 					14,
@@ -2682,7 +2683,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if self.label then
 			if self.labelPosition == "top" then
 				raylib.DrawTextEx(
-					vend,
+					self.font,
 					self.label,
 					vector.create(x, y),
 					self.fontSize - 2,
@@ -2693,7 +2694,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				actualTextboxHeight = height - self.fontSize - self.labelGap
 			elseif self.labelPosition == "left" then
 				raylib.DrawTextEx(
-					vend,
+					self.font,
 					self.label,
 					vector.create(x, y + (height / 2) - (self.fontSize / 2)),
 					self.fontSize - 2,
@@ -2759,7 +2760,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			local prefixX = actualTextboxX - prefixWidth + self.prefixGap
 			local posY = actualTextboxY + (actualTextboxHeight / 2) - (self.fontSize / 2)
 			raylib.DrawTextEx(
-				vend,
+				self.font,
 				self.prefix,
 				vector.create(prefixX, posY),
 				self.fontSize - 2,
@@ -2773,7 +2774,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if self.suffix then
 			local suffixX = actualTextboxX + actualTextboxWidth + self.suffixGap
 			raylib.DrawTextEx(
-				vend,
+				self.font,
 				self.suffix,
 				vector.create(suffixX, actualTextboxY + (actualTextboxHeight / 2) - (self.fontSize / 2)),
 				self.fontSize - 2,
@@ -2801,7 +2802,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				upHovered and Color3.new(0.15, 0.15, 0.15):ToRaylib(0) or Color3.new(0.1, 0.1, 0.1):ToRaylib(0)
 			)
 			raylib.DrawRectangleLines(btnX, actualTextboxY, btnW, btnH, self.theme.border)
-			raylib.DrawTextEx(vend, "+", vector.create(btnX + 4, actualTextboxY + 2), 10, 1, self.theme.text)
+			raylib.DrawTextEx(self.font, "+", vector.create(btnX + 4, actualTextboxY + 2), 10, 1, self.theme.text)
 
 			if raylib.IsMouseButtonPressed(0) == 1 and upHovered then
 				self:incrementNumeric()
@@ -2822,7 +2823,14 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				downHovered and Color3.new(0.15, 0.15, 0.15):ToRaylib(0) or Color3.new(0.1, 0.1, 0.1):ToRaylib(0)
 			)
 			raylib.DrawRectangleLines(btnX, actualTextboxY + btnH, btnW, btnH, self.theme.border)
-			raylib.DrawTextEx(vend, "-", vector.create(btnX + 4, actualTextboxY + btnH + 2), 10, 1, self.theme.text)
+			raylib.DrawTextEx(
+				self.font,
+				"-",
+				vector.create(btnX + 4, actualTextboxY + btnH + 2),
+				10,
+				1,
+				self.theme.text
+			)
 
 			if raylib.IsMouseButtonPressed(0) == 1 and downHovered then
 				self:decrementNumeric()
@@ -2931,7 +2939,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		if self.label and self.labelPosition == "right" then
 			local labelX = actualTextboxX + actualTextboxWidth + self.labelGap
 			raylib.DrawTextEx(
-				vend,
+				self.font,
 				self.label,
 				vector.create(labelX, actualTextboxY + (actualTextboxHeight / 2) - (self.fontSize / 2)),
 				self.fontSize - 2,

@@ -57,14 +57,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		PhysicsEngine = Enum.PhysicsEngine.Default, -- jolt
 
 		-- rendering
-		MAX_VIEW_DISTANCE = 4000,
+		MAX_VIEW_DISTANCE = 40000,
 		UseGpuInstancing = true,
-		MinInstancesPerBatch = 2,
+		MinInstancesPerBatch = 10,
 		EnableViewFrustumCulling = true,
 		ViewFrustumPadding = 12,
 		VisibilityRefreshDistance = 16,
 		VisibilityRefreshDotThreshold = 0.9925,
 		EnableDefaultPlayerMenu = true,
+
+		ChunkRebuildBudget = 8,
+		ChunkInstanceUpdateBudget = 20,
 
 		-- debugging
 		IsInPool = function(part)
@@ -241,13 +244,45 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local conn = part.Changed:Connect(function(prop)
 			if prop == "Position" or prop == "CFrame" then
 				updatePartChunk(part)
+				-- Invalidate cached transform matrix (position/rotation changed)
+				rawset(part, "__cachedMatrix", nil)
+				-- For batched parts, mark the batch instance data as dirty so
+				-- the GPU buffer is refreshed with the new position/rotation.
+				local batch = rawget(part, "__workspaceBatch")
+				if batch then
+					batch.instancesDirty = true
+				end
 				return
 			end
 
-			if prop == "Size" or prop == "Color" or prop == "Transparency" then
-				markChunkDirty(rawget(part, "__workspaceChunk"), false)
+			if prop == "Size" then
+				rawset(part, "__cachedMaterial", nil)
+				rawset(part, "__cachedMatrix", nil)
+				-- Batched parts need GPU buffer refresh; singleParts use the
+				-- material/matrix cache which was just cleared above.
+				local batch = rawget(part, "__workspaceBatch")
+				if batch then
+					batch.instancesDirty = true
+					local chunk = rawget(part, "__workspaceChunk")
+					if chunk then
+						chunk.instanceDataDirty = true
+					end
+				end
+			elseif prop == "Color" or prop == "Transparency" then
+				rawset(part, "__cachedMaterial", nil)
+				-- Same: only GPU update needed for batched parts.
+				local batch = rawget(part, "__workspaceBatch")
+				if batch then
+					batch.instancesDirty = true
+					local chunk = rawget(part, "__workspaceChunk")
+					if chunk then
+						chunk.instanceDataDirty = true
+					end
+				end
 			elseif prop == "Material" or prop == "Shape" or prop == "MeshObject" or prop == "Destroyed" then
 				markChunkDirty(rawget(part, "__workspaceChunk"), true)
+				rawset(part, "__cachedMaterial", nil)
+				rawset(part, "__cachedMatrix", nil)
 			end
 		end)
 
@@ -271,13 +306,49 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			return true
 		end
 
-		local forward = camera.CFrame:GetLookVector()
-		local halfFov = math.rad(((camera.FieldOfView or 70) * 0.5) + (Workspace.ViewFrustumPadding or 0))
-		local cosHalfFov = math.cos(halfFov)
-		local facing = forward:Dot(toCenter) / dist
-		local radiusAllowance = math.min(1, chunk.boundsRadius / dist)
+		local cf = camera.CFrame
+		local forward = cf:GetLookVector()
+		local right = cf:GetRightVector()
+		local up = cf:GetUpVector()
 
-		return facing >= (cosHalfFov - radiusAllowance)
+		-- Roblox FieldOfView is vertical; derive horizontal from aspect ratio
+		local viewport = camera.ViewportSize
+		local aspect = viewport.X / viewport.Y
+
+		local halfVFov = math.rad((camera.FieldOfView or 70) * 0.5)
+		local halfHFov = math.atan(math.tan(halfVFov) * aspect)
+
+		local padding = math.rad(Workspace.ViewFrustumPadding or 0)
+
+		local tocNorm = toCenter / dist
+
+		-- Check vertical frustum plane
+		local dotForward = forward:Dot(tocNorm)
+		local dotUp = up:Dot(tocNorm)
+		local dotRight = right:Dot(tocNorm)
+
+		local radiusAllowance = chunk.boundsRadius / dist
+
+		-- Vertical cull
+		local cosVFov = math.cos(halfVFov + padding)
+		local vertAngle = math.abs(math.atan2(math.abs(dotUp), dotForward))
+		if vertAngle > halfVFov + padding + math.asin(math.min(1, radiusAllowance)) then
+			return false
+		end
+
+		-- Horizontal cull
+		local cosHFov = math.cos(halfHFov + padding)
+		local horizAngle = math.abs(math.atan2(math.abs(dotRight), dotForward))
+		if horizAngle > halfHFov + padding + math.asin(math.min(1, radiusAllowance)) then
+			return false
+		end
+
+		-- Behind camera cull (dot against forward with sphere allowance)
+		if dotForward < -radiusAllowance then
+			return false
+		end
+
+		return true
 	end
 
 	local meshlib = renderer.Mesh
@@ -338,10 +409,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		return obj:IsA("Part") or obj:IsA("MeshPart")
 	end
 
-	Workspace.DescendantAdded:Connect(function(v)
+	local function visitSubtree(root, callback)
+		if not root then
+			return
+		end
+
+		callback(root)
+		for _, descendant in ipairs(root:GetDescendants()) do
+			callback(descendant)
+		end
+	end
+
+	local function registerWorkspaceObject(v)
 		pool[v.UniqueId] = v
 		IdPool[v.UniqueId] = v
-		if isRenderable(v) then
+		if isRenderable(v) and rawget(v, "__workspaceRenderableIndex") == nil then
 			addPart(v)
 			watchRenderablePart(v)
 			signal:Fire("UpdatePart", v)
@@ -349,9 +431,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			renderablePool[#renderablePool + 1] = v
 			rawset(v, "__workspaceRenderableIndex", #renderablePool)
 		end
-	end)
+	end
 
-	Workspace.DescendantRemoving:Connect(function(v)
+	local function unregisterWorkspaceObject(v)
 		if isRenderable(v) then
 			local conn = rawget(v, "__workspaceRenderConn")
 			if conn and conn.Disconnect then
@@ -373,18 +455,18 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 			rawset(v, "__workspaceRenderableIndex", nil)
 		end
+	end
+
+	Workspace.DescendantAdded:Connect(function(v)
+		visitSubtree(v, registerWorkspaceObject)
+	end)
+
+	Workspace.DescendantRemoving:Connect(function(v)
+		visitSubtree(v, unregisterWorkspaceObject)
 	end)
 
 	for _, child in pairs(Workspace:GetDescendants()) do
-		pool[child.UniqueId] = child
-		IdPool[child.UniqueId] = child
-		if isRenderable(child) then
-			addPart(child)
-			watchRenderablePart(child)
-			pool[child.UniqueId]._renderable = true
-			renderablePool[#renderablePool + 1] = child
-			rawset(child, "__workspaceRenderableIndex", #renderablePool)
-		end
+		registerWorkspaceObject(child)
 	end
 
 	local function loadMaterial(materialName, sync)
@@ -526,35 +608,52 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			return
 		end
 
-		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+		-- Cache the transform matrix per-part. Only recomputed when CFrame or Size
+		-- changes (invalidated via watchRenderablePart). For static/anchored maps
+		-- this eliminates the matrix decompose + multiply every frame.
+		local matrix = rawget(part, "__cachedMatrix")
+		if not matrix then
+			matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
+			rawset(part, "__cachedMatrix", matrix)
+		end
 
-		local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
-		buffer.copy(
-			tmpAlbedo,
-			0,
-			matData.material,
-			r3d.structs.R3D_Material:offset("albedo"),
-			r3d.structs.R3D_AlbedoMap:size()
-		)
-		buffer.copy(tmpAlbedo, r3d.structs.R3D_AlbedoMap:offset("color"), part.Color:ToRaylib(part.Transparency or 0))
+		-- Cache the combined material buffer per-part. Only rebuilt when Color,
+		-- Transparency, Size (UV scale), or Material changes -- NOT every frame.
+		-- For a 1000-part map at 60fps this eliminates ~120,000 buffer.create()
+		-- calls per second down to 0 for static geometry.
+		local tmpMaterial = rawget(part, "__cachedMaterial")
+		if not tmpMaterial then
+			local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
+			buffer.copy(
+				tmpAlbedo,
+				0,
+				matData.material,
+				r3d.structs.R3D_Material:offset("albedo"),
+				r3d.structs.R3D_AlbedoMap:size()
+			)
+			buffer.copy(
+				tmpAlbedo,
+				r3d.structs.R3D_AlbedoMap:offset("color"),
+				part.Color:ToRaylib(part.Transparency or 0)
+			)
 
-		local tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
-		buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
-		buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
-		buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
-		buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
+			tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
+			buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
+			buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
+			buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
+			buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
 
-		local size = part.Size
-		local uvScaleU = size.X -- Adjust multiplier as needed for desired tiling density
-		local uvScaleV = size.Z -- Use appropriate axes based on UV mapping
+			local size = part.Size
+			buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale"), size.X)
+			buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale") + 4, size.Z)
 
-		buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale"), uvScaleU)
-		buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale") + 4, uvScaleV)
+			local materialShader = mtsh_sh[materialName]
+			local applyPerObject = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
+			if applyPerObject then
+				applyPerObject(part, tmpAlbedo, tmpMaterial)
+			end
 
-		local materialShader = mtsh_sh[materialName]
-		local applyPerObject = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
-		if applyPerObject then
-			applyPerObject(part, tmpAlbedo, tmpMaterial)
+			rawset(part, "__cachedMaterial", tmpMaterial)
 		end
 
 		renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix, function()
@@ -607,31 +706,40 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 		if okMap and mappedFlags == INSTANCE_FLAGS then
 			local okWrite = pcall(function()
+				-- Localize the parts array and stride constants to reduce table
+				-- indexing and upvalue lookups in the hot inner loop.
+				local parts = batch.parts
+				local posStride = INSTANCE_POSITION_STRIDE
+				local rotStride = INSTANCE_ROTATION_STRIDE
+				local sclStride = INSTANCE_SCALE_STRIDE
+				local clrStride = INSTANCE_COLOR_STRIDE
 				for i = 1, count do
-					local part = batch.parts[i]
-					local position = part.CFrame and part.CFrame.Position or part.Position
+					local part = parts[i]
+					local cf = part.CFrame
+					local position = cf and cf.Position or part.Position
 					local size = part.Size
-					local qx, qy, qz, qw = part.CFrame:ToQuaternion()
-					local r, g, b = part.Color:ToRGB()
+					local qx, qy, qz, qw = cf:ToQuaternion()
+					local color = part.Color
+					local r, g, b = color:ToRGB()
 					local alpha = math.clamp(math.floor(255 * (1 - (part.Transparency or 0))), 0, 255)
 
-					local pOffset = (i - 1) * INSTANCE_POSITION_STRIDE
+					local pOffset = (i - 1) * posStride
 					mappedPosition:writef32(pOffset, position.X)
 					mappedPosition:writef32(pOffset + 4, position.Y)
 					mappedPosition:writef32(pOffset + 8, position.Z)
 
-					local rOffset = (i - 1) * INSTANCE_ROTATION_STRIDE
+					local rOffset = (i - 1) * rotStride
 					mappedRotation:writef32(rOffset, qx)
 					mappedRotation:writef32(rOffset + 4, qy)
 					mappedRotation:writef32(rOffset + 8, qz)
 					mappedRotation:writef32(rOffset + 12, qw)
 
-					local sOffset = (i - 1) * INSTANCE_SCALE_STRIDE
+					local sOffset = (i - 1) * sclStride
 					mappedScale:writef32(sOffset, size.X)
 					mappedScale:writef32(sOffset + 4, size.Y)
 					mappedScale:writef32(sOffset + 8, size.Z)
 
-					local cOffset = (i - 1) * INSTANCE_COLOR_STRIDE
+					local cOffset = (i - 1) * clrStride
 					mappedColor:writeu8(cOffset, r)
 					mappedColor:writeu8(cOffset + 1, g)
 					mappedColor:writeu8(cOffset + 2, b)
@@ -651,12 +759,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local scaleBuffer = buffer.create(count * INSTANCE_SCALE_STRIDE)
 			local colorBuffer = buffer.create(count * INSTANCE_COLOR_STRIDE)
 
+			local parts = batch.parts
 			for i = 1, count do
-				local part = batch.parts[i]
-				local position = part.CFrame and part.CFrame.Position or part.Position
+				local part = parts[i]
+				local cf = part.CFrame
+				local position = cf and cf.Position or part.Position
 				local size = part.Size
-				local qx, qy, qz, qw = part.CFrame:ToQuaternion()
-				local r, g, b = part.Color:ToRGB()
+				local qx, qy, qz, qw = cf:ToQuaternion()
+				local color = part.Color
+				local r, g, b = color:ToRGB()
 				local alpha = math.clamp(math.floor(255 * (1 - (part.Transparency or 0))), 0, 255)
 
 				local pOffset = (i - 1) * INSTANCE_POSITION_STRIDE
@@ -706,10 +817,15 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			return
 		end
 
+		-- Per-batch dirty tracking: only re-upload GPU buffers for batches whose
+		-- data has actually changed. Skips clean batches entirely, saving GPU
+		-- bandwidth and Luau overhead when only a few parts move each frame.
+		-- SinglParts don't have GPU instance buffers, so they're not touched here.
 		for i = 1, #chunk.batchList do
 			local batch = chunk.batchList[i]
-			if #batch.parts >= Workspace.MinInstancesPerBatch then
+			if batch.instancesDirty and #batch.parts >= Workspace.MinInstancesPerBatch then
 				uploadBatchInstances(batch)
+				batch.instancesDirty = false
 			end
 		end
 
@@ -722,10 +838,59 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		chunk.batchList = {}
 		chunk.singleParts = {}
 
+		-- Per-rebuild transform deduplication table.
+		-- Parts that share the exact CFrame (position + rotation) and Size with
+		-- a previously-processed part are completely occluded — skip them to
+		-- save draw calls and GPU overdraw. This catches accidentally duplicated
+		-- or layered-but-identical geometry common in imported maps.
+		-- The key encodes position and size to 0.01-stud precision and rotation
+		-- (via quaternion) to 0.001 precision. q and -q are the same rotation
+		-- so we normalise the sign before hashing.
+		local seenTransforms = {}
+
 		for i = 1, #chunk.parts do
 			local part = chunk.parts[i]
 			if not isRenderable(part) or part.Destroyed then
 				continue
+			end
+
+			-- Deduplication: build a compact transform+size fingerprint and
+			-- skip this part if one with the same shape already exists.
+			do
+				local cf = part.CFrame
+				local pos = cf.Position
+				local sz = part.Size
+				local qx, qy, qz, qw = cf:ToQuaternion()
+				-- Normalise quaternion sign so q and -q hash identically.
+				if qw < 0 then
+					qx, qy, qz, qw = -qx, -qy, -qz, -qw
+				end
+				local f = math.floor
+				local key = f(pos.X * 100 + 0.5)
+					.. ","
+					.. f(pos.Y * 100 + 0.5)
+					.. ","
+					.. f(pos.Z * 100 + 0.5)
+					.. ","
+					.. f(sz.X * 100 + 0.5)
+					.. ","
+					.. f(sz.Y * 100 + 0.5)
+					.. ","
+					.. f(sz.Z * 100 + 0.5)
+					.. ","
+					.. f(qx * 1000 + 0.5)
+					.. ","
+					.. f(qy * 1000 + 0.5)
+					.. ","
+					.. f(qz * 1000 + 0.5)
+					.. ","
+					.. f(qw * 1000 + 0.5)
+				if seenTransforms[key] then
+					rawset(part, "__workspaceDuplicate", true)
+					continue
+				end
+				seenTransforms[key] = true
+				rawset(part, "__workspaceDuplicate", false)
 			end
 
 			local isMeshPart = part:IsA("MeshPart")
@@ -767,6 +932,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				if not batch then
 					local instancedMaterial = getInstancedMaterial(materialName)
 					if not instancedMaterial then
+						rawset(part, "__cachedMaterial", nil)
+						rawset(part, "__cachedMatrix", nil)
 						table.insert(chunk.singleParts, part)
 						continue
 					end
@@ -778,12 +945,20 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						count = 0,
 						instanceBuffer = nil,
 						capacity = 0,
+						instancesDirty = true,
 					}
 					chunk.batches[key] = batch
 					chunk.batchList[#chunk.batchList + 1] = batch
 				end
+				-- Track which batch owns this part so Changed can mark only that
+				-- batch dirty instead of the entire chunk.
+				rawset(part, "__workspaceBatch", batch)
 				table.insert(batch.parts, part)
 			else
+				-- Clear caches when falling back to single draw (no instancing)
+				rawset(part, "__cachedMaterial", nil)
+				rawset(part, "__cachedMatrix", nil)
+				rawset(part, "__workspaceBatch", nil)
 				table.insert(chunk.singleParts, part)
 			end
 		end
@@ -805,6 +980,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	local function drawChunks()
+		raylib.lib.rlSetClipPlanes(0.1, Workspace.MAX_VIEW_DISTANCE)
+
 		local Kinemium_camera = Workspace.Camera
 		if not Kinemium_camera then
 			return
@@ -838,12 +1015,20 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			or lastVisibilityCameraPos == nil
 			or lastVisibilityCameraLook == nil
 
+		-- Track whether the camera POSITION changed (not just rotation). The
+		-- sort is keyed on distance-from-camera, so it only needs to re-run
+		-- when position changes, not every camera look-direction change.
+		local cameraPositionChanged = lastVisibilityCameraPos == nil
+
 		if not shouldRefreshVisibleChunks then
 			local cameraDelta = camPos - lastVisibilityCameraPos
-			if cameraDelta:MagnitudeSquared() >= refreshDistanceSq then
+			local camDeltaSq = cameraDelta:MagnitudeSquared()
+			if camDeltaSq >= refreshDistanceSq then
 				shouldRefreshVisibleChunks = true
+				cameraPositionChanged = true
 			elseif camLook:Dot(lastVisibilityCameraLook) <= refreshDotThreshold then
 				shouldRefreshVisibleChunks = true
+				-- rotation-only refresh: visible set may change but distances don't
 			end
 		end
 
@@ -856,6 +1041,16 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				end
 			end
 
+			-- Sort closest-first for rebuild budget prioritization. Only re-sort
+			-- when camera position changed -- rotation doesn't change distances.
+			if cameraPositionChanged or visibleChunkCacheDirty or forceDirty then
+				table.sort(visibleChunks, function(a, b)
+					local da = (a.center.X - camPos.X) ^ 2 + (a.center.Y - camPos.Y) ^ 2 + (a.center.Z - camPos.Z) ^ 2
+					local db = (b.center.X - camPos.X) ^ 2 + (b.center.Y - camPos.Y) ^ 2 + (b.center.Z - camPos.Z) ^ 2
+					return da < db
+				end)
+			end
+
 			visibleChunkCacheDirty = false
 			lastVisibleChunkSettingsKey = settingsKey
 			lastVisibilityCameraPos = camPos
@@ -863,14 +1058,37 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			lastVisibilityMaxDistance = Workspace.MAX_VIEW_DISTANCE
 		end
 
+		-- Per-frame streaming budgets: limit how many chunks are fully rebuilt
+		-- (structure + GPU buffers) or partially refreshed (instance data only)
+		-- each frame. This prevents a single import from causing a multi-frame
+		-- GPU stall by spreading the work over several frames, exactly like
+		-- Roblox's streaming renderer.
+		local structureRebuildsDone = 0
+		local instanceUpdatesDone = 0
+		local rebuildBudget = Workspace.ChunkRebuildBudget or 8
+		local instanceBudget = Workspace.ChunkInstanceUpdateBudget or 20
+
 		for i = 1, #visibleChunks do
 			local chunk = visibleChunks[i]
+
+			-- Rebuild chunk structure (batch grouping + GPU buffer allocation)
+			-- only while within the per-frame budget. Chunks that miss the
+			-- budget this frame will be rebuilt in a subsequent frame (they
+			-- continue to draw with whatever stale data they already have).
 			if forceDirty or chunk.dirty then
-				rebuildChunkBatches(chunk)
+				if structureRebuildsDone < rebuildBudget then
+					rebuildChunkBatches(chunk)
+					structureRebuildsDone += 1
+				end
 			elseif chunk.instanceDataDirty then
-				refreshChunkInstanceBuffers(chunk)
+				if instanceUpdatesDone < instanceBudget then
+					refreshChunkInstanceBuffers(chunk)
+					instanceUpdatesDone += 1
+				end
 			end
 
+			-- Always draw whatever data is currently ready for this chunk,
+			-- even if it hasn't been (re)built yet this frame.
 			local r3dAABB = chunk.r3dAABB
 
 			for singleIndex = 1, #chunk.singleParts do

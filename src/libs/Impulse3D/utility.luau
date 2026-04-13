@@ -339,7 +339,7 @@ function PhysicsUtils.RaySphereIntersection(rayOrigin, rayDir, spherePos, radius
 	end
 
 	local hitPoint = rayOrigin + rayDir * t
-	local normal = (hitPoint - spherePos).Unit
+	local normal = (hitPoint - spherePos):Unit()
 	return true, t, normal
 end
 

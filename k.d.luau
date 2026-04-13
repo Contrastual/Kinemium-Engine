@@ -105,6 +105,28 @@ type SchemaType = {
     validate: (self: any, packet: any) -> (boolean, string?, string?),
 }
 
+type ReactPointer = {
+	store: { [string]: any },
+	signals: { [string]: any },
+
+	new: () -> ReactPointer,
+
+	set: (self: ReactPointer, key: string, subkey: string | any, value: any?) -> (),
+	get: (self: ReactPointer, key: string, subkey: string?) -> any,
+
+	subscribe: (self: ReactPointer, key: string, subkey: string | ((...any) -> ())?, fn: ((...any) -> ())?) -> any,
+
+	bind: (self: ReactPointer, object: Instance, property: string, value: any) -> any?,
+
+	setGroup: (self: ReactPointer, key: string, tbl: { [string]: any }) -> (),
+
+	resolve: (self: ReactPointer, value: any, apply: (any) -> ()) -> any?,
+
+	compute: (self: ReactPointer, key: string, dependencies: { string }, fn: (...any) -> any) -> (),
+
+	destroy: (self: ReactPointer) -> (),
+}
+
 type Class = {
     __name: string,
     __index: any,
@@ -1123,6 +1145,7 @@ declare signed_int: signed_int
 declare signed_char: signed_char
 declare ptr: ptr
 declare ref: ref
+declare ReactPointer: ReactPointer
 declare nullptr_t: nullptr_t
 declare Signal: Signal
 declare Disposable: DisposableClass

@@ -88,6 +88,7 @@ local function props()
 		Jump = false,
 		JumpHeight = 3.2,
 		JumpPower = 20,
+		JumpQueueWindow = 0.15,
 		MaxSlopeAngle = 45,
 		MoveDirection = ZERO,
 		WalkSpeed = 16,
@@ -500,6 +501,102 @@ local function exportRigDescriptor(root, bindings)
 	return encodeRigDescriptor(descriptor)
 end
 
+local function defaultRig(options)
+	options = options or {}
+	local shirt = options.ShirtColor or Color3.fromRGB(196, 40, 28)
+	local pants = options.PantsColor or Color3.fromRGB(13, 105, 172)
+	local headColor = options.HeadColor or Color3.fromRGB(255, 204, 153)
+	local rootColor = options.RootColor or Color3.new(0, 0, 0)
+	local spawn = options.SpawnCFrame or CFrame.new(0, 20, 0)
+
+	return {
+		RigType = Enum.RigType.K17,
+		HipHeight = options.HipHeight or 1,
+		RootPart = {
+			Name = "HumanoidRootPart",
+			Size = Vector3.new(2, 2, 1),
+			Color = rootColor,
+			Transparency = 1,
+			Anchored = true,
+			CanCollide = false,
+			CFrame = spawn,
+		},
+		Bindings = {
+			Torso = {
+				Size = Vector3.new(2, 2, 1),
+				Color = shirt,
+				Transform = CFrame.new(0, 1, 0),
+				CenterOffset = CFrame.new(0, 1, 0),
+			},
+			Head = {
+				Size = Vector3.new(2, 1, 1),
+				Color = headColor,
+				Transform = CFrame.new(0, 3, 0),
+				CenterOffset = CFrame.new(0, 0.5, 0),
+			},
+			LeftArm = {
+				Size = Vector3.new(1, 2, 1),
+				Color = shirt,
+				Transform = CFrame.new(-1.5, 3, 0),
+				CenterOffset = CFrame.new(0, -1, 0),
+			},
+			RightArm = {
+				Size = Vector3.new(1, 2, 1),
+				Color = shirt,
+				Transform = CFrame.new(1.5, 3, 0),
+				CenterOffset = CFrame.new(0, -1, 0),
+			},
+			LeftLeg = {
+				Size = Vector3.new(1, 2, 1),
+				Color = pants,
+				Transform = CFrame.new(-0.5, 1, 0),
+				CenterOffset = CFrame.new(0, -1, 0),
+			},
+			RightLeg = {
+				Size = Vector3.new(1, 2, 1),
+				Color = pants,
+				Transform = CFrame.new(0.5, 1, 0),
+				CenterOffset = CFrame.new(0, -1, 0),
+			},
+		},
+	}
+end
+
+local function inferRigDescriptorFromCharacter(char, root)
+	if not char or char.FindFirstChild == nil then
+		return nil
+	end
+
+	local template = defaultRig({})
+	local bindings = {}
+
+	for bindingName, bindingSpec in pairs(template.Bindings or {}) do
+		local part = char:FindFirstChild(bindingName)
+		if part then
+			bindings[bindingName] = {
+				Transform = bindingSpec.Transform or ID,
+				Segments = {
+					{
+						Name = "Main",
+						PartName = part.Name,
+						Transform = ID,
+						CenterOffset = bindingSpec.CenterOffset or ID,
+					},
+				},
+			}
+		end
+	end
+
+	if next(bindings) == nil then
+		return nil
+	end
+
+	return {
+		RootPartName = (root and root.Name) or "HumanoidRootPart",
+		Bindings = bindings,
+	}
+end
+
 local function syncRoot(h)
 	local root = h.RootPart
 	if not root or root.Parent == nil then
@@ -619,6 +716,9 @@ local function restoreRigFromDescriptor(h, c)
 	local success = false
 	local char = characterOf(h)
 	local descriptor = decodeRigDescriptor(h.RigDescriptor)
+	if descriptor == nil then
+		descriptor = inferRigDescriptorFromCharacter(char, h.RootPart)
+	end
 	repeat
 		if not char or type(descriptor) ~= "table" or type(descriptor.Bindings) ~= "table" then
 			break
@@ -895,67 +995,6 @@ local function getAnimator(h, createIfMissing, createInstance)
 	return nil
 end
 
-local function defaultRig(options)
-	options = options or {}
-	local shirt = options.ShirtColor or Color3.fromRGB(196, 40, 28)
-	local pants = options.PantsColor or Color3.fromRGB(13, 105, 172)
-	local headColor = options.HeadColor or Color3.fromRGB(255, 204, 153)
-	local rootColor = options.RootColor or Color3.new(0, 0, 0)
-	local spawn = options.SpawnCFrame or CFrame.new(0, 20, 0)
-
-	return {
-		RigType = Enum.RigType.K17,
-		HipHeight = options.HipHeight or 1,
-		RootPart = {
-			Name = "HumanoidRootPart",
-			Size = Vector3.new(2, 2, 1),
-			Color = rootColor,
-			Transparency = 1,
-			Anchored = true,
-			CanCollide = false,
-			CFrame = spawn,
-		},
-		Bindings = {
-			Torso = {
-				Size = Vector3.new(2, 2, 1),
-				Color = shirt,
-				Transform = CFrame.new(0, 1, 0),
-				CenterOffset = CFrame.new(0, 1, 0),
-			},
-			Head = {
-				Size = Vector3.new(2, 1, 1),
-				Color = headColor,
-				Transform = CFrame.new(0, 3, 0),
-				CenterOffset = CFrame.new(0, 0.5, 0),
-			},
-			LeftArm = {
-				Size = Vector3.new(1, 2, 1),
-				Color = shirt,
-				Transform = CFrame.new(-1.5, 3, 0),
-				CenterOffset = CFrame.new(0, -1, 0),
-			},
-			RightArm = {
-				Size = Vector3.new(1, 2, 1),
-				Color = shirt,
-				Transform = CFrame.new(1.5, 3, 0),
-				CenterOffset = CFrame.new(0, -1, 0),
-			},
-			LeftLeg = {
-				Size = Vector3.new(1, 2, 1),
-				Color = pants,
-				Transform = CFrame.new(-0.5, 1, 0),
-				CenterOffset = CFrame.new(0, -1, 0),
-			},
-			RightLeg = {
-				Size = Vector3.new(1, 2, 1),
-				Color = pants,
-				Transform = CFrame.new(0.5, 1, 0),
-				CenterOffset = CFrame.new(0, -1, 0),
-			},
-		},
-	}
-end
-
 return {
 	class = "Humanoid",
 	callback = function(h, renderer, game)
@@ -1047,6 +1086,10 @@ return {
 			local def = defaultRig(options)
 			def.Character = options and options.Character or characterOf(self)
 			return bind(def)
+		end
+
+		function h:RestoreRig()
+			return restoreRigFromDescriptor(self, c)
 		end
 
 		function h:GetRigPart(name)
@@ -1281,11 +1324,13 @@ return {
 					local owner = ownerRoot(h)
 					local ownerName = owner and owner.NetworkOwner and owner.NetworkOwner.Name or "Server"
 					local branch = authoritative and "authoritative" or "replica"
+					--[[
 					print(
 						`[HumanoidDebug][Simulation][{branch}] char={char.Name} root=#{root.NetworkId or "?"} owner={ownerName} pos={formatDebugVec3(
 							root.CFrame.Position
 						)} vel={formatDebugVec3(root.AssemblyLinearVelocity)}`
 					)
+						--]]
 				end
 
 				c.animClock += dt
@@ -1365,7 +1410,7 @@ return {
 
 				local player = getAssociatedPlayer(h)
 				local moveDir = h.MoveDirection
-				local facingDir = h.FacingDirection or c.lookXZ
+				local facingDir = h.FacingDirection
 
 				if
 					workspace.ServerAuthority
@@ -1426,7 +1471,7 @@ return {
 					h.FloorMaterial = Enum.Material.Air
 				end
 
-				local jumpRequest = c.jumpQueuedTime ~= 0 and (os.clock() - c.jumpQueuedTime < 0.15)
+				local jumpRequest = c.jumpQueuedTime ~= 0 and (os.clock() - c.jumpQueuedTime < h.JumpQueueWindow)
 				if jumpRequest and c.isGrounded then
 					c.verticalVelocity = h.JumpPower
 					c.isGrounded = false
@@ -1477,6 +1522,60 @@ return {
 					local air = c.isGrounded and 1 or math.max(h.AirControl, 0)
 					c.smoothVelXZ = c.smoothVelXZ:Lerp(moveDirFlat * walkSpeed, math.min(1, dt * h.VelocityLerp * air))
 					horiz = Vector3.new(c.smoothVelXZ.X, 0, c.smoothVelXZ.Z)
+				end
+
+				local horizOffset = Vector3.new(horiz.X, 0, horiz.Z) * dt
+				local minHorizDist = horizOffset:Magnitude()
+				local slideNormal = nil
+
+				if minHorizDist > 0.001 then
+					local hasBlockcast = type(workspace.Blockcast) == "function"
+					for _, binding in pairs(c.bindings) do
+						for _, seg in ipairs(binding.Segments) do
+							if seg.Part and seg.Part.Parent ~= nil then
+								local sweepHit
+								if hasBlockcast then
+									local cf = seg.Part.CFrame + Vector3.new(0, 0.05, 0)
+									local size = seg.Part.Size * 0.95
+									pcall(function()
+										sweepHit = workspace:Blockcast(cf, size, horizOffset, c.rayParams)
+									end)
+								end
+								if not sweepHit then
+									pcall(function()
+										sweepHit = workspace:Raycast(seg.Part.Position, horizOffset, c.rayParams)
+									end)
+								end
+
+								if
+									sweepHit
+									and math.abs(sweepHit.Normal.Y) < 0.7
+									and sweepHit.Distance < minHorizDist
+								then
+									minHorizDist = sweepHit.Distance
+									slideNormal = sweepHit.Normal
+								end
+							end
+						end
+					end
+				end
+
+				if slideNormal then
+					slideNormal = Vector3.new(slideNormal.X, 0, slideNormal.Z)
+					if slideNormal:Magnitude() > 0.001 then
+						slideNormal = slideNormal:Unit()
+					else
+						slideNormal = Vector3.new(0, 0, 1)
+					end
+
+					local safeTravel = math.max(0, minHorizDist - 0.05)
+					local hitPoint = horizOffset:Unit() * safeTravel
+					local leftover = horizOffset - hitPoint
+					local slide = leftover - (slideNormal * leftover:Dot(slideNormal))
+					horizOffset = hitPoint + slide
+
+					horiz = Vector3.new(horizOffset.X / dt, 0, horizOffset.Z / dt)
+					c.smoothVelXZ = horiz
 				end
 
 				local vel = Vector3.new(horiz.X, velY, horiz.Z)

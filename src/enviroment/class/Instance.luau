@@ -9,15 +9,6 @@ local function generateUniqueId()
 	return id
 end
 
-local nextNetworkId = 1
-local PREFIX = ""
-
-local function generateNetworkId()
-	local id = nextNetworkId
-	nextNetworkId += 1
-	return PREFIX .. id
-end
-
 -- Instance metatable
 local instance_mt = {}
 

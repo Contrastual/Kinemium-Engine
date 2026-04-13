@@ -801,7 +801,7 @@ return {
 								if t > 0 and t < minT then
 									minT = t
 									closestHit = origin + direction * t
-									closestNorm = edge1:Cross(edge2).Unit
+									closestNorm = edge1:Cross(edge2):Unit()
 									closestFace = fid
 								end
 							end

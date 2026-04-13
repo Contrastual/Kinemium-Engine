@@ -430,7 +430,7 @@ local funcs = {
 	},
 	sail_copy_load_options = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 	sail_log_level_from_string = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	sail_set_log_barrier = { returns = ffi.types.void, args = { ffi.types.pointer } },
+	sail_set_log_barrier = { returns = ffi.types.void, args = { ffi.types.u8 } },
 	sail_set_logger = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	sail_malloc = { returns = ffi.types.pointer, args = { ffi.types.u64, ffi.types.pointer } },
 	sail_malloc_std_signature = { returns = ffi.types.pointer, args = { ffi.types.u64 } },
@@ -553,6 +553,7 @@ local funcs = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.pointer, ffi.types.u64, ffi.types.pointer },
 	},
+
 	sail_reverse_uint16 = { returns = ffi.types.u16, args = { ffi.types.u16 } },
 	sail_reverse_uint32 = { returns = ffi.types.u32, args = { ffi.types.u32 } },
 	sail_reverse_uint64 = { returns = ffi.types.u64, args = { ffi.types.u64 } },

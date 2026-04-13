@@ -1,119 +1,142 @@
 local UDim2 = require("@UDim2")
+local UDim = require("@UDim")
+local Vector2 = require("@Vector2")
 
 local propTable = {
 	Name = "UIPadding",
-	Padding = UDim2.new(0, 0, 0, 0),
 	BaseClass = "Instance",
 
-	_CachedPadding = nil,
+	Padding = UDim2.new(0, 0, 0, 0),
+	PaddingLeft = nil,
+	PaddingRight = nil,
+	PaddingTop = nil,
+	PaddingBottom = nil,
+
 	_CachedParentSize = nil,
+	_CachedResolved = nil,
 }
 
-function propTable.GetEffectivePadding(object, parentSize)
-	local padding = object.Padding
-	local cachedSize = object._CachedParentSize
-	local cachedPadding = object._CachedPadding
-
-	if not cachedSize or not cachedPadding or cachedSize ~= parentSize then
-		local paddingPixels = padding:ToPixels(parentSize)
-		object._CachedPadding = paddingPixels
-		object._CachedParentSize = parentSize
-		return paddingPixels
+local function resolveLegacyPaddingSide(padding, primaryKey, secondaryKey)
+	local side = padding and padding[primaryKey]
+	if side then
+		return side
 	end
 
-	return cachedPadding
+	return padding and padding[secondaryKey] or UDim.new(0, 0)
 end
 
-function propTable.GetEffectiveContainerSize(object, containerSize)
-	local parent = object.Parent
-	if not parent then
-		return containerSize
+local function resolvePaddingSide(instance, propertyName, primaryKey, secondaryKey)
+	local explicit = instance[propertyName]
+	if explicit ~= nil then
+		return explicit
 	end
 
-	local paddingPixels = object:GetEffectivePadding(containerSize)
-
-	local effectiveWidth = containerSize.X - paddingPixels.X * 2
-	local effectiveHeight = containerSize.Y - paddingPixels.Y * 2
-
-	effectiveWidth = math.max(0, effectiveWidth)
-	effectiveHeight = math.max(0, effectiveHeight)
-
-	return Vector2.new(effectiveWidth, effectiveHeight)
+	return resolveLegacyPaddingSide(instance.Padding, primaryKey, secondaryKey)
 end
 
-function propTable.GetEffectiveContainerOffset(object, containerSize)
-	local paddingPixels = object:GetEffectivePadding(containerSize)
-	return Vector2.new(paddingPixels.X, paddingPixels.Y)
+function propTable:GetResolvedPadding(parentSize)
+	local cachedSize = self._CachedParentSize
+	local cachedResolved = self._CachedResolved
+
+	if cachedSize and cachedResolved and cachedSize == parentSize then
+		return cachedResolved
+	end
+
+	local leftUDim = resolvePaddingSide(self, "PaddingLeft", "X", "X")
+	local rightUDim = resolvePaddingSide(self, "PaddingRight", "X2", "X")
+	local topUDim = resolvePaddingSide(self, "PaddingTop", "Y", "Y")
+	local bottomUDim = resolvePaddingSide(self, "PaddingBottom", "Y2", "Y")
+
+	local left = leftUDim.Scale * parentSize.X + leftUDim.Offset
+	local right = rightUDim.Scale * parentSize.X + rightUDim.Offset
+	local top = topUDim.Scale * parentSize.Y + topUDim.Offset
+	local bottom = bottomUDim.Scale * parentSize.Y + bottomUDim.Offset
+
+	local resolved = {
+		Left = left,
+		Right = right,
+		Top = top,
+		Bottom = bottom,
+
+		Horizontal = left + right,
+		Vertical = top + bottom,
+	}
+
+	self._CachedParentSize = parentSize
+	self._CachedResolved = resolved
+
+	return resolved
 end
 
-function propTable.GetEffectiveChildPosition(object, childRelativePosition, containerSize)
-	local paddingOffset = object:GetEffectiveContainerOffset(containerSize)
-	return childRelativePosition + paddingOffset
+function propTable:GetInnerSize(containerSize)
+	local p = self:GetResolvedPadding(containerSize)
+
+	return Vector2.new(math.max(0, containerSize.X - p.Horizontal), math.max(0, containerSize.Y - p.Vertical))
 end
 
-function propTable.GetAllPaddings(container)
-	local paddings = {}
+function propTable:GetOffset()
+	local p = self._CachedResolved
+	return Vector2.new(p.Left, p.Top)
+end
+
+function propTable:ApplyToPosition(pos)
+	local p = self._CachedResolved
+	return pos + Vector2.new(p.Left, p.Top)
+end
+
+function propTable.GetAll(container)
+	local out = {}
 
 	for _, child in ipairs(container:GetChildren()) do
 		if child.ClassName == "UIPadding" then
-			table.insert(paddings, child)
+			table.insert(out, child)
 		end
 	end
 
-	return paddings
+	return out
 end
 
-function propTable.GetTotalEffectivePadding(container, containerSize)
-	local totalPaddingX = 0
-	local totalPaddingY = 0
+function propTable.ResolveAll(container, containerSize)
+	local total = {
+		Left = 0,
+		Right = 0,
+		Top = 0,
+		Bottom = 0,
+	}
 
-	local paddings = propTable.GetAllPaddings(container)
+	for _, padding in ipairs(propTable.GetAll(container)) do
+		local p = padding:GetResolvedPadding(containerSize)
 
-	for _, padding in ipairs(paddings) do
-		local effectivePadding = padding:GetEffectivePadding(containerSize)
-		totalPaddingX = totalPaddingX + effectivePadding.X
-		totalPaddingY = totalPaddingY + effectivePadding.Y
+		total.Left += p.Left
+		total.Right += p.Right
+		total.Top += p.Top
+		total.Bottom += p.Bottom
 	end
 
-	return Vector2.new(totalPaddingX, totalPaddingY)
+	total.Horizontal = total.Left + total.Right
+	total.Vertical = total.Top + total.Bottom
+
+	return total
 end
 
-function propTable.GetTotalEffectiveContainerSize(container, containerSize)
-	local totalPadding = propTable.GetTotalEffectivePadding(container, containerSize)
+function propTable.GetTotalInnerSize(container, containerSize)
+	local p = propTable.ResolveAll(container, containerSize)
 
-	local effectiveWidth = containerSize.X - totalPadding.X * 2
-	local effectiveHeight = containerSize.Y - totalPadding.Y * 2
-
-	effectiveWidth = math.max(0, effectiveWidth)
-	effectiveHeight = math.max(0, effectiveHeight)
-
-	return Vector2.new(effectiveWidth, effectiveHeight)
+	return Vector2.new(math.max(0, containerSize.X - p.Horizontal), math.max(0, containerSize.Y - p.Vertical))
 end
 
-function propTable.GetTotalEffectiveContainerOffset(container, containerSize)
-	local totalPadding = propTable.GetTotalEffectivePadding(container, containerSize)
-	return Vector2.new(totalPadding.X, totalPadding.Y)
-end
-
-function propTable.GetTotalEffectiveChildPosition(container, childRelativePosition, containerSize)
-	local totalPaddingOffset = propTable.GetTotalEffectiveContainerOffset(container, containerSize)
-	return childRelativePosition + totalPaddingOffset
+function propTable.GetTotalOffset(container, containerSize)
+	local p = propTable.ResolveAll(container, containerSize)
+	return Vector2.new(p.Left, p.Top)
 end
 
 return {
 	class = "UIPadding",
-	render = function(lib, object, dt, structs, renderer)
-		return nil
+	render = function()
+		-- no render; purely layout modifier
 	end,
 	callback = function(instance)
 		instance:SetProperties(propTable)
 		return instance
-	end,
-	inherit = function(tble)
-		for prop, val in pairs(propTable) do
-			if not tble[prop] then
-				tble[prop] = val
-			end
-		end
 	end,
 }

@@ -1,6 +1,6 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local RunService = game:GetService("RunService")
-local renderer = KinemiumRaylib.renderer
+local renderer = KinemiumRaylib.GetRenderer()
 local freecam = renderer.Freecam
 local raylib = require("@raylib")
 

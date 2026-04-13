@@ -5,12 +5,11 @@ local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local Selection = game:GetService("Selection")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local FileDialogService = game:GetService("FileDialogService")
 local KineFileService = game:GetService("KineFileService")
 local ScriptRunnerService = game:GetService("ScriptRunnerService")
+local RBXModelImporter = game:GetService("RBXModelImporter")
 
--- Early returns
 if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") then
 	return
 end
@@ -50,10 +49,9 @@ local spring = import("@kispring")
 local aereon = import("@Aereon")
 local gui = aereon.gui
 local LocalPlayer = Players.LocalPlayer
-local rl = KinemiumRaylib.lib
-local structs = KinemiumRaylib.structs
-local const = KinemiumRaylib.const
-local renderer = KinemiumRaylib.renderer
+local rl = KinemiumRaylib.GetLib()
+local structs = KinemiumRaylib.GetStructs()
+local addMenuOpenBool = false
 local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
 local hoverspring = spring.new(2, 5)
@@ -82,6 +80,8 @@ local yOffset = 0
 local windowObject = nil
 local arect = require("@Arect")(rl)
 local textbox = aereon.textbox(Theme, game)
+
+local ContextMenuOpen = false
 
 local searchBox = textbox.new({
 	multiline = false,
@@ -130,14 +130,19 @@ local SelectionMenu = gui.menu({
 	x = 0,
 	y = 0,
 	width = 200,
-	height = 300,
 	Font = vend,
+	backgroundColor = Theme.SecondaryBackgroundColor,
+	textColor = Theme.TextColor,
+	hoverColor = Theme.BackgroundColor,
 	items = {
 		{
 			label = "Destroy",
 			onClick = function()
 				if Selection:Get()[1] then
 					for _, v in pairs(Selection:Get()) do
+						if v.BaseClass == "Singleton" then
+							return
+						end
 						pcall(function()
 							v:Destroy()
 						end)
@@ -223,6 +228,7 @@ local SelectionMenu = gui.menu({
 				},
 			},
 		},
+
 		{
 			label = "Select",
 			submenu = {
@@ -277,16 +283,40 @@ local SelectionMenu = gui.menu({
 		},
 		{
 			label = "Import",
-			onClick = function()
-				local path = FileDialogService.RequestFile({})
+			submenu = {
+				{
+					label = ".KINEOBJ",
+					onClick = function()
+						local path = FileDialogService.RequestFile({})
 
-				local ins = KineFileService.DecodeFile(path)
+						local ins = KineFileService.DecodeFile(path)
 
-				local object = Selection:Get()[1]
-				if object and ins then
-					ins.Parent = object
-				end
-			end,
+						local object = Selection:Get()[1]
+						if object and ins then
+							ins.Parent = object
+						end
+					end,
+				},
+
+				{
+					label = ".RBXM, .RBXMX",
+					onClick = function()
+						local path = FileDialogService.RequestFile({})
+
+						local read = Filesystem.readFile(path, true)
+
+						local new = RBXModelImporter.ImportModel(read)
+						if new then
+							local selected = Selection:Get()[1]
+							if selected then
+								new.Parent = selected
+							else
+								new.Parent = workspace
+							end
+						end
+					end,
+				},
+			},
 		},
 	},
 })
@@ -356,7 +386,12 @@ end
 
 -- Selection handling
 local function handleSelection(instance, rectData, mousePos)
-	if not isMouseInRect(rectData, mousePos) or rl.IsMouseButtonPressed(0) ~= 1 then
+	if
+		not isMouseInRect(rectData, mousePos)
+		or rl.IsMouseButtonPressed(0) ~= 1
+		or ContextMenuOpen
+		or addMenuOpenBool
+	then
 		return
 	end
 
@@ -485,6 +520,7 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 					newObj.Parent = instance
 				end
 				addMenuOpen[instance] = false
+				addMenuOpenBool = false
 				addMenuScroll[instance] = 0
 			end
 		end
@@ -562,7 +598,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	local children = instance:GetChildren()
 	local hasChildren = #children > 0
-	local ctrl = rl.IsKeyDown(341) == 1 or rl.IsKeyDown(345) == 1
 
 	local btnX = winX + 25 + winWidth - NODE_WIDTH - PADDING - (indent * -INDENT_SIZE)
 	local btnY = winY + 10 + yOffset - scrollOffset
@@ -629,6 +664,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			for key in pairs(addMenuOpen) do
 				addMenuOpen[key] = false
 			end
+			addMenuOpenBool = true
 			addMenuOpen[instance] = not addMenuOpen[instance]
 			activeAddMenu = addMenuOpen[instance]
 					and {
@@ -642,10 +678,12 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 		-- Selection Menu
 		if rl.IsMouseButtonReleased(1) == 1 then
 			if isSelected then
-				SelectionMenu.set("obj_rect", arect.new(mousePos.x, mousePos.y, 200, 400))
+				SelectionMenu.set("obj_rect", arect.new(mousePos.x, mousePos.y, 200, 0))
 				SelectionMenu:show()
+				ContextMenuOpen = true
 			else
 				SelectionMenu:hide()
+				ContextMenuOpen = false
 			end
 		end
 	end
@@ -781,7 +819,7 @@ explorerWindow.stepped = function(windowData)
 
 	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
 		local mouseWheel = rl.GetMouseWheelMove()
-		if math.abs(mouseWheel) > 0.01 then
+		if math.abs(mouseWheel) > 0.01 and windowData.Focused == true then
 			scrollTarget -= mouseWheel * NODE_HEIGHT * SCROLL_SPEED
 		end
 	end

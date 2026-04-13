@@ -9,7 +9,7 @@ TCPServer.ConnectedClients = {}
 local onRecieveCallbacks = {}
 
 local HEARTBEAT_TIMEOUT = 15
-local MAX_MESSAGE_SIZE = 100000
+local MAX_MESSAGE_SIZE = 4 * 1024 * 1024
 local MESSAGE_TIMEOUT = 10
 local MAX_CLIENTS = 130
 local MAX_MESSAGES_PER_CLIENT = 100

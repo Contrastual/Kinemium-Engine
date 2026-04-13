@@ -52,6 +52,20 @@ ContentService.InitRenderer = function(renderer, renderer_signal)
 		Hash = hash,
 	})
 
+	function ContentService:GetBinary(url, maxSize)
+		local res = request(url, {
+			method = "GET",
+			headers = { ["Accept"] = "application/octet-stream, */*" },
+			max_body_size = maxSize or (50 * 1024 * 1024),
+		}, true)
+
+		if not res.ok then
+			error(`Download failed ({res.status_code})`)
+		end
+
+		return res.body
+	end
+
 	function ContentService:Get(url, maxSize)
 		local id = hash(url)
 		local ext = getExtension(url)

@@ -20,9 +20,6 @@ function HumanoidStateAdapter.matches(object)
 end
 
 function HumanoidStateAdapter.capture(humanoid)
-	-- Do NOT capture RootPart CFrame/Position here.
-	-- The BasePart adapter already handles RootPart physics replication.
-	-- We only capture Humanoid-specific logical state.
 	return {
 		type = "Humanoid",
 		id = humanoid.NetworkId,
@@ -37,8 +34,6 @@ function HumanoidStateAdapter.capture(humanoid)
 end
 
 function HumanoidStateAdapter.apply(humanoid, state)
-	-- Never touch RootPart.CFrame or Position here.
-	-- The Client interpolation loop owns that via remoteTargets / BasePart adapter.
 	if state.stance ~= nil then
 		humanoid.Stance = state.stance
 	end

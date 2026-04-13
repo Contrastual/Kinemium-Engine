@@ -45,7 +45,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 
 			registry[fileName] = filePath
 
-			print("Loading " .. fileName)
+			log("Loading " .. fileName)
 		end
 	end
 

@@ -46,7 +46,7 @@ function CFrame2D.new(...)
 		self.Position = Vector2.new(args[1], args[2])
 	elseif #args == 3 then
 		local pos, target = args[1], args[2]
-		local dir = (target - pos).Unit
+		local dir = (target - pos):Unit()
 		local angle = math.atan2(dir.Y, dir.X)
 		self.Position = pos
 		self.Rotation = rotMatrix(angle)

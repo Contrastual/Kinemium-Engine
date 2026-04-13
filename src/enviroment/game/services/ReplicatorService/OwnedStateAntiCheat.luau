@@ -9,11 +9,13 @@ OwnedStateAntiCheat.Config = {
 	MaxOwnedPositionError = 24,
 	MaxOwnedStateStrikes = 6,
 
-	-- New check thresholds
-	MaxUpdatesPerTick = 3, -- max state updates accepted per server tick per session
-	VelocityDirectionThreshold = 0.35, -- min dot product between reported vel and actual displacement
-	VelocityDirectionMinSpeed = 20, -- only check direction when moving faster than this
-	RotationOrthogonalTolerance = 0.02, -- max deviation from 1.0 for column magnitudes
+	MaxUpdatesPerTick = 3,
+	VelocityDirectionThreshold = 0.65, -- raised from 0.35; direction must actually match
+	VelocityDirectionMinSpeed = 20,
+	RotationOrthogonalTolerance = 0.02,
+
+	MaxHumanoidLinearSpeed = 32, -- studs/s; tune to your real max walk/sprint speed
+	HumanoidSpeedLeniency = 1.4, -- multiplier for lag/physics jitter tolerance
 }
 
 local function isFiniteNumber(value)
@@ -100,6 +102,8 @@ function OwnedStateAntiCheat.new(context)
 	local networkOwnership = context.NetworkOwnership
 	local onOwnershipRevoked = context.OnOwnershipRevoked
 
+	local getMaxSpeedForObject = context.GetMaxSpeedForObject
+
 	local stateBySession = {}
 
 	local function getSessionState(session)
@@ -113,7 +117,6 @@ function OwnedStateAntiCheat.new(context)
 			}
 			stateBySession[session.key] = state
 		end
-
 		return state
 	end
 
@@ -145,6 +148,8 @@ function OwnedStateAntiCheat.new(context)
 		end
 
 		local sessionState = getSessionState(session)
+
+		--  Rate limit
 		local currentTick = networkService.CurrentTick or 0
 		if currentTick ~= sessionState.lastTickCount then
 			sessionState.updatesThisTick = 0
@@ -156,6 +161,7 @@ function OwnedStateAntiCheat.new(context)
 			return false
 		end
 
+		--  Decode & basic sanity
 		local linear = decodeVectorState(state.linear)
 		local angular = decodeVectorState(state.angular)
 		local cframe = decodeCFrameState(state.cframe)
@@ -169,12 +175,32 @@ function OwnedStateAntiCheat.new(context)
 			return false
 		end
 
+		--  Determine the speed cap for this specific object
+		-- If the caller supplies a per-object getter (e.g. reading Humanoid.WalkSpeed
+		-- from a server-authoritative source), use that; otherwise fall back to
+		-- a humanoid heuristic or the global part cap.
+		local isHumanoidPart = object.Name == "HumanoidRootPart"
+		local maxLinearSpeed
+
+		if getMaxSpeedForObject then
+			maxLinearSpeed = getMaxSpeedForObject(object)
+		end
+
+		if not maxLinearSpeed then
+			if isHumanoidPart then
+				maxLinearSpeed = OwnedStateAntiCheat.Config.MaxHumanoidLinearSpeed
+					* OwnedStateAntiCheat.Config.HumanoidSpeedLeniency
+			else
+				maxLinearSpeed = OwnedStateAntiCheat.Config.MaxOwnedLinearSpeed
+			end
+		end
+
 		local linearSpeed = linear:Magnitude()
-		if linearSpeed > OwnedStateAntiCheat.Config.MaxOwnedLinearSpeed then
+		if linearSpeed > maxLinearSpeed then
 			registerStrike(
 				session,
 				object,
-				`linear speed {math.floor(linearSpeed + 0.5)} > {OwnedStateAntiCheat.Config.MaxOwnedLinearSpeed}`
+				`linear speed {math.floor(linearSpeed + 0.5)} > {math.floor(maxLinearSpeed + 0.5)}`
 			)
 			return false
 		end
@@ -205,7 +231,8 @@ function OwnedStateAntiCheat.new(context)
 		end
 
 		if referenceCFrame and referenceCFrame.Position then
-			local allowedTravel = OwnedStateAntiCheat.Config.MaxOwnedPositionError + linearSpeed * deltaTime * 1.5
+			local allowedTravel = OwnedStateAntiCheat.Config.MaxOwnedPositionError + maxLinearSpeed * deltaTime * 1.5
+
 			local displacement = cframe.Position - referenceCFrame.Position
 			local traveled = displacement:Magnitude()
 
@@ -219,7 +246,8 @@ function OwnedStateAntiCheat.new(context)
 			end
 
 			local absoluteMaxTravel = OwnedStateAntiCheat.Config.MaxOwnedPositionError
-				+ OwnedStateAntiCheat.Config.MaxOwnedLinearSpeed * deltaTime * 2
+				+ maxLinearSpeed * deltaTime * 1.8 -- tighter than before (was 2×)
+
 			if traveled > absoluteMaxTravel then
 				registerStrike(
 					session,
@@ -229,9 +257,10 @@ function OwnedStateAntiCheat.new(context)
 				return false
 			end
 
+			--  Velocity direction check
 			if linearSpeed > OwnedStateAntiCheat.Config.VelocityDirectionMinSpeed and traveled > 1 then
-				local displacementDir = displacement.Unit
-				local velocityDir = linear.Unit
+				local displacementDir = displacement:Unit()
+				local velocityDir = linear:Unit()
 				local dot = displacementDir:Dot(velocityDir)
 				if dot < OwnedStateAntiCheat.Config.VelocityDirectionThreshold then
 					registerStrike(

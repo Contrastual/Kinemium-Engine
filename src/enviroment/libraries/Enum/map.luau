@@ -242,6 +242,19 @@ enumTable.MachineNetworkOwner = {
 	Client = 1,
 }
 
+enumTable.NotificationAnchor = {
+	TopRight = 0,
+	TopLeft = 1,
+	BottomRight = 2,
+	BottomLeft = 3,
+}
+
+enumTable.NotificationState = {
+	Entering = 0,
+	Visible = 1,
+	Exiting = 2,
+}
+
 enumTable.UserInputType = {
 	None = 0,
 

@@ -97,7 +97,6 @@ Players.InitRenderer = function(renderer, signal, game)
 		local CharacterModel = newObject("Model", datamodel)
 		CharacterModel.Name = player.Name
 		CharacterModel:SetAttribute("__characterUserId", player.UserId)
-		CharacterModel.Parent = datamodel.Workspace
 
 		attachCharacterNetworkController(CharacterModel, player)
 
@@ -120,6 +119,7 @@ Players.InitRenderer = function(renderer, signal, game)
 			RootColor = Color3.new(0, 0, 0),
 		})
 		CharacterModel.PrimaryPart = humanoid.RootPart
+		CharacterModel.Parent = datamodel.Workspace
 
 		assignCharacter(player, CharacterModel)
 		return CharacterModel
@@ -135,9 +135,7 @@ Players.InitRenderer = function(renderer, signal, game)
 		table.insert(playerRegistry, player)
 
 		if IsServer then
-			task.spawn(function()
-				self:LoadCharacter(player, datamodel)
-			end)
+			self:LoadCharacter(player, datamodel)
 		end
 
 		self.PlayerAdded:Fire(player)
