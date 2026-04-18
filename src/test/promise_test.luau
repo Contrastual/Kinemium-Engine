@@ -1,4 +1,4 @@
-local Promise = require("../enviroment/datatypes/Promise")
+local Promise = require("../environment/datatypes/Promise")
 
 local testing = zune.testing
 local expect = testing.expect
@@ -36,8 +36,7 @@ testing.describe("Promise", function()
 		Promise.resolve(1):finally(function()
 			hits += 1
 		end)
-		Promise.reject("x"):catch(function()
-		end):finally(function()
+		Promise.reject("x"):catch(function() end):finally(function()
 			hits += 1
 		end)
 		expect(hits).toBe(2)

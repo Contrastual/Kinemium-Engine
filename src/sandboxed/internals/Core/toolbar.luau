@@ -289,63 +289,78 @@ local function updateTooltip(dt, hoveredKey, hoveredText, mouseX, mouseY)
 end
 
 local function renderButton(xPos, name, element, windowData, dt)
-	local winX, winY = windowData.x, windowData.y + 80
-	local cellWidth = element.width or 50
-	local cellHeight = element.height or 50
-	local rectX = winX + xPos
-	local rectY = winY
-	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
+    local winX, winY = windowData.x, windowData.y + 80
+    local cellWidth = element.width or 50
+    local cellHeight = element.height or 50
+    local rectX = winX + xPos
+    local rectY = winY
+    local labelWidth = name and measureTextWidth(name) or 0
+    local effectiveWidth = math.max(cellWidth, labelWidth)
 
-	local transparency = 1
-	local color = Color3.new(0.5, 0.5, 0.5)
+    local rectData = aRect.new(rectX, rectY, effectiveWidth, cellHeight)
 
-	local isHovered = aRect.MouseIsInRect(rectData)
+    local transparency = 1
+    local color = Color3.new(0.5, 0.5, 0.5)
 
-	if isHovered then
-		color = element.hoverColor
-		transparency = element.hoverTransparency
-	end
+    local isHovered = aRect.MouseIsInRect(rectData)
 
-	aRect.Button(rectData, function()
-		element.callback(element, rectData)
-	end)
+    if isHovered then
+        color = element.hoverColor
+        transparency = element.hoverTransparency
+    end
 
-	local bgColor = color:ToRaylib(transparency)
-	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
+    aRect.Button(rectData, function()
+        element.callback(element, rectData)
+    end)
 
-	if element.texture then
-		rl.DrawTexturePro(
-			element.texture.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
-			aRect:translate(rectData),
-			vector.create(0, 0),
-			element.rotation or 0,
-			ImageColor
-		)
-	end
+    local bgColor = color:ToRaylib(transparency)
+    rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
 
-	local labelWidth = 0
-	if name then
-		labelWidth = measureTextWidth(name)
-		local textX = rectData.x + cellWidth / 2 - labelWidth / 2
-		local textY = rectData.y + cellHeight + 5
-		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
-	end
+    if name then
+        labelWidth = measureTextWidth(name)
+        local textX = rectData.x + effectiveWidth / 2 - labelWidth / 2
+        local textY = rectData.y + cellHeight + 5
+        rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
+    end
 
-	if element.render then
-		element.render(aRect)
-	end
+    if element.texture then
+        local scale = element.scale or 1.6
 
-	if isHovered and element.tooltip then
-		local mx = rl.GetMouseX and rl.GetMouseX() or rectData.x
-		local my = rl.GetMouseY and rl.GetMouseY() or rectData.y
-		updateTooltip(dt, tostring(element), element.tooltip, mx, my)
-	end
+        local texW = element.texture.x * scale
+        local texH = element.texture.y * scale
 
-	local leftOverhang = math.max(0, (labelWidth - cellWidth) / 2)
-	local effectiveWidth = math.max(cellWidth, labelWidth) + leftOverhang
-	return effectiveWidth + (element.padding or 10)
-end
+        local iconX = rectData.x + effectiveWidth / 2 - texW / 2
+        local iconY = rectData.y + cellHeight / 2 - texH / 2
+
+        local iconRect = aRect.new(iconX, iconY, texW, texH)
+
+        rl.DrawTexturePro(
+        element.texture.texture,
+        structs.Rectangle:new({
+        x = 0,
+        y = 0,
+        width = element.texture.x, -- ✅ ORIGINAL SIZE
+        height = element.texture.y, -- ✅ ORIGINAL SIZE
+        }),
+        aRect:translate(iconRect),
+        vector.create(0, 0),
+        element.rotation or 0,
+        ImageColor
+        )
+    end
+
+    if element.render then
+        element.render(aRect)
+    end
+
+    if isHovered and element.tooltip then
+        local mx = rl.GetMouseX and rl.GetMouseX() or rectData.x
+        local my = rl.GetMouseY and rl.GetMouseY() or rectData.y
+        updateTooltip(dt, tostring(element), element.tooltip, mx, my)
+    end
+
+    return effectiveWidth + (element.padding or 10)
+ end
 
 local function renderToggleButton(xPos, name, element, windowData, dt)
 	local winX, winY = windowData.x, windowData.y + 80
@@ -522,6 +537,20 @@ local function renderSeperator(xPos, windowData, element)
 
 	return (element.width or 2) + (element.padding or 20)
 end
+
+local NewToolbarElement = Signal.new()
+ishared.NewToolbarElement = NewToolbarElement
+
+NewToolbarElement:Connect(function(categoryName, elementName, element)
+	if not categoryRegistry[categoryName] then
+		categoryRegistry[categoryName] = {
+			title = categoryName,
+			elements = {}
+		}
+	end
+
+	categoryRegistry[categoryName].elements[elementName] = element
+end)
 
 game.EngineSignal:Connect(function(route, name, data)
 	if route == "NewToolbarCategory" then

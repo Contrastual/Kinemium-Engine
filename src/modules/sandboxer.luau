@@ -4,13 +4,13 @@ local luau = zune.luau
 local task = zune.task
 local filesystem = require("./filesystem")
 
-sandboxer.enviroment = {}
+sandboxer.environment = {}
 sandboxer.native_code_gen = true
 sandboxer.thread = { active = {} }
 
 function sandboxer.run(code, chunk, env)
 	local options = {
-		env = env or sandboxer.enviroment,
+		env = env or sandboxer.environment,
 		chunk_name = chunk,
 		native_code_gen = sandboxer.native_code_gen,
 	}
@@ -20,7 +20,7 @@ function sandboxer.run(code, chunk, env)
 			optimization_level = 2,
 		})
 		local thread = luau.load(bytecode, options)
-		setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
+		setfenv(thread, setmetatable(env or sandboxer.environment, { __index = getfenv(1) }))
 
 		return thread()
 	end)

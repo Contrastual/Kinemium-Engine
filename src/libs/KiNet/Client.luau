@@ -11,7 +11,7 @@ local MAX_QUEUE_SIZE = 1000
 local HEARTBEAT_INTERVAL = 5
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
 local MAX_LOGICAL_MESSAGE_SIZE = 4 * 1024 * 1024
-local MESSAGE_TIMEOUT = 10
+local MESSAGE_TIMEOUT = 60
 local MTU_SIZE = 1000
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
@@ -458,6 +458,31 @@ function Client:Connect(arguments)
 		authToken = self.AuthToken,
 		arguments = arguments,
 	})
+
+	-- Retry connection if not authenticated
+	task.spawn(function()
+		local retries = 0
+		local MAX_CONNECT_RETRIES = 15
+		local CONNECT_RETRY_INTERVAL = 2
+
+		while not Client.IsAuthenticated and retries < MAX_CONNECT_RETRIES do
+			task.wait(CONNECT_RETRY_INTERVAL)
+			if Client.IsAuthenticated or not Client.Socket then
+				break
+			end
+			retries += 1
+			log(`Connection retry {retries}/{MAX_CONNECT_RETRIES} to {displayAddress}:{self.ServerPort}`)
+			Client:Send({
+				type = "CONNECT",
+				authToken = self.AuthToken,
+				arguments = arguments,
+			})
+		end
+
+		if not Client.IsAuthenticated and Client.Socket then
+			warn(`[KiNet][Client] Failed to connect to {displayAddress}:{self.ServerPort} after {MAX_CONNECT_RETRIES} retries`)
+		end
+	end)
 end
 
 function Client:OnRecieve(callback)

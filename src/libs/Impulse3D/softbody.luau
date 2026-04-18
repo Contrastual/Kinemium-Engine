@@ -139,7 +139,7 @@ function softbody.step(id: number, dt: number, gravity: Vector3Double)
 		end
 
 		local delta = p2.position - p1.position
-		local dist = delta.Magnitude
+		local dist = delta:Magnitude()
 		if dist < 1e-9 then
 			continue
 		end

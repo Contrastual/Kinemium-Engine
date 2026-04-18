@@ -6,10 +6,10 @@ local Serializer = require("./Serializer")
 Server.ConnectedClients = {}
 local onRecieveCallbacks = {}
 
-local HEARTBEAT_TIMEOUT = 15
+local HEARTBEAT_TIMEOUT = 120
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
 local MAX_LOGICAL_MESSAGE_SIZE = 4 * 1024 * 1024
-local MESSAGE_TIMEOUT = 10
+local MESSAGE_TIMEOUT = 60
 local MAX_CLIENTS = 130
 local MAX_MESSAGES_PER_CLIENT = 300
 local MTU_SIZE = 1000
@@ -204,14 +204,14 @@ function Server:FragmentMessage(data, messageId, serializedBuffer, reliable)
 
 	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
 	if totalFragments > MAX_FRAGMENT_COUNT then
-		error(
-			`Message {messageId} requires {totalFragments} fragments which exceeds the limit of {MAX_FRAGMENT_COUNT}`
-		)
+		error(`Message {messageId} requires {totalFragments} fragments which exceeds the limit of {MAX_FRAGMENT_COUNT}`)
 	end
 
 	if data.kind then
 		print(
-			`[KiNet][Server] Fragmenting {data.channel}:{data.kind} for {messageId} into {totalFragments} fragments ({buffer.len(buf)} bytes)`
+			`[KiNet][Server] Fragmenting {data.channel}:{data.kind} for {messageId} into {totalFragments} fragments ({buffer.len(
+				buf
+			)} bytes)`
 		)
 	end
 
@@ -242,14 +242,16 @@ function Server:ReassembleFragments(fragmentData, client)
 		return nil
 	end
 
-	if type(fragmentData.totalFragments) ~= "number"
+	if
+		type(fragmentData.totalFragments) ~= "number"
 		or fragmentData.totalFragments < 1
 		or fragmentData.totalFragments > MAX_FRAGMENT_COUNT
 	then
 		return nil
 	end
 
-	if type(fragmentData.fragmentIndex) ~= "number"
+	if
+		type(fragmentData.fragmentIndex) ~= "number"
 		or fragmentData.fragmentIndex < 0
 		or fragmentData.fragmentIndex >= fragmentData.totalFragments
 	then
@@ -320,7 +322,9 @@ function Server:ReassembleFragments(fragmentData, client)
 
 		client.fragmentBuffer[msgId] = nil
 
-		print(`[KiNet][Server] Reassembled fragmented message {msgId} from {clientKey(client)} ({fragmentState.totalFragments} fragments)`)
+		print(
+			`[KiNet][Server] Reassembled fragmented message {msgId} from {clientKey(client)} ({fragmentState.totalFragments} fragments)`
+		)
 
 		local ok, decoded = pcall(Serializer.Deserialize, completeData)
 		if not ok then
@@ -584,6 +588,18 @@ function Server._middleware(v, addr)
 		end
 
 		if v.type == "CONNECT" then
+			local existingClient = Server.ConnectedClients[key]
+			if existingClient and existingClient.authenticated then
+				-- Client is already connected; re-send existing AUTH_SUCCESS
+				-- (the previous one may have been lost over UDP)
+				Server:SendRaw(existingClient, {
+					type = "AUTH_SUCCESS",
+					sessionId = existingClient.sessionId,
+				})
+				existingClient.lastHeartbeat = os.time()
+				return
+			end
+
 			if #table.pack(Server.ConnectedClients) >= MAX_CLIENTS then
 				warn(`Max clients reached, rejecting {key}`)
 				return
@@ -731,7 +747,12 @@ function Server:Listen()
 					})
 				end
 
-				if decoded.reliable and client and decoded.messageId and not rememberReliableMessage(client, decoded.messageId) then
+				if
+					decoded.reliable
+					and client
+					and decoded.messageId
+					and not rememberReliableMessage(client, decoded.messageId)
+				then
 					continue
 				end
 

@@ -1,6 +1,6 @@
 local kilang = {}
 
-local Kinemium_env = require("./enviroment/get")
+local Kinemium_env = require("./environment/get")
 local sandboxer = require("./modules/sandboxer")
 local preprocessor = require("./kilang/Transpiler")
 local threads = {}
@@ -10,8 +10,8 @@ kilang.threads = threads
 
 function kilang:init(cam)
 	local luaEnv, CEnv = Kinemium_env(kilang.renderer, cam)
-	sandboxer.enviroment = luaEnv
-	kilang.env = sandboxer.enviroment
+	sandboxer.environment = luaEnv
+	kilang.env = sandboxer.environment
 	return CEnv
 end
 
@@ -33,9 +33,9 @@ function kilang:execute(code, opts)
 		id = "stack" .. math.random(0, 9999)
 	end
 
-	sandboxer.enviroment.SecurityCapabilities = SecurityCapabilities
+	sandboxer.environment.SecurityCapabilities = SecurityCapabilities
 
-	local thread, success, result = sandboxer.thread.fromCode(id, code, sandboxer.enviroment)
+	local thread, success, result = sandboxer.thread.fromCode(id, code, sandboxer.environment)
 	if success then
 		threads[id] = thread
 	end

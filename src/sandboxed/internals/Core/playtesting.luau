@@ -2,7 +2,6 @@
 local IsPlaytesting = false
 
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
-local clients = {}
 local playtestService = game:GetService("PlaytestService")
 
 repeat
@@ -21,9 +20,8 @@ NewCategoryToolbar:Fire("Playtest", {
 				if IsPlaytesting then
 					return
 				end
-				print("playtesting..")
 
-				playtestService.CreatePlaytestAsync()
+				playtestService.CreatePlaytestAsync(ishared.GameName or "Game")
 				IsPlaytesting = true
 			end,
 			hoverTransparency = 0.5,
@@ -35,13 +33,11 @@ NewCategoryToolbar:Fire("Playtest", {
 			type = "ImageButton",
 
 			callback = function()
-				local playtestService = game:GetService("PlaytestService")
-
 				if not IsPlaytesting then
 					return
 				end
 
-				playtestService.StopCurrentPlaytest()
+				playtestService.StopCurrentPlaytest(ishared.GameName or "Game")
 				IsPlaytesting = false
 			end,
 			hoverTransparency = 0.5,

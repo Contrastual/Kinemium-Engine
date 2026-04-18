@@ -126,7 +126,7 @@ There are a set of predefined scripts in there as examples, but you can change a
 
 # Can I make my games have modding support?
 Yes! there is a modding service called KinemiumModService (said up there)<br>
-This lets you add mods to your game, and you can set the enviroment of your said mods!
+This lets you add mods to your game, and you can set the environment of your said mods!
 
 # How do I spell Kinemium?
 Ki-nem-yum!!

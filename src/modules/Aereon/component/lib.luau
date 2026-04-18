@@ -26,6 +26,9 @@ end
 comps.cellitem = function(data)
 	return create("./objects/cellItem", data)
 end
+comps.modcard = function(data)
+	return create("./objects/modcard", data)
+end
 comps.UICellList = function(data)
 	return create("./objects/UICellList", data)
 end

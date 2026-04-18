@@ -40,7 +40,7 @@ function KiRend.new(config: KiRendConf)
 	lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 
 	local useVsync = if config.vsync == nil then false else config.vsync
-	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
+	local windowFlags = bit32.bor(const.ConfigFlags.FLAG_WINDOW_RESIZABLE, const.ConfigFlags.FLAG_MSAA_4X_HINT)
 	if useVsync then
 		windowFlags = bit32.bor(windowFlags, const.ConfigFlags.FLAG_VSYNC_HINT)
 	end
@@ -63,7 +63,6 @@ function KiRend.new(config: KiRendConf)
 
 	rlib.R3D_Init(config.width, config.height)
 	rlib.R3D_SetUpscaleMode(2)
-	rlib.R3D_SetAntiAliasingMode(1)
 	rlib.R3D_SetTextureWrap(raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
 
 	local lastRenderWidth, lastRenderHeight = config.width, config.height

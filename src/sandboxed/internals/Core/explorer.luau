@@ -859,6 +859,8 @@ explorerWindow.stepped = function(windowData)
 
 	-- Handle cloning
 	if ctrl then
+		game.Stop3DInput = true
+
 		if rl.IsKeyReleased(68) == 1 then
 			local selected = Selection.Get()
 			for _, v in pairs(selected) do

@@ -204,7 +204,10 @@ RunService.RenderStepped:Connect(function(dt)
 	humanoid:MoveRelative(moveInput, cameraBasis)
 	humanoid:SetSprinting(UserInputService:IsKeyDown(Enum.KeyCode.LeftShift))
 
-	local head = character.Head
+	local head = character:FindFirstChild("Head")
+	if not head then
+		return
+	end
 	local focusPos = head.CFrame.Position
 
 	local isFirstPerson = zoomDist <= 0.5
@@ -219,9 +222,9 @@ RunService.RenderStepped:Connect(function(dt)
 	smoothCamPos = (smoothCamPos or targetCamPos):Lerp(targetCamPos, alpha)
 
 	if zoomDist <= 0.5 then
-		character.Head.Transparency = 1
+		head.Transparency = 1
 	else
-		character.Head.Transparency = 0
+		head.Transparency = 0
 	end
 
 	local rayVector = smoothCamPos - focusPos

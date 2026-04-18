@@ -243,9 +243,31 @@ end
 
 -- public functions
 function Serializer.Serialize(value)
-	local size = math.max(4096, estimateSize(value) * 2)
-	local b = buffer.create(size)
-	local finalOffset = writeValue(b, 0, value)
+	-- Use a growable buffer approach to avoid underestimation errors.
+	-- Start with a reasonable default and double when needed.
+	local capacity = math.max(4096, estimateSize(value))
+	local b = buffer.create(capacity)
+	local finalOffset
+
+	-- writeValue may exceed our estimate for deeply nested structures or
+	-- large embedded buffers.  Retry with a larger allocation on failure.
+	local retries = 0
+	while retries < 8 do
+		local ok, result = pcall(writeValue, b, 0, value)
+		if ok then
+			finalOffset = result
+			break
+		end
+
+		-- Buffer was too small — double the capacity and retry.
+		retries += 1
+		capacity = capacity * 2
+		b = buffer.create(capacity)
+	end
+
+	if not finalOffset then
+		error("Serializer.Serialize: failed to serialize after retries (payload too large or circular)")
+	end
 
 	-- trim buffer to actual size
 	local trimmed = buffer.create(finalOffset)

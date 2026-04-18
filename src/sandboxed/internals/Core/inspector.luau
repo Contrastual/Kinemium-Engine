@@ -672,6 +672,10 @@ Selection.SelectionAdded:Connect(function(selected)
 	table.clear(udim2Expanded)
 	scrollOffset = 0
 
+	if not selected then
+		return
+	end
+
 	for propName, propValue in pairs(selected._props) do
 		if isBlacklisted(propName, propValue) then
 			continue

@@ -20,7 +20,7 @@ physics.substeps = 4
 physics.accumulator = 0
 physics.constraintIterations = 4
 physics.jointWarmStarting = true
-physics.broadphaseCellSize = 4 -- tune for your scene scale
+physics.broadphaseCellSize = 4
 
 local _broadphase = Broadphase.new(physics.broadphaseCellSize)
 local _activeContacts = {}

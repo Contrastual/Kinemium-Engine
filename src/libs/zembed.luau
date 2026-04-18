@@ -39,6 +39,14 @@ function lib.GetScriptsThatHas(str)
 	return results
 end
 
+function lib.GetPathEmbedded()
+	if lib.IsEmbedded() then
+		return "../"
+	else
+		return "./"
+	end
+end
+
 function lib.GetFilesThatHas(str)
 	local scripts = fs.embeddedFiles()
 	local results = {}

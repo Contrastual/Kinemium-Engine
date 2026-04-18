@@ -17,6 +17,10 @@ end
 local httpServerViewer = require("@httpServerViewer")
 
 _G.ENGINE_PROFILER = require("@profiler")
+_G.ENGINE_VERSION = "1.10.7"
+_G.ENGINE_ENDPOINT = {
+	MARKETPLACE = "https://quadigen.github.io/Kinemium-Engine-Plugins",
+}
 
 _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
@@ -185,7 +189,7 @@ end
 -- SETUP CAMERA
 local instancePointer = Instance.new("Camera")
 local Kinemium_camera = cam.callback(instancePointer, renderer)
-Kinemium_camera.Parent = sandboxer.enviroment.Workspace
+Kinemium_camera.Parent = sandboxer.environment.Workspace
 
 -- SETUP KILANG
 kilang.renderer = renderer
@@ -221,14 +225,6 @@ local function loadInternals()
 		return
 	end
 
-	local Folder
-
-	if not _G.IsClient then
-		Folder = Instance.new("Folder")
-		Folder.Name = "Studio"
-		Folder.Parent = kilang.env.game.CoreGui
-	end
-
 	loop(zembed.IsEmbedded() and "../../src/sandboxed/internals" or "src/sandboxed/internals", function(path, entry)
 		if kilang.threads[path] then
 			return
@@ -258,16 +254,6 @@ local function loadInternals()
 		elseif string.find(path, ".c") then
 			iodebug("Found C file!", path)
 			CEnv.runC(code)
-		end
-
-		local luauCleaned = string.gsub(entry.name, ".luau", "")
-		local luaCleaned = string.gsub(luauCleaned, ".lua", "")
-
-		if Folder then
-			local object = Instance.new("LocalScript")
-			object.Source = code
-			object.Name = luaCleaned
-			object.Parent = Folder
 		end
 	end)
 end
@@ -330,16 +316,9 @@ if FlagExists("kilang") or IsServer then
 end
 
 -- INITIALIZE ENGINE
-print("son")
-
 loadInternals()
-print("son")
-
 httpServerViewer:Init(renderer)
-print("son")
-
 Kinemium:run()
-print("son")
 
 -- RUN RENDERER
 renderer:Run()
