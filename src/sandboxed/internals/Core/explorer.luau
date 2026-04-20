@@ -56,7 +56,7 @@ local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
 local hoverspring = spring.new(2, 5)
 
-local notfound_tex = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("NotFound.svg"))
+local notfound_tex = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("NotFound.png"))
 
 local Theme = game:GetService("StudioThemeService").SelectedTheme
 local ThemeColors = {
@@ -116,7 +116,7 @@ task.spawn(function()
 
 	for class in pairs(classes) do
 		if not loadedIcon[class] then
-			local asset = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".svg")
+			local asset = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".png")
 
 			if asset then
 				loadedIcon[class] = KinemiumIconLoader.ToTexture(asset)
@@ -327,9 +327,9 @@ local scrollOffset = 0
 local contentHeight = 0
 local maxScroll = 0
 
-KinemiumIconLoader.new("Add", "./src/assets/images/icons/Add.svg")
-KinemiumIconLoader.new("ArrowRight", "./src/assets/images/icons/ArrowRight.svg")
-KinemiumIconLoader.new("ArrowDown", "./src/assets/images/icons/ArrowDown.svg")
+KinemiumIconLoader.new("Add", "./src/assets/images/icons/Add.png")
+KinemiumIconLoader.new("ArrowRight", "./src/assets/images/icons/ArrowRight.png")
+KinemiumIconLoader.new("ArrowDown", "./src/assets/images/icons/ArrowDown.png")
 
 local addIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Add"))
 local ArrowRight = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("ArrowRight"))
@@ -623,7 +623,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	rl.DrawRectangleRounded(structs.Rectangle:new(rectData), 0.5, 20, color:ToRaylib(transparency))
 
 	if not loadedIcon[instance.ClassName] then
-		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".svg")
+		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".png")
 		if svg then
 			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
 		end

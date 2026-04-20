@@ -91,6 +91,9 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	if mouse.Target then
+		if mouse.Target.BaseClass ~= "BasePart" then
+			return
+		end
 		if mouse.Target.Size.X > 200 or mouse.Target.Size.Y > 200 or mouse.Target.Size.Z > 200 then
 			return
 		end

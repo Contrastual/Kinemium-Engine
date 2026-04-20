@@ -498,7 +498,7 @@ NewCategoryToolbar:Fire("Tools", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Move.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Move.png"),
 		},
 		{
 			type = "ImageButton",
@@ -510,7 +510,7 @@ NewCategoryToolbar:Fire("Tools", {
 			text = "Rotate",
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Rotate.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Rotate.png"),
 		},
 		{
 			type = "ImageButton",
@@ -522,7 +522,7 @@ NewCategoryToolbar:Fire("Tools", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Size.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Size.png"),
 		},
 		{
 			type = "Separator",

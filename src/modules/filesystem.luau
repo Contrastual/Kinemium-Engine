@@ -29,6 +29,28 @@ function filesystem.entryloop(path, callback)
 	return true
 end
 
+function filesystem.walk(path, callback)
+	local entries = zunefs.entries(path)
+	if entries then
+		for _, entry in pairs(entries) do
+			callback(entry, entries)
+		end
+	end
+	return true
+end
+
+function filesystem.createFolder(path, name)
+	local combined = path .. "/" .. name
+	if not filesystem.exists(combined) then
+		zunefs.makeDir(combined)
+	end
+	return combined
+end
+
+function filesystem.exists(path)
+	return zunefs.stat(path).kind ~= "none"
+end
+
 function filesystem.read(file)
 	return zunefs.readFile(file)
 end

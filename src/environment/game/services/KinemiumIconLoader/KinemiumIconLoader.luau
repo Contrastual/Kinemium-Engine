@@ -106,17 +106,6 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			return
 		end,
 		ToTexture = function(path: string)
-			if textures[path] then
-				return textures[path]
-			end
-			if true then
-				return {
-					texture = raylib.lib.LoadTexture(path),
-					x = 0,
-					y = 0,
-				}
-			end
-
 			if zembed.IsEmbedded() then
 				if not path:match("^%a:") then -- ignore C:\ style paths
 					if path:match("^%.%./") then

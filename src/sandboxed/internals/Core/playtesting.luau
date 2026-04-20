@@ -27,7 +27,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Play.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Play.png"),
 		},
 		{
 			type = "ImageButton",
@@ -44,7 +44,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			text = "Stop",
 			hoverColor = Color3.new(1, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Pause.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Pause.png"),
 		},
 
 		{
@@ -65,7 +65,7 @@ NewCategoryToolbar:Fire("Playtest", {
 			hoverTransparency = 0.5,
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
-			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/MultipleDevices.svg"),
+			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/MultipleDevices.png"),
 		},
 	},
 })

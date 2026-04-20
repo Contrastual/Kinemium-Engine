@@ -15,6 +15,10 @@ if zune.platform.os == "windows" then
 	require("@vcredistInstaller")
 end
 local httpServerViewer = require("@httpServerViewer")
+local filesystem = require("@filesystem")
+
+filesystem.createFolder(".", ".temp")
+filesystem.createFolder("./src", "projects")
 
 _G.ENGINE_PROFILER = require("@profiler")
 _G.ENGINE_VERSION = "1.10.7"
