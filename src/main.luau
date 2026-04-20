@@ -19,7 +19,7 @@ local httpServerViewer = require("@httpServerViewer")
 _G.ENGINE_PROFILER = require("@profiler")
 _G.ENGINE_VERSION = "1.10.7"
 _G.ENGINE_ENDPOINT = {
-	MARKETPLACE = "https://quadigen.github.io/Kinemium-Engine-Plugins",
+	MARKETPLACE = "https://quadigen.github.io/Kinemium-Engine-Plugins/plugins.json",
 }
 
 _G.warn = function(...)
@@ -197,6 +197,7 @@ local CEnv = kilang:init(Kinemium_camera)
 
 local game = kilang.env.game
 kilang.env.FlagExists = FlagExists
+kilang.env.GetFlagValue = GetFlagValue
 
 -- SETUP PROFILER
 renderer:SetProfiler(ENGINE_PROFILER)

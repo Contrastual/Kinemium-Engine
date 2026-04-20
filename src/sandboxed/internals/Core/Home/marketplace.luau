@@ -103,14 +103,7 @@ end
 local cards = {}
 local pages = {}
 
-task.spawn(function()
-	local plugins = game.PluginLoader.GetPluginsMarketplace()
-	for _, plugin in pairs(plugins) do
-		table.insert(cards, createCard(plugin))
-		pages[plugin.manifest.id] = createPage(plugin)
-		print("Created for plugin " .. plugin.manifest.name)
-	end
-end)
+local plugins
 
 repeat
 	task.wait()
@@ -122,6 +115,15 @@ table.insert(ishared.Home.rendering, {
 	render = function(dt)
 		if ishared.Home.activePage ~= "Marketplace" then
 			return
+		end
+
+		if not plugins then
+			plugins = game.PluginLoader.GetPluginsMarketplace()
+			for _, plugin in pairs(plugins) do
+				table.insert(cards, createCard(plugin))
+				pages[plugin.manifest.id] = createPage(plugin)
+				print("Created for plugin " .. plugin.manifest.name)
+			end
 		end
 
 		local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()

@@ -8,15 +8,15 @@ local onRecieveCallbacks = {}
 
 local HEARTBEAT_TIMEOUT = 120
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
-local MAX_LOGICAL_MESSAGE_SIZE = 4 * 1024 * 1024
-local MESSAGE_TIMEOUT = 60
-local MAX_CLIENTS = 130
-local MAX_MESSAGES_PER_CLIENT = 300
-local MTU_SIZE = 1000
+local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
+local MESSAGE_TIMEOUT = 300
+local MAX_CLIENTS = 1000
+local MAX_MESSAGES_PER_CLIENT = 1000
+local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
-local MAX_RETRIES = 5
-local FRAGMENT_TIMEOUT = 10
-local MAX_FRAGMENT_COUNT = 4096
+local MAX_RETRIES = 15
+local FRAGMENT_TIMEOUT = 30
+local MAX_FRAGMENT_COUNT = 262144
 local MAX_SEQUENCE_WINDOW = 2048
 local MAX_PROCESSED_RELIABLE_MESSAGES = 2048
 
@@ -55,7 +55,7 @@ local function trackClientSequence(client, sequence)
 
 	while #client.recentSequenceOrder > MAX_SEQUENCE_WINDOW do
 		local oldest = table.remove(client.recentSequenceOrder, 1)
-		if oldest and oldest <= client.highestSequence - MAX_SEQUENCE_WINDOW then
+		if oldest then
 			client.recentSequences[oldest] = nil
 		end
 	end
@@ -430,9 +430,14 @@ function Server:SendReliable(client, data)
 		fragmentCount = #fragments,
 	}
 
-	for _, fragment in ipairs(fragments) do
-		self:SendRaw(client, fragment)
-	end
+	task.spawn(function()
+		for i, fragment in ipairs(fragments) do
+			self:SendRaw(client, fragment)
+			if i % 200 == 0 then
+				task.wait()
+			end
+		end
+	end)
 end
 
 function Server:SendRaw(client, data)
@@ -480,9 +485,14 @@ function Server:Send(client, data, reliable)
 				return
 			end
 
-			for _, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
-				self:SendRaw(client, fragment)
-			end
+			task.spawn(function()
+				for i, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
+					self:SendRaw(client, fragment)
+					if i % 200 == 0 then
+						task.wait()
+					end
+				end
+			end)
 			return
 		end
 
@@ -501,7 +511,8 @@ function Server:ProcessReliableQueue()
 				if client.authenticated and client.pendingAcks then
 					cleanupFragmentBuffer(client.fragmentBuffer, currentTime)
 					for msgId, ackData in pairs(client.pendingAcks) do
-						if currentTime - ackData.lastSent > ACK_TIMEOUT then
+						local dynamicTimeout = ACK_TIMEOUT + ((ackData.fragmentCount or 1) * 0.05)
+						if currentTime - ackData.lastSent > dynamicTimeout then
 							if ackData.attempts >= MAX_RETRIES then
 								warn(
 									`Message {msgId} to {key} failed after {MAX_RETRIES} retries (channel={ackData.channel or "?"}, kind={ackData.kind or "?"}, fragments={ackData.fragmentCount or 1})`
@@ -511,9 +522,14 @@ function Server:ProcessReliableQueue()
 								ackData.attempts = ackData.attempts + 1
 								ackData.lastSent = currentTime
 
-								for _, fragment in ipairs(ackData.fragments) do
-									self:SendRaw(client, fragment)
-								end
+								task.spawn(function()
+									for i, fragment in ipairs(ackData.fragments) do
+										self:SendRaw(client, fragment)
+										if i % 200 == 0 then
+											task.wait()
+										end
+									end
+								end)
 							end
 						end
 					end
@@ -640,6 +656,12 @@ function Server._middleware(v, addr)
 			return
 		end
 
+		-- Any valid message from the client keeps the session alive,
+		-- not just explicit HEARTBEAT packets. This prevents timeouts
+		-- when the client is actively sending owned-state or other data
+		-- but a heartbeat UDP packet gets lost.
+		client.lastHeartbeat = os.time()
+
 		if v.type == "DISCONNECT" then
 			Server.ConnectedClients[key] = nil
 			log(`Client ({key}) disconnected`)
@@ -647,10 +669,6 @@ function Server._middleware(v, addr)
 			if Server._onClientRemoved then
 				Server._onClientRemoved(addr)
 			end
-		end
-
-		if v.type == "HEARTBEAT" then
-			client.lastHeartbeat = os.time()
 		end
 	end
 end

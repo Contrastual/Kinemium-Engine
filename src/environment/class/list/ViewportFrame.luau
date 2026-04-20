@@ -123,7 +123,7 @@ return {
 
 				rlib.R3D_BeginEx(rtx, camera._raylibcam)
 				for _, child in pairs(object:GetDescendants()) do
-					if child:IsA("Part") or child:IsA("MeshPart") then
+					if child.BaseClass == "BasePart" then
 						if not child.CFrame or not child.Size then
 							continue
 						end

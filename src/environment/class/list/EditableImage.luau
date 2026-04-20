@@ -19,7 +19,9 @@ return {
 		instance:SetProperties(propTable)
 
 		instance._image = rlib.GenImageColor(instance.Size.X, instance.Size.Y, rconst.BLANK)
-		instance._texture = rlib.LoadTextureFromImage(instance._image)
+		if not _G.IsHeadless then
+			instance._texture = rlib.LoadTextureFromImage(instance._image)
+		end
 		instance._dirty = false
 
 		local _Vector2Struct = raylib.structs.Vector2
@@ -29,9 +31,13 @@ return {
 		instance.Changed:Connect(function(prop)
 			if prop == "Size" then
 				rlib.UnloadImage(instance._image)
-				rlib.UnloadTexture(instance._texture)
+				if not _G.IsHeadless then
+					rlib.UnloadTexture(instance._texture)
+				end
 				instance._image = rlib.GenImageColor(instance.Size.X, instance.Size.Y, rconst.BLANK)
-				instance._texture = rlib.LoadTextureFromImage(instance._image)
+				if not _G.IsHeadless then
+					instance._texture = rlib.LoadTextureFromImage(instance._image)
+				end
 				instance._dirty = false
 			end
 		end)
@@ -40,7 +46,7 @@ return {
 			if self._image then
 				rlib.UnloadImage(self._image)
 			end
-			if self._texture then
+			if self._texture and not _G.IsHeadless then
 				rlib.UnloadTexture(self._texture)
 			end
 			self._image = nil
@@ -122,8 +128,36 @@ return {
 		end
 
 		function instance:DrawImageProjected(mesh: any, projection: any, brushConfig: any)
-			-- Unimplemented complex software rasterization mock
-			warn("DrawImageProjected is currently unsupported.")
+			if mesh and mesh.class == "EditableMesh" and projection and brushConfig then
+				local faces = mesh:GetFaces()
+				local rcol = ColorStruct:new({ r = 255, g = 255, b = 255, a = 255 })
+
+				for _, faceId in ipairs(faces) do
+					local fvs = mesh:GetFaceVertices(faceId)
+					if #fvs == 3 then
+						local p1 = mesh:GetPosition(fvs[1])
+						local p2 = mesh:GetPosition(fvs[2])
+						local p3 = mesh:GetPosition(fvs[3])
+
+						-- Simplified 2D mapping (mock projection taking simple normalized coordinates)
+						local v1 = Vector2.new(
+							math.clamp(math.floor((p1.X + 1) * 0.5 * self.Size.X), 0, self.Size.X - 1),
+							math.clamp(math.floor((p1.Y + 1) * 0.5 * self.Size.Y), 0, self.Size.Y - 1)
+						)
+						local v2 = Vector2.new(
+							math.clamp(math.floor((p2.X + 1) * 0.5 * self.Size.X), 0, self.Size.X - 1),
+							math.clamp(math.floor((p2.Y + 1) * 0.5 * self.Size.Y), 0, self.Size.Y - 1)
+						)
+						local v3 = Vector2.new(
+							math.clamp(math.floor((p3.X + 1) * 0.5 * self.Size.X), 0, self.Size.X - 1),
+							math.clamp(math.floor((p3.Y + 1) * 0.5 * self.Size.Y), 0, self.Size.Y - 1)
+						)
+
+						rlib.ImageDrawTriangle(self._image, v1, v2, v3, rcol)
+					end
+				end
+			end
+			self._dirty = true
 		end
 
 		function instance:ReadPixelsBuffer(position: Vector2, size: Vector2): buffer

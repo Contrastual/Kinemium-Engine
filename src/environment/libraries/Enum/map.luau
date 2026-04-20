@@ -513,6 +513,12 @@ enumTable.VerticalAlignment = {
 	Bottom = 2,
 }
 
+enumTable.Style = {
+	AlternatingSupports = 0,
+	BridgeStyleSupports = 1,
+	NoSupports = 2,
+}
+
 enumTable.EasingStyle = {
 	Linear = 0,
 	Sine = 1,
@@ -607,6 +613,7 @@ enumTable.HumanoidStateType = {
 	Swimming = 5,
 	Climbing = 6,
 	Dead = 7,
+	Seated = 8,
 }
 
 enumTable.ZIndexBehavior = {

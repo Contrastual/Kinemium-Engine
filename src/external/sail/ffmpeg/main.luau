@@ -57,6 +57,8 @@ local FFMPG_ASSET_LINUX = "ffmpeg-master-latest-linux64-gpl-shared.tar.gz"
 local function getDownloadURL()
 	if platform.os == "windows" then
 		return `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/{FFMPG_ASSET_WINDOWS}`
+	elseif platform.os == "macos" then
+		error("FFmpeg prebuilt binaries for macOS are not available. You must clone and compile FFmpeg as a shared library and place it in the src/external/sail/bin directory.")
 	else
 		return `https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/{FFMPG_ASSET_LINUX}`
 	end
@@ -71,6 +73,10 @@ end
 local LIBRARY_PATH = fs.path.resolve(BIN_LOCATION, `avcodec-62.{ffi.suffix}`)
 
 if fs.stat(LIBRARY_PATH).kind == "none" then
+	if platform.os == "macos" then
+		error("FFmpeg prebuilt binaries for macOS are not available. You must clone and compile FFmpeg as a shared library and place the dylib files in the src/external/sail/bin directory.")
+	end
+
 	log(`Downloading FFmpeg for {platform.os}-{platform.cpu.arch}...`)
 
 	local res = request(getDownloadURL(), {

@@ -583,7 +583,7 @@ function NavMesh:CreateFromWorkspace(workspace: Instance?, agentHeight: number?,
 	end
 
 	for _, part in ipairs(descendants) do
-		if part:IsA("Part") and part.CanCollide and not part.Anchored == false then
+		if part.BaseClass == "BasePart" and part.CanCollide and not part.Anchored == false then
 			local size = part.Size
 			local pos = part.Position
 
@@ -639,7 +639,7 @@ function NavMesh:CreateFromParts(parts: { Instance }, agentHeight: number?, agen
 	local surfaces = {}
 
 	for _, part in ipairs(parts) do
-		if part:IsA("Part") and part.CanCollide then
+		if part.BaseClass == "BasePart" and part.CanCollide then
 			local size = part.Size
 			local pos = part.Position
 

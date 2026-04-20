@@ -10,13 +10,13 @@ local MAX_QUEUE_SIZE = 1000
 
 local HEARTBEAT_INTERVAL = 5
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
-local MAX_LOGICAL_MESSAGE_SIZE = 4 * 1024 * 1024
-local MESSAGE_TIMEOUT = 60
-local MTU_SIZE = 1000
+local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
+local MESSAGE_TIMEOUT = 300
+local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
-local FRAGMENT_TIMEOUT = 10
-local MAX_FRAGMENT_COUNT = 4096
+local FRAGMENT_TIMEOUT = 30
+local MAX_FRAGMENT_COUNT = 262144
 local MAX_SEQUENCE_WINDOW = 2048
 local MAX_PROCESSED_RELIABLE_MESSAGES = 2048
 
@@ -50,7 +50,7 @@ local function trackReceivedSequence(self, sequence)
 
 	while #self.ReceivedSequenceOrder > MAX_SEQUENCE_WINDOW do
 		local oldest = table.remove(self.ReceivedSequenceOrder, 1)
-		if oldest and oldest <= self.HighestReceivedSequence - MAX_SEQUENCE_WINDOW then
+		if oldest then
 			self.ReceivedSequences[oldest] = nil
 		end
 	end
@@ -278,7 +278,11 @@ function Client:ReassembleFragments(fragmentData)
 		return nil
 	end
 
-	cleanupFragmentBuffer(self.FragmentBuffer)
+	local now = os.clock()
+	if now - (self._lastFragmentCleanup or 0) > 1 then
+		self._lastFragmentCleanup = now
+		cleanupFragmentBuffer(self.FragmentBuffer)
+	end
 
 	if not self.FragmentBuffer[msgId] then
 		self.FragmentBuffer[msgId] = {
@@ -375,9 +379,14 @@ function Client:SendReliable(data)
 		fragmentCount = #fragments,
 	}
 
-	for _, fragment in ipairs(fragments) do
-		self:SendRaw(fragment)
-	end
+	task.spawn(function()
+		for i, fragment in ipairs(fragments) do
+			self:SendRaw(fragment)
+			if i % 200 == 0 then
+				task.wait()
+			end
+		end
+	end)
 end
 
 function Client:SendRaw(data)
@@ -424,7 +433,8 @@ function Client:ProcessReliableQueue()
 			cleanupFragmentBuffer(self.FragmentBuffer, currentTime)
 
 			for msgId, ackData in pairs(self.PendingAcks) do
-				if currentTime - ackData.lastSent > ACK_TIMEOUT then
+				local dynamicTimeout = ACK_TIMEOUT + ((ackData.fragmentCount or 1) * 0.05)
+				if currentTime - ackData.lastSent > dynamicTimeout then
 					if ackData.attempts >= MAX_RETRIES then
 						warn(
 							`Message {msgId} failed after {MAX_RETRIES} retries (channel={ackData.channel or "?"}, kind={ackData.kind or "?"}, fragments={ackData.fragmentCount or 1})`
@@ -434,11 +444,16 @@ function Client:ProcessReliableQueue()
 						ackData.attempts = ackData.attempts + 1
 						ackData.lastSent = currentTime
 
-						for _, fragment in ipairs(ackData.fragments) do
-							if self.Socket then
-								self:SendRaw(fragment)
+						task.spawn(function()
+							for i, fragment in ipairs(ackData.fragments) do
+								if self.Socket then
+									self:SendRaw(fragment)
+								end
+								if i % 200 == 0 then
+									task.wait()
+								end
 							end
-						end
+						end)
 					end
 				end
 			end
@@ -566,9 +581,14 @@ function Client:Send(data, reliable)
 				return
 			end
 
-			for _, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
-				self:SendRaw(fragment)
-			end
+			task.spawn(function()
+				for i, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
+					self:SendRaw(fragment)
+					if i % 200 == 0 then
+						task.wait()
+					end
+				end
+			end)
 			return
 		end
 
@@ -647,6 +667,7 @@ function Client:Listen()
 
 	self._listenRunning = true
 	self:ProcessReliableQueue()
+	self:StartHeartbeat()
 
 	task.spawn(function()
 		while self._listenRunning do

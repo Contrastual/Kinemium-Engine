@@ -174,7 +174,9 @@ function ServerPreview.BuildResponse(request, context)
 
 	local datamodel = context.datamodel
 	local now = os.time()
-	local defaultName = if datamodel and type(datamodel.Name) == "string" and datamodel.Name ~= ""
+	local defaultName = if datamodel
+			and type(datamodel.Name) == "string"
+			and datamodel.Name ~= ""
 		then datamodel.Name
 		else "Kinemium Server"
 
@@ -299,10 +301,7 @@ function ServerPreview.Ping(address, port, options)
 			end
 
 			local decodeOk, decoded = pcall(Serializer.Deserialize, data)
-			if decodeOk
-				and ServerPreview.IsResponse(decoded)
-				and decoded.requestId == request.requestId
-			then
+			if decodeOk and ServerPreview.IsResponse(decoded) and decoded.requestId == request.requestId then
 				response = decoded
 				done = true
 				return

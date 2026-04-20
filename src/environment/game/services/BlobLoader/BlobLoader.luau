@@ -26,6 +26,7 @@ BlobLoader.InitRenderer = function(renderer, renderer_signal, datamodel)
 			task.spawn(function()
 				local SerializationService = datamodel:GetService("SerializationService")
 				local instances = SerializationService.Deserialize(binary, nil, true)
+				print("[DEBUG] Deserialized instances. Root count:", instances and #instances or "nil")
 				if not instances then
 					return false
 				end
@@ -37,12 +38,16 @@ BlobLoader.InitRenderer = function(renderer, renderer_signal, datamodel)
 							end
 						end
 					else
+						print("[DEBUG] Merging root:", root.Name)
 						local liveService = mergeServiceSnapshot(root)
 						if not liveService then
+							print("[DEBUG] Parenting root to Workspace:", root.Name)
 							root.Parent = datamodel:GetService("Workspace") or datamodel
+							print("[DEBUG] Parented root to Workspace:", root.Name)
 						end
 					end
 				end
+				print("[DEBUG] Finished parenting all roots")
 			end)
 
 			return datamodel

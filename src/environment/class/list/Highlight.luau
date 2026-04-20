@@ -14,7 +14,7 @@ return {
 	callback = function(instance, renderer, datamodel)
 		renderer.Pool.new("gizmo", function()
 			local adornee = instance.Adornee
-			if adornee and adornee:IsA("Part") then
+			if adornee and adornee.BaseClass == "BasePart" then
 				local CFrame = adornee.CFrame
 				local Pos = CFrame.Position
 				local Size = adornee.Size

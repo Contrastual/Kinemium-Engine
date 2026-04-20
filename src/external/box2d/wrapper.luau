@@ -11,15 +11,7 @@ local function getPath(destination)
 	return src
 end
 
-local fileFormat = ""
-
-if platform == "windows" then
-	fileFormat = "dll"
-elseif platform == "macos" then
-	fileFormat = "dylib"
-elseif platform == "linux" then
-	fileFormat = "so"
-end
+local fileFormat = ffi.suffix
 
 local dir = getPath("src/external/box2d")
 

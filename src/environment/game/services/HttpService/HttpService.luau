@@ -47,7 +47,6 @@ HttpService.InitRenderer = function(renderer, renderer_signal, game)
 
 	function HttpService:GetAsync(url, headers, opts)
 		local res = request("GET", url, nil, headers, opts)
-		print(res.Body, res)
 		return JSON.decode(res.Body), res
 	end
 

@@ -14,3 +14,16 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DR3D_RAYLIB_VENDORED=ON -DR3D_ASSIMP_VENDOR
 also do --config release when building pls devcell pls pls
 
 the binaries for SAIL is full (every format)
+ffmpeg
+# Since FFmpeg does not provide official macOS shared builds, clone it and build it
+git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
+cd ffmpeg
+./configure --enable-shared --disable-static
+make -j$(sysctl -n hw.ncpu)
+# Copy the compiled .dylib files to src/external/sail/bin
+
+manifold
+cmake -S . -B build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release
+cd build
+cmake --build .
+# Copy libmanifold.dylib and libmanifoldc.dylib to src/external/manifold/bin

@@ -1,308 +1,322 @@
--- devcell
-local Instance = require("@Instance")
-local signal = require("@Kinemium.signal")
-local Enum = require("@EnumMap")
-local sandboxer = require("@sandboxer")
-local task = zune.task
-local fs = zune.fs
-local process = zune.process
-local kilang = require("@Kilang")
-local platform = zune.platform
 
-local ScriptRunnerService = Instance.new("ScriptRunnerService")
-ScriptRunnerService.ExplorerHidden = true
+local a=require"@Instance"
+local b=require"@Kinemium.signal"
+local c=require"@EnumMap"
+local d=require"@sandboxer"
+local e=zune.task
+local f=zune.fs
+local g=zune.process
+require"@Kilang"
+local h=zune.platform
 
-local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
-local userThreads = {}
-local externalEditorThreads = {}
+local i=a.new"ScriptRunnerService"
+i.ExplorerHidden=true
 
--- Thread metadata: { name, thread, env, status, memoryLimit, memoryUsed }
-local threadMeta = {}
+local j={luau={},python={},duktape={},quickjs={},luajit={}}
+local k={}
+local l={}
+local m={}
 
--- Global memory limit: 1GB per thread
-local DEFAULT_MEMORY_LIMIT = 1024 * 1024 * 1024 -- 1GB
--- Max buffer size: 1GB
-local MAX_BUFFER_SIZE = 1024 * 1024 * 1024 -- 1GB
+
+local n={}
+
+
+local o=1073741824
+
+local p=1073741824
 
 local function getMemoryUsage()
-	local ok, result = platform.getTotalMemory()
-	if ok then
-		return result
-	end
-	return 0
+local q,r=h.getTotalMemory()
+if q then
+return r
+end
+return 0
 end
 
-local function createThreadInfo(name, thread, env, language)
-	local info = {
-		name = name,
-		thread = thread,
-		env = env,
-		language = language or "luau",
-		status = "running",
-		memoryLimit = DEFAULT_MEMORY_LIMIT,
-		memoryAtStart = getMemoryUsage(),
-		createdAt = os.clock(),
-		globals = {},
-	}
-	threadMeta[name] = info
-	return info
+local function createThreadInfo(q,r,s,t)
+local u={
+name=q,
+thread=r,
+env=s,
+language=t or"luau",
+status="running",
+memoryLimit=o,
+memoryAtStart=getMemoryUsage(),
+createdAt=os.clock(),
+globals={},
+}
+n[q]=u
+return u
 end
 
-ScriptRunnerService.Initenvironment = function(environment, datamodel)
-	local ScriptRan = signal.new()
+i.Initenvironment=function(q,r)
+b.new()
 
-	ScriptRunnerService:SetProperties({
-		RunLuauScript = function(ScriptInstance)
-			local LogService = datamodel:GetService("LogService")
-			local outsideSuccess, outsideResult
-			local scriptEnv = table.clone(environment)
-			scriptEnv.script = ScriptInstance
+i:SetProperties{
+CreateScriptingRuntime=function(s,t,u)
+m[s]={runner=t,clearer=u}
+end,
 
-			local object = task.spawn(function()
-				local _, success, result = sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, scriptEnv)
+RunLuauScript=function(s)
+local t=r:GetService"LogService"
+local u,v
+local w=table.clone(q)
+w.script=s
 
-				scriptEnv.script = nil
-				outsideSuccess = success
-				outsideResult = result
-			end)
+local x=e.spawn(function()local
+x, y, z=d.run(s.Source,s.Name,w)
 
-			threads.luau[ScriptInstance.Name] = object
-			createThreadInfo(ScriptInstance.Name, object, scriptEnv, "luau")
+w.script=nil
+u=y
+v=z
+end)
 
-			if not outsideSuccess and outsideResult ~= nil then
-				LogService.CreateLog("error", outsideResult)
-			end
-			return outsideResult
-		end,
+j.luau[s.Name]=x
+createThreadInfo(s.Name,x,w,"luau")
 
-		RunPythonScript = function(ScriptInstance)
-			local python = require("@python")
-			local VM = python.PythonVM.new()
+if not u and v~=nil then
+t.CreateLog("error",v)
+end
+return v
+end,
 
-			for k, p in pairs(environment) do
-				VM:setGlobal(k, p)
-			end
+RunPythonScript=function(s)
+local t=require"@python"
+local u=t.PythonVM.new()
 
-			threads.python[ScriptInstance.Name] = VM
-			createThreadInfo(ScriptInstance.Name, VM, nil, "python")
-
-			return VM:execute(ScriptInstance.Source), VM
-		end,
-
-		RunQuickJS = function(ScriptInstance)
-			local qjsvm = require("@quickjs")
-
-			local object = task.spawn(function()
-				local VM = qjsvm.new()
-				VM.Evaluate(ScriptInstance.Source)
-			end)
-
-			threads.duktape[ScriptInstance.Name] = object
-			createThreadInfo(ScriptInstance.Name, object, nil, "quickjs")
-			return object
-		end,
-
-		RunScript = function(ScriptInstance)
-			local language = ScriptInstance.Language
-
-			if language == Enum.Language.Luau then
-				return ScriptRunnerService.RunLuauScript(ScriptInstance)
-			elseif language == Enum.Language.Python then
-				return ScriptRunnerService.RunPythonScript(ScriptInstance)
-			elseif language == Enum.Language.JavaScript then
-				return ScriptRunnerService.RunQuickJS(ScriptInstance)
-			end
-			return
-		end,
-
-		-- Get all raw thread objects (legacy)
-		GetActive = function()
-			return threads
-		end,
-
-		-- Get thread metadata by script name
-		GetThread = function(name)
-			return threadMeta[name]
-		end,
-
-		-- Get all thread metadata
-		GetAllThreads = function()
-			local result = {}
-			for name, info in pairs(threadMeta) do
-				result[name] = {
-					name = info.name,
-					language = info.language,
-					status = info.status,
-					memoryLimit = info.memoryLimit,
-					createdAt = info.createdAt,
-					globals = info.globals,
-				}
-			end
-			return result
-		end,
-
-		-- Get thread status
-		GetThreadStatus = function(name)
-			local info = threadMeta[name]
-			if not info then
-				return "unknown"
-			end
-			return info.status
-		end,
-
-		-- Insert a global variable into a running thread's environment
-		SetGlobal = function(name, key, value)
-			local info = threadMeta[name]
-			if not info then
-				warn(`[ScriptRunner] Thread '{name}' not found`)
-				return false
-			end
-
-			if info.env then
-				info.env[key] = value
-				info.globals[key] = true
-				return true
-			else
-				warn(`[ScriptRunner] Thread '{name}' does not have an accessible environment`)
-				return false
-			end
-		end,
-
-		-- Get a global variable from a thread's environment
-		GetGlobal = function(name, key)
-			local info = threadMeta[name]
-			if not info or not info.env then
-				return nil
-			end
-			return info.env[key]
-		end,
-
-		-- Set memory limit for a specific thread
-		SetMemoryLimit = function(name, bytes)
-			local info = threadMeta[name]
-			if not info then
-				warn(`[ScriptRunner] Thread '{name}' not found`)
-				return false
-			end
-			info.memoryLimit = math.min(bytes, DEFAULT_MEMORY_LIMIT)
-			return true
-		end,
-
-		-- List all globals injected into a thread
-		GetThreadGlobals = function(name)
-			local info = threadMeta[name]
-			if not info then
-				return {}
-			end
-			local globals = {}
-			for key in pairs(info.globals) do
-				table.insert(globals, key)
-			end
-			return globals
-		end,
-
-		RegisterUserThread = function(thread)
-			table.insert(userThreads, thread)
-		end,
-
-		Clear = function()
-			for _, thread in pairs(threads.luau) do
-				task.cancel(thread)
-			end
-
-			for _, thread in pairs(threads.python) do
-				thread:close()
-			end
-
-			for _, thread in pairs(threads.duktape) do
-				thread:close()
-			end
-
-			for _, thread in pairs(userThreads) do
-				pcall(task.cancel, thread)
-			end
-
-			for uniqueId, thread in pairs(externalEditorThreads) do
-				pcall(task.cancel, thread)
-				externalEditorThreads[uniqueId] = nil
-			end
-
-			-- Mark all thread metadata as dead
-			for name, info in pairs(threadMeta) do
-				info.status = "dead"
-			end
-
-			threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
-			userThreads = {}
-			threadMeta = {}
-		end,
-
-		OpenInExternalEditor = function(script, program, folderPath)
-			local path = folderPath .. "/" .. script.UniqueId .. ".luau"
-			fs.writeFile(path, script.Source)
-
-			script.IsOverridden = true
-
-			local abs = fs.realPath(path)
-
-			local command
-			local args = { abs }
-
-			if program == "vscode" then
-				command = "code"
-			elseif program == "note" then
-				command = "notepad"
-			else -- "let my os choose"
-				command = "start"
-				args = { "", abs } -- important: empty title for start
-			end
-
-			task.spawn(function()
-				process.run(command, args, { shell = true })
-			end)
-
-			local existingThread = externalEditorThreads[script.UniqueId]
-			if existingThread then
-				pcall(task.cancel, existingThread)
-			end
-
-			local syncThread
-			syncThread = task.spawn(function()
-				local lastSource = script.Source
-				while not script.Destroyed do
-					local ok, stat = pcall(fs.stat, path)
-					if not ok or not stat or stat.kind == "none" then
-						break
-					end
-
-					local okRead, source = pcall(fs.readFile, path)
-					if okRead and source ~= lastSource then
-						lastSource = source
-						script.Source = source
-					end
-
-					task.wait(0.3)
-				end
-
-				if externalEditorThreads[script.UniqueId] == syncThread then
-					externalEditorThreads[script.UniqueId] = nil
-				end
-			end)
-			externalEditorThreads[script.UniqueId] = syncThread
-		end,
-
-		-- Memory limit getter
-		GetDefaultMemoryLimit = function()
-			return DEFAULT_MEMORY_LIMIT
-		end,
-
-		-- Max buffer size getter
-		GetMaxBufferSize = function()
-			return MAX_BUFFER_SIZE
-		end,
-	})
-
-	return ScriptRunnerService
+for v,w in pairs(q)do
+u:setGlobal(v,w)
 end
 
-return ScriptRunnerService
+j.python[s.Name]=u
+createThreadInfo(s.Name,u,nil,"python")
+
+return u:execute(s.Source),u
+end,
+
+RunQuickJS=function(s)
+local t=require"@quickjs"
+
+local u=e.spawn(function()
+local u=t.new()
+u.Evaluate(s.Source)
+end)
+
+j.duktape[s.Name]=u
+createThreadInfo(s.Name,u,nil,"quickjs")
+return u
+end,
+
+RunScript=function(s)
+local t=s.Language
+
+if m[t]then
+return m[t].runner(s)
+end
+
+return
+end,
+
+
+GetActive=function()
+return j
+end,
+
+
+GetThread=function(s)
+return n[s]
+end,
+
+
+GetAllThreads=function()
+local s={}
+for t,u in pairs(n)do
+s[t]={
+name=u.name,
+language=u.language,
+status=u.status,
+memoryLimit=u.memoryLimit,
+createdAt=u.createdAt,
+globals=u.globals,
+}
+end
+return s
+end,
+
+
+GetThreadStatus=function(s)
+local t=n[s]
+if not t then
+return"unknown"
+end
+return t.status
+end,
+
+
+SetGlobal=function(s,t,u)
+local v=n[s]
+if not v then
+warn(`[ScriptRunner] Thread '{s}' not found`)
+return false
+end
+
+if v.env then
+v.env[t]=u
+v.globals[t]=true
+return true
+else
+warn(`[ScriptRunner] Thread '{s}' does not have an accessible environment`)
+return false
+end
+end,
+
+
+GetGlobal=function(s,t)
+local u=n[s]
+if not u or not u.env then
+return nil
+end
+return u.env[t]
+end,
+
+
+SetMemoryLimit=function(s,t)
+local u=n[s]
+if not u then
+warn(`[ScriptRunner] Thread '{s}' not found`)
+return false
+end
+u.memoryLimit=math.min(t,o)
+return true
+end,
+
+
+GetThreadGlobals=function(s)
+local t=n[s]
+if not t then
+return{}
+end
+local u={}
+for v in pairs(t.globals)do
+table.insert(u,v)
+end
+return u
+end,
+
+RegisterUserThread=function(s)
+table.insert(k,s)
+end,
+
+Clear=function()
+for s,t in pairs(m)do
+if t.clearer then
+t.clearer()
+end
+end
+
+for s,t in pairs(k)do
+pcall(e.cancel,t)
+end
+
+for s,t in pairs(l)do
+pcall(e.cancel,t)
+l[s]=nil
+end
+
+
+for s,t in pairs(n)do
+t.status="dead"
+end
+
+j={luau={},python={},duktape={},quickjs={},luajit={}}
+k={}
+n={}
+end,
+
+OpenInExternalEditor=function(s,t,u)
+local v=u.."/"..s.UniqueId..".luau"
+f.writeFile(v,s.Source)
+
+s.IsOverridden=true
+
+local w=f.realPath(v)
+
+local x
+local y={w}
+
+if t=="vscode"then
+x="code"
+elseif t=="note"then
+x="notepad"
+else
+x="start"
+y={"",w}
+end
+
+e.spawn(function()
+g.run(x,y,{shell=true})
+end)
+
+local z=l[s.UniqueId]
+if z then
+pcall(e.cancel,z)
+end
+
+local A
+A=e.spawn(function()
+local B=s.Source
+while not s.Destroyed do
+local C,D=pcall(f.stat,v)
+if not C or not D or D.kind=="none"then
+break
+end
+
+local E,F=pcall(f.readFile,v)
+if E and F~=B then
+B=F
+s.Source=F
+end
+
+e.wait(0.3)
+end
+
+if l[s.UniqueId]==A then
+l[s.UniqueId]=nil
+end
+end)
+l[s.UniqueId]=A
+end,
+
+
+GetDefaultMemoryLimit=function()
+return o
+end,
+
+
+GetMaxBufferSize=function()
+return p
+end,
+}
+
+i.CreateScriptingRuntime(c.Language.Luau,i.RunLuauScript,function()
+for s,t in pairs(j.luau)do
+e.cancel(t)
+end
+end)
+
+i.CreateScriptingRuntime(c.Language.Python,i.RunPythonScript,function()
+for s,t in pairs(j.python)do
+t:close()
+end
+end)
+
+i.CreateScriptingRuntime(c.Language.JavaScript,i.RunQuickJS,function()
+for s,t in pairs(j.duktape)do
+t:close()
+end
+end)
+
+return i
+end
+
+return i

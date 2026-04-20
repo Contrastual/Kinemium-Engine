@@ -1,0 +1,21 @@
+local propTable = {
+	Name = "Motor6D",
+	BaseClass = "Kinemium.weld",
+
+	DesireAngle = 0,
+	CurrentAngle = 0,
+	MaxVelocity = 0,
+}
+
+return {
+	class = "Motor6D",
+	callback = function(instance)
+		instance:SetProperties(propTable)
+		return instance
+	end,
+	inherit = function(tble)
+		for prop, val in pairs(propTable) do
+			tble[prop] = val
+		end
+	end,
+}

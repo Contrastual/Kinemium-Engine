@@ -2871,6 +2871,7 @@ enums.SecurityCapability = {
 	Input = 17,
 	Environment = 18,
 	RemoteEvent = 19,
+	UnreliableRemoteEvent = 73,
 	LegacySound = 20,
 	Players = 21,
 	CapabilityControl = 22,

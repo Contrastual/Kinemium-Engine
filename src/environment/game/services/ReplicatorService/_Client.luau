@@ -183,18 +183,25 @@ function Client.init(context)
 	end
 
 	local function injectRemoteEventHook(object)
-		if object.ClassName ~= "RemoteEvent" then
-			return
+		if object.ClassName == "RemoteEvent" then
+			object:SetProperties({
+				FireServer = function(self, ...)
+					networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
+						object = self.NetworkId,
+						args = table.pack(...),
+					}, true)
+				end,
+			})
+		elseif object.ClassName == "UnreliableRemoteEvent" then
+			object:SetProperties({
+				FireServer = function(self, ...)
+					networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, {
+						object = self.NetworkId,
+						args = table.pack(...),
+					}, false)
+				end,
+			})
 		end
-
-		object:SetProperties({
-			FireServer = function(self, ...)
-				networkService:SendToServer(Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
-					object = self.NetworkId,
-					args = table.pack(...),
-				}, true)
-			end,
-		})
 	end
 
 	local function queueOwnedPatch(object, prop, value)
@@ -642,7 +649,7 @@ function Client.init(context)
 			})
 
 			-- Progress report and yield every 50 objects to keep network alive
-			if i % 50 == 0 then
+			if i % 10 == 0 then
 				print(`[Replicator][Client]   Progress: {i}/{#deserialized} objects processed...`)
 				task.wait()
 			end
@@ -676,9 +683,12 @@ function Client.init(context)
 
 		print(`[Replicator][Client] handleCreate: parenting {#deferred} deferred objects...`)
 		local retryQueue = {}
-		for _, entry in ipairs(deferred) do
+		for i, entry in ipairs(deferred) do
 			if not tryParent(entry) then
 				table.insert(retryQueue, entry)
+			end
+			if i % 10 == 0 then
+				task.wait()
 			end
 		end
 
@@ -696,7 +706,7 @@ function Client.init(context)
 				table.insert(retryQueue, entry)
 			end
 			retryYieldCount += 1
-			if retryYieldCount % 50 == 0 then
+			if retryYieldCount % 10 == 0 then
 				task.wait()
 			end
 		end
@@ -720,7 +730,7 @@ function Client.init(context)
 			-- Apply any snapshot state that arrived before this object was in lookup
 			flushPendingSnapshot(entry.object)
 
-			if i % 50 == 0 then
+			if i % 10 == 0 then
 				task.wait()
 			end
 		end
@@ -1092,7 +1102,21 @@ function Client.init(context)
 		end
 
 		local args = payload.args or {}
-		object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
+		if type(object.OnClientEvent.Fire) == "function" then
+			object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
+		end
+	end)
+
+	networkService:RegisterMessageHandler(Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, function(_, payload)
+		local object = lookup[payload.object]
+		if not object or object.ClassName ~= "UnreliableRemoteEvent" then
+			return
+		end
+
+		local args = payload.args or {}
+		if type(object.OnClientEvent.Fire) == "function" then
+			object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
+		end
 	end)
 
 	networkService:RegisterMessageHandler(

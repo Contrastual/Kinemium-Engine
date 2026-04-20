@@ -54,7 +54,7 @@ return {
 
 		function instance:ScaleTo(factor)
 			for _, child in ipairs(self:GetChildren()) do
-				if child:IsA("Part") then
+				if child.BaseClass == "BasePart" then
 					child.Size = child.Size * factor
 					child.CFrame = self.WorldPivot + ((child.CFrame.Position - self.WorldPivot.Position) * factor)
 				end

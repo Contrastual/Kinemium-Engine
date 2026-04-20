@@ -1,8 +1,8 @@
 <!--
-category: System
-tags: [reshape, edit, adjust, modify, transform, center, point, change, design, move]
-version: "2.47"
-unicode: "fda9"
+tags: [direction, navigation, left, right, up, down, north, south, west, east, higher, lower]
+category: Arrows
+version: "1.73"
+unicode: "f22f"
 -->
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -10,17 +10,18 @@ unicode: "fda9"
   height="24"
   viewBox="0 0 24 24"
   fill="none"
-  stroke="#ffffff"
+  stroke="white"
   stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
 >
-  <path d="M3 4a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
-  <path d="M3 18a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
-  <path d="M17 4a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
-  <path d="M17 18a1 1 0 0 1 1 -1h2a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-2a1 1 0 0 1 -1 -1l0 -2" />
-  <path d="M11 5h2" />
-  <path d="M5 11v2" />
-  <path d="M19 11v2" />
-  <path d="M11 19h2" />
+  <path d="M18 9l3 3l-3 3" />
+  <path d="M15 12h6" />
+  <path d="M6 9l-3 3l3 3" />
+  <path d="M3 12h6" />
+  <path d="M9 18l3 3l3 -3" />
+  <path d="M12 15v6" />
+  <path d="M15 6l-3 -3l-3 3" />
+  <path d="M12 3v6" />
 </svg>
+

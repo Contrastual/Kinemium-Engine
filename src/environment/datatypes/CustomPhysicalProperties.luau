@@ -18,7 +18,7 @@ function CustomPhysicalProperties.new(
 )
 	local self = setmetatable({}, CustomPhysicalProperties)
 
-	self.Density = density or 1.0
+	self.Density = density or 0.7
 	self.Friction = friction or 0.3
 	self.Elasticity = elasticity or 0.5
 	self.FrictionWeight = frictionWeight or 1.0

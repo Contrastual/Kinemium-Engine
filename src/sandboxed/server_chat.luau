@@ -9,6 +9,7 @@ remoteEvent.Name = "ChatRemote"
 remoteEvent.Parent = InternalStorage
 
 local ChatService = game:GetService("ChatService")
+local Players = game:GetService("Players")
 
 local cache = {}
 
@@ -17,6 +18,28 @@ local lastMessageTime = {}
 
 local function getPlayerColor(player)
 	return Color3.fromHSV((player.UserId % 100) / 100, 0.7, 1)
+end
+
+ChatService.CreateChatMessage = function(player, message)
+	remoteEvent:Fire(player, {
+		name = "SERVER",
+		message = message,
+		color = Color3.new(1, 1, 1),
+	})
+end
+
+ChatService.CreateChatMessageForPlayers = function(players, message)
+	for _, player in ipairs(players) do
+		ChatService.CreateChatMessage(player, message)
+	end
+end
+
+ChatService.CreateChatMessageForAll = function(message)
+	remoteEvent:FireAllClients({
+		name = "SERVER",
+		message = message,
+		color = Color3.new(1, 1, 1),
+	})
 end
 
 remoteEvent.OnServerEvent:Connect(function(player, message)
@@ -48,4 +71,6 @@ remoteEvent.OnServerEvent:Connect(function(player, message)
 		message = message,
 		color = getPlayerColor(player),
 	})
+
+	print(`[CHAT]: [{player.Name}]: {message}`)
 end)

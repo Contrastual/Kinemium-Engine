@@ -341,7 +341,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local function chunkVisible(chunk, camPos, maxDist, frustum)
 		local toCenter = chunk.center - camPos
 		local distSq = toCenter:MagnitudeSquared()
-		local r = chunk.boundsRadius
+		local r = chunk.boundsRadius + (chunk.maxPartSize or 0) * 0.866
 		local maxReach = maxDist + r
 		if distSq > maxReach * maxReach then
 			return false
@@ -434,7 +434,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	signal:Connect(function(route, data) end)
 
 	local function isRenderable(obj)
-		return obj:IsA("Part") or obj:IsA("MeshPart")
+		return obj.BaseClass == "BasePart"
 	end
 
 	local function visitSubtree(root, callback)
@@ -1011,6 +1011,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end
 		chunk.maxPartSize = maxPS
+		
+		local expansion = maxPS * 0.5
+		chunk.r3dAABB = structs.BoundingBox:new({
+			min = vector.create(chunk.aabbMin.X - expansion, chunk.aabbMin.Y - expansion, chunk.aabbMin.Z - expansion),
+			max = vector.create(chunk.aabbMax.X + expansion, chunk.aabbMax.Y + expansion, chunk.aabbMax.Z + expansion),
+		})
 
 		for i = 1, #chunk.batchList do
 			local batch = chunk.batchList[i]

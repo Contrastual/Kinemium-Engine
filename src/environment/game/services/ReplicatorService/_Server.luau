@@ -7,12 +7,11 @@ local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
 local CFrame = require("@CFrame")
 local InputActionService = require("../InputActionService/InputActionService")
 
-local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 2
+local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
-local REPLICATION_TARGET_BYTES = 48 * 1024
+local REPLICATION_TARGET_BYTES = 50 * 1024
 local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
 local MAX_SNAPSHOT_STATES_PER_MESSAGE = 96
-local MAX_CREATE_ROOTS_PER_MESSAGE = 24
 
 local function packArgs(...)
 	return table.pack(...)
@@ -520,8 +519,10 @@ function Server.init(context)
 	end
 
 	local function sendCreate(recipient, roots)
+		print("[DEBUG] sendCreate called for", roots and #roots or "nil", "roots")
 		local serializable = collectSerializableRoots(roots)
 		if #serializable == 0 then
+			print("[DEBUG] sendCreate: 0 serializable roots")
 			return
 		end
 
@@ -535,7 +536,9 @@ function Server.init(context)
 				return
 			end
 
+			print("[DEBUG] serializing objects for batch of size", #batch)
 			local serialized = serializeObjects(batch)
+			print("[DEBUG] serialized result:", serialized and "success" or "failed")
 
 			if not serialized then
 				-- If the whole batch failed, try sending each root individually.
@@ -607,11 +610,14 @@ function Server.init(context)
 			-- processes it in a single handleCreate call instead of spawning dozens
 			-- of parallel coroutines that fight for CPU time.
 			-- KiNet handles fragmentation if it exceeds MTU_SIZE.
+			print("[DEBUG] Sending batch to recipient")
 			sendBatch(serializable)
+			print("[DEBUG] Done sending batch to recipient")
 		else
 			-- Runtime broadcast (new objects spawned during gameplay): use small
 			-- batches so each packet stays lightweight.
 			local ROOTS_PER_BATCH = 8
+			print("[DEBUG] Sending broadcast batches for", #serializable, "items")
 			for i = 1, #serializable, ROOTS_PER_BATCH do
 				local batch = {}
 				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
@@ -619,6 +625,7 @@ function Server.init(context)
 				end
 				sendBatch(batch)
 			end
+			print("[DEBUG] Done sending broadcast batches")
 		end
 
 		sendPatchEntries(recipient, collectReferencePatchEntries(serializable))
@@ -711,44 +718,77 @@ function Server.init(context)
 	end
 
 	injectRemoteEventHooks = function(object)
-		if object.ClassName ~= "RemoteEvent" then
-			return
-		end
-
-		object:SetProperties({
-			FireClient = function(self, player, ...)
-				local session = networkService:GetSessionByUserId(player.UserId)
-				if not session then
-					return
-				end
-
-				networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
-					object = self.NetworkId,
-					args = packArgs(...),
-				}, true)
-			end,
-			FireAllClients = function(self, ...)
-				networkService:Broadcast(Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
-					object = self.NetworkId,
-					args = packArgs(...),
-				}, true)
-			end,
-			FireClients = function(self, players, ...)
-				local args = packArgs(...)
-				for _, player in ipairs(players or {}) do
+		if object.ClassName == "RemoteEvent" then
+			object:SetProperties({
+				FireClient = function(self, player, ...)
 					local session = networkService:GetSessionByUserId(player.UserId)
-					if session then
-						networkService:SendToClient(
-							session,
-							Protocol.Channels.Message,
-							Protocol.Kinds.RemoteEvent,
-							{ object = self.NetworkId, args = args },
-							true
-						)
+					if not session then
+						return
 					end
-				end
-			end,
-		})
+
+					networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
+						object = self.NetworkId,
+						args = packArgs(...),
+					}, true)
+				end,
+				FireAllClients = function(self, ...)
+					networkService:Broadcast(Protocol.Channels.Message, Protocol.Kinds.RemoteEvent, {
+						object = self.NetworkId,
+						args = packArgs(...),
+					}, true)
+				end,
+				FireClients = function(self, players, ...)
+					local args = packArgs(...)
+					for _, player in ipairs(players or {}) do
+						local session = networkService:GetSessionByUserId(player.UserId)
+						if session then
+							networkService:SendToClient(
+								session,
+								Protocol.Channels.Message,
+								Protocol.Kinds.RemoteEvent,
+								{ object = self.NetworkId, args = args },
+								true
+							)
+						end
+					end
+				end,
+			})
+		elseif object.ClassName == "UnreliableRemoteEvent" then
+			object:SetProperties({
+				FireClient = function(self, player, ...)
+					local session = networkService:GetSessionByUserId(player.UserId)
+					if not session then
+						return
+					end
+
+					networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, {
+						object = self.NetworkId,
+						args = packArgs(...),
+					}, false)
+				end,
+				FireAllClients = function(self, ...)
+					networkService:Broadcast(Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, {
+						object = self.NetworkId,
+						args = packArgs(...),
+					}, false)
+				end,
+				FireClients = function(self, players, ...)
+					local args = packArgs(...)
+					for _, player in ipairs(players or {}) do
+						local session = networkService:GetSessionByUserId(player.UserId)
+						if session then
+							networkService:SendToClient(
+								session,
+								Protocol.Channels.Message,
+								Protocol.Kinds.UnreliableRemoteEvent,
+								{ object = self.NetworkId, args = args },
+								false
+							)
+						end
+					end
+				end,
+			})
+		end
 	end
 
 	local function completeRemoteFunctionInvocation(requestId, payload)
@@ -1022,6 +1062,21 @@ function Server.init(context)
 		function(session, payload)
 			local object = lookup[payload.object]
 			if not object or object.ClassName ~= "RemoteEvent" then
+				return
+			end
+
+			local player = session and session.player or nil
+			local args = payload.args or {}
+			object.OnServerEvent:Fire(player, table.unpack(args, 1, args.n or #args))
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.UnreliableRemoteEvent,
+		function(session, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "UnreliableRemoteEvent" then
 				return
 			end
 

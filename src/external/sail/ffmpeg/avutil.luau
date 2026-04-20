@@ -15,8 +15,7 @@ local AVAmbientViewingEnvironment = ffi.struct({
 export type AVAmbientViewingEnvironment = typeof(AVAmbientViewingEnvironment:new({}))
 
 local AVBlowfish = ffi.struct({
-	-- FIXME: Array size needs manual definition: 16 + 2
-	-- { p = ffi.types.u32:array(16 + 2) },
+	{ p = ffi.types.u32:array(16 + 2) },
 })
 export type AVBlowfish = typeof(AVBlowfish:new({}))
 
@@ -110,8 +109,7 @@ export type AVDOVIRpuDataHeader = typeof(AVDOVIRpuDataHeader:new({}))
 
 local AVDOVIReshapingCurve = ffi.struct({
 	{ num_pivots = ffi.types.u8 },
-	-- FIXME: Array size needs manual definition: 8 + 1
-	-- { pivots = ffi.types.u16:array(8 + 1) },
+	{ pivots = ffi.types.u16:array(9) },
 	{ mapping_idc = ffi.types.pointer:array(8) },
 	{ poly_order = ffi.types.u8:array(8) },
 	{ mmr_order = ffi.types.u8:array(8) },

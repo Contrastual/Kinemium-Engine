@@ -25,6 +25,10 @@ return {
 	callback = function(instance, renderer, datamodel)
 		instance:SetProperties(propTable)
 
+		if _G.IsHeadless or not renderer then
+			return instance
+		end
+
 		local light = rlib.R3D_CreateLight(2) -- R3D_LIGHT_OMNI
 		rlib.R3D_SetLightPosition(light, vector.create(instance.Position.X, instance.Position.Y, instance.Position.Z))
 		rlib.R3D_SetLightColor(light, instance.Color:ToRaylib(instance.Transparency))

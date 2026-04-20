@@ -5,6 +5,9 @@ local raylib = require("@raylib")
 local lib, structs, const = raylib.lib, raylib.structs, raylib.const
 
 local function extract_texture(v)
+	if type(v) == "table" and v.id then
+		return v
+	end
 	local texture = zune.mem.slice(v, structs.RenderTexture:offset("texture"), structs.Texture:size())
 	return texture
 end
@@ -196,5 +199,7 @@ function blurmod.Init(width, height)
 
 	return wrapper
 end
+
+blurmod._extract_texture = extract_texture
 
 return blurmod
