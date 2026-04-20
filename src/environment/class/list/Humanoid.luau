@@ -156,6 +156,7 @@ end
 local function controller()
 	local ray = RaycastParams.new()
 	ray.FilterType = Enum.RaycastFilterType.Exclude
+	ray.IgnoreWater = true
 	return {
 		animClock = 0,
 		animStride = 0,
@@ -685,7 +686,9 @@ end
 
 local function updateStance(h)
 	local nextStance = "default"
-	if h.Dashing then
+	if h.SeatPart ~= nil then
+		nextStance = "seated"
+	elseif h.Dashing then
 		nextStance = "dash"
 	elseif h.Crouching then
 		nextStance = "crouch"
@@ -697,6 +700,10 @@ local function updateStance(h)
 		h.Stance = nextStance
 		h.StanceChanged:Fire(prev, nextStance)
 	end
+end
+
+local function isSeated(h)
+	return h.SeatPart ~= nil
 end
 
 local function reportSpeed(h, c, speed)
@@ -795,6 +802,23 @@ end
 
 local function humanoidDefaultPose(animator, humanoid, context)
 	context = context or {}
+
+	local stance = context.stance or humanoid.Stance or "default"
+
+	if stance == "seated" then
+		local clock = context.clock or 0
+		local breathing = math.sin(clock * 1.2)
+		local idleArmSway = 0.06 + breathing * 0.03
+
+		return {
+			Torso = CFrame.Angles(0.1, 0, 0),
+			Head = CFrame.Angles(-0.05 + breathing * 0.01, 0, 0),
+			LeftArm = CFrame.Angles(0, 0, -idleArmSway - 0.3),
+			RightArm = CFrame.Angles(0, 0, idleArmSway + 0.3),
+			LeftLeg = CFrame.Angles(-math.pi * 0.5, 0, 0.06),
+			RightLeg = CFrame.Angles(-math.pi * 0.5, 0, -0.06),
+		}
+	end
 
 	local clock = context.clock or animator.Clock or 0
 	local speed = math.max(context.speed or 0, 0)
@@ -1191,6 +1215,80 @@ return {
 			self:SetCrouching(not self.Crouching)
 		end
 
+		function h:EquipTool(tool)
+			if not tool or tool.ClassName ~= "Tool" then
+				return
+			end
+
+			local char = characterOf(self)
+			if not char then
+				return
+			end
+
+			tool.Parent = char
+
+			local handle = nil
+			if tool.RequiresHandle then
+				handle = tool:FindFirstChild("Handle")
+			else
+				handle = tool.PrimaryPart
+					or tool:FindFirstChildOfClass("Part")
+					or tool:FindFirstChildOfClass("MeshPart")
+			end
+
+			if not handle then
+				return
+			end
+
+			local rightArm = self:GetRigPart("RightArm")
+				or char:FindFirstChild("RightArm")
+				or char:FindFirstChild("Right Arm")
+			if not rightArm then
+				return
+			end
+
+			if tool.Grip then
+				handle.CFrame = rightArm.CFrame * tool.Grip
+			end
+
+			local weld = Instance.new("WeldConstraint")
+			weld.Name = "ToolWeld"
+			weld.Part0 = rightArm
+			weld.Part1 = handle
+			weld.Parent = rightArm
+		end
+
+		function h:UnequipTools()
+			local char = characterOf(self)
+			if not char then
+				return
+			end
+
+			local players = game and game.GetService and game:GetService("Players") or nil
+			local player = players and players:GetPlayerFromCharacter(char) or nil
+			local backpack = player and player:FindFirstChildOfClass("Backpack") or nil
+
+			for _, child in ipairs(char:GetChildren()) do
+				if child.ClassName == "Tool" then
+					for _, desc in ipairs(char:GetDescendants()) do
+						if desc.ClassName == "WeldConstraint" and desc.Name == "ToolWeld" then
+							local handle = child:FindFirstChild("Handle")
+							local isRelated = (handle ~= nil and desc.Part1 == handle)
+								or (desc.Part1 and desc.Part1:IsDescendantOf(child))
+							if isRelated then
+								desc:Destroy()
+							end
+						end
+					end
+					if backpack then
+						child.Parent = backpack
+					else
+						child.Parent = nil
+					end
+				end
+			end
+		end
+
 		function h:Move(dir)
 			self.MoveDirection = dir or ZERO
 		end
@@ -1289,6 +1387,17 @@ return {
 				restoreRigFromDescriptor(h, c)
 			elseif prop == "Sprinting" or prop == "Crouching" or prop == "Dashing" then
 				updateStance(h)
+			elseif prop == "SeatPart" then
+				if value ~= nil then
+					setState(h, c, Enum.HumanoidStateType.Seated)
+					h.Sit = true
+					h.Seated:Fire(true, value)
+					updateStance(h)
+				else
+					h.Sit = false
+					h.Seated:Fire(false, nil)
+					updateStance(h)
+				end
 			end
 		end)
 
@@ -1362,6 +1471,43 @@ return {
 					local horiz = Vector3.new(rootVelocity.X, 0, rootVelocity.Z)
 					local speed = horiz:Magnitude()
 
+					local waterRayParams = RaycastParams.new()
+					waterRayParams.FilterDescendantsInstances = c.rayParams.FilterDescendantsInstances
+					waterRayParams.FilterType = c.rayParams.FilterType
+					waterRayParams.IgnoreWater = false
+
+					local inWater = false
+					local terrain = workspace:FindFirstChild("Terrain")
+					if terrain and type(terrain._getVoxel) == "function" then
+						local vs = terrain.VoxelSize or 2
+						local vx, vy, vz =
+							math.floor(c.currentPos.X / vs),
+							math.floor((c.currentPos.Y + h.HipHeight * 0.5) / vs),
+							math.floor(c.currentPos.Z / vs)
+						local voxel = terrain:_getVoxel(vx, vy, vz)
+						if voxel and voxel.material == "water" and (voxel.density or 0) > 0.1 then
+							inWater = true
+						end
+					end
+					if not inWater then
+						local waterHit = workspace:Raycast(
+							c.currentPos + Vector3.new(0, h.HipHeight * 2, 0),
+							Vector3.new(0, -h.HipHeight * 3, 0),
+							waterRayParams
+						)
+						if
+							waterHit
+							and (
+								waterHit.Material == Enum.Material.Water
+								or (waterHit.Instance and waterHit.Instance.Material == Enum.Material.Water)
+							)
+						then
+							if c.currentPos.Y < waterHit.Position.Y then
+								inWater = true
+							end
+						end
+					end
+
 					local standHit = workspace:Raycast(
 						c.currentPos,
 						Vector3.new(0, -(h.HipHeight + h.GroundProbePadding), 0),
@@ -1383,6 +1529,9 @@ return {
 					local animState = c.isGrounded
 							and (speed > 0.05 and Enum.HumanoidStateType.Running or Enum.HumanoidStateType.None)
 						or (rootVelocity.Y > 0 and Enum.HumanoidStateType.Jumping or Enum.HumanoidStateType.Freefall)
+					if inWater then
+						animState = Enum.HumanoidStateType.Swimming
+					end
 					c.state = animState -- local controller copy only, not h.State
 
 					char.WorldPivot = root.CFrame
@@ -1400,6 +1549,7 @@ return {
 						state = animState,
 						stance = h.Stance, -- read from adapter-delivered value
 						walkSpeed = h.WalkSpeed,
+						verticalVelocity = isSeated(h) and 0 or c.verticalVelocity,
 					}
 					local pose = animator and animator:StepAnimation(h, animContext) or {}
 
@@ -1463,6 +1613,43 @@ return {
 
 				c.isGrounded = false
 
+				local waterRayParams = RaycastParams.new()
+				waterRayParams.FilterDescendantsInstances = c.rayParams.FilterDescendantsInstances
+				waterRayParams.FilterType = c.rayParams.FilterType
+				waterRayParams.IgnoreWater = false
+
+				local inWater = false
+				local terrain = workspace:FindFirstChild("Terrain")
+				if terrain and type(terrain._getVoxel) == "function" then
+					local vs = terrain.VoxelSize or 2
+					local vx, vy, vz =
+						math.floor(c.currentPos.X / vs),
+						math.floor((c.currentPos.Y + h.HipHeight * 0.5) / vs),
+						math.floor(c.currentPos.Z / vs)
+					local voxel = terrain:_getVoxel(vx, vy, vz)
+					if voxel and voxel.material == "water" and (voxel.density or 0) > 0.1 then
+						inWater = true
+					end
+				end
+				if not inWater then
+					local waterHit = workspace:Raycast(
+						c.currentPos + Vector3.new(0, h.HipHeight * 2, 0),
+						Vector3.new(0, -h.HipHeight * 3, 0),
+						waterRayParams
+					)
+					if
+						waterHit
+						and (
+							waterHit.Material == Enum.Material.Water
+							or (waterHit.Instance and waterHit.Instance.Material == Enum.Material.Water)
+						)
+					then
+						if c.currentPos.Y < waterHit.Position.Y then
+							inWater = true
+						end
+					end
+				end
+
 				local groundY
 				local standHit = workspace:Raycast(
 					c.currentPos,
@@ -1476,12 +1663,39 @@ return {
 					if c.currentPos.Y - floorY <= h.GroundSnapDistance then
 						c.isGrounded = true
 						h.FloorMaterial = standHit.Instance and standHit.Instance.Material or Enum.Material.Air
+
+						local hitInst = standHit.Instance
+						if hitInst and hitInst.IsSeat == true and not isSeated(h) then
+							if hitInst.Occupant == nil then
+								hitInst.Occupant = h
+								h.SeatPart = hitInst
+							end
+						end
 					end
 				else
 					h.FloorMaterial = Enum.Material.Air
 				end
 
 				local jumpRequest = c.jumpQueuedTime ~= 0 and (os.clock() - c.jumpQueuedTime < h.JumpQueueWindow)
+				if h.SeatPart and jumpRequest then
+					local seat = h.SeatPart
+					h.SeatPart = nil
+					if seat then
+						seat.Occupant = nil
+					end
+					jumpRequest = true
+
+					if h.SeatPart then
+						local seatCF = h.SeatPart.CFrame
+						c.currentPos = seatCF.Position + Vector3.new(0, h.HipHeight + 1, 0)
+						local f, ok = flat(seatCF:GetLookVector())
+						c.lookXZ = ok and f or LOOK
+
+						if h.SeatPart.Parent == nil then
+							h.SeatPart = nil
+						end
+					end
+				end
 				if jumpRequest and c.isGrounded then
 					c.verticalVelocity = h.JumpPower
 					c.isGrounded = false
@@ -1490,7 +1704,7 @@ return {
 				end
 				h.Jump = false
 				local velY = c.verticalVelocity
-				if c.isGrounded then
+				if c.isGrounded and not inWater then
 					velY = 0
 					if groundY then
 						local hip = math.max(h.HipHeight - (h.Crouching and 0.55 or 0), 0.5)
@@ -1498,7 +1712,20 @@ return {
 					end
 					c.verticalVelocity = 0
 				else
-					local nextVelY = math.max(velY - h.Gravity * h.GravityScale * dt, -h.FallCap)
+					local gravity = h.Gravity * h.GravityScale
+					if inWater then
+						gravity = gravity * -0.5 -- Buoyancy pushes up
+					end
+
+					local nextVelY = math.max(velY - gravity * dt, -h.FallCap)
+					if inWater then
+						if nextVelY < -h.FallCap * 0.3 then
+							nextVelY = -h.FallCap * 0.3
+						end
+						if nextVelY > h.JumpPower * 0.5 then
+							nextVelY = h.JumpPower * 0.5
+						end -- Terminal upward velocity in water
+					end
 					local fall = math.max(0, -nextVelY * dt)
 					if fall > 0 then
 						local sweepHit = workspace:Raycast(
@@ -1523,7 +1750,18 @@ return {
 
 				local walkSpeed = h:GetEffectiveWalkSpeed()
 				local horiz
-				if h.Dashing then
+				if isSeated(h) then
+					horiz = ZERO
+					velY = 0
+					c.isGrounded = true
+					c.verticalVelocity = 0
+					if h.SeatPart then
+						local seatCF = h.SeatPart.CFrame
+						c.currentPos = seatCF.Position + Vector3.new(0, h.HipHeight + 1, 0)
+						local f, ok = flat(seatCF:GetLookVector())
+						c.lookXZ = ok and f or LOOK
+					end
+				elseif h.Dashing then
 					horiz = c.dashDirection * h.DashSpeed
 					if h.DashLift ~= 0 and c.isGrounded then
 						velY = h.DashLift
@@ -1593,19 +1831,21 @@ return {
 				h.MoveVelocity = vel
 				local speed = horiz:Magnitude()
 				reportSpeed(h, c, speed)
-				if c.isGrounded then
-					if c.state == Enum.HumanoidStateType.Freefall or c.state == Enum.HumanoidStateType.Jumping then
-						c.landBob = 1
-						setState(h, c, Enum.HumanoidStateType.Landed)
-					elseif speed > 0.05 then
-						setState(h, c, Enum.HumanoidStateType.Running)
+				if not isSeated(h) then
+					if c.isGrounded then
+						if c.state == Enum.HumanoidStateType.Freefall or c.state == Enum.HumanoidStateType.Jumping then
+							c.landBob = 1
+							setState(h, c, Enum.HumanoidStateType.Landed)
+						elseif speed > 0.05 then
+							setState(h, c, Enum.HumanoidStateType.Running)
+						else
+							setState(h, c, Enum.HumanoidStateType.None)
+						end
+					elseif velY > 0 then
+						setState(h, c, Enum.HumanoidStateType.Jumping)
 					else
-						setState(h, c, Enum.HumanoidStateType.None)
+						setState(h, c, Enum.HumanoidStateType.Freefall)
 					end
-				elseif velY > 0 then
-					setState(h, c, Enum.HumanoidStateType.Jumping)
-				else
-					setState(h, c, Enum.HumanoidStateType.Freefall)
 				end
 				local right = Vector3.new(-c.lookXZ.Z, 0, c.lookXZ.X)
 				local side = right.X * horiz.X + right.Z * horiz.Z
@@ -1634,6 +1874,7 @@ return {
 					state = c.state,
 					stance = h.Stance,
 					walkSpeed = h.WalkSpeed,
+					verticalVelocity = isSeated(h) and 0 or c.verticalVelocity,
 				}
 				local pose = animator and animator:StepAnimation(h, animContext) or {}
 

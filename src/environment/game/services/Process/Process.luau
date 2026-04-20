@@ -47,6 +47,28 @@ Process.InitRenderer = function(renderer, renderer_signal)
 			return process
 		end,
 
+		CreateKinemiumServerProcessPiped = function(ip, port, maxPlayers)
+			local info = {
+				"run",
+				"game",
+				"--server",
+				"--port",
+				tostring(port),
+				"--address",
+				ip,
+			}
+
+			if maxPlayers then
+				table.insert(info, "--max-players")
+				table.insert(info, tostring(maxPlayers))
+			end
+
+			local process = zune.process.create(zune.fs.getExePath(), info, {
+				opts = { stdout = "piped", stderr = "piped" },
+			})
+			return process
+		end,
+
 		CreateKinemiumServerProcessEx = function(ip, port)
 			-- example zune run game --server --port 1234 --address 0.0.0.0
 			local info = {

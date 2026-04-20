@@ -440,8 +440,7 @@ local AVSmpte291mAnc8bit = ffi.struct({
 	{ did = ffi.types.u8 },
 	{ sdid_or_dbn = ffi.types.u8 },
 	{ data_count = ffi.types.u8 },
-	-- FIXME: Array size needs manual definition: 0xFF
-	-- { payload = ffi.types.u8:array(0xFF) },
+	{ payload = ffi.types.u8:array(0xFF) },
 	{ checksum = ffi.types.u8 },
 })
 export type AVSmpte291mAnc8bit = typeof(AVSmpte291mAnc8bit:new({}))

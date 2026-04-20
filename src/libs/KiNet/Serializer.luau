@@ -275,7 +275,7 @@ function Serializer.Serialize(value)
 
 	if Serializer.CompressionEnabled then
 		return serde.zstd.compress(trimmed, {
-			level = 9,
+			level = 3,
 		})
 	else
 		return trimmed

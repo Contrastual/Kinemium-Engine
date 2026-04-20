@@ -187,9 +187,15 @@ local function deserializeCFrame(value)
 		zVec = { x = -value.LookVector.x, y = -value.LookVector.y, z = -value.LookVector.z }
 	end
 
-	local function getX(v) return v and ((v._internal and (v._internal.x or v._internal.X)) or v.x or v.X) or 0 end
-	local function getY(v) return v and ((v._internal and (v._internal.y or v._internal.Y)) or v.y or v.Y) or 0 end
-	local function getZ(v) return v and ((v._internal and (v._internal.z or v._internal.Z)) or v.z or v.Z) or 0 end
+	local function getX(v)
+		return v and ((v._internal and (v._internal.x or v._internal.X)) or v.x or v.X) or 0
+	end
+	local function getY(v)
+		return v and ((v._internal and (v._internal.y or v._internal.Y)) or v.y or v.Y) or 0
+	end
+	local function getZ(v)
+		return v and ((v._internal and (v._internal.z or v._internal.Z)) or v.z or v.Z) or 0
+	end
 
 	local px = getX(position)
 	local py = getY(position)
@@ -213,7 +219,6 @@ local function deserializeCFrame(value)
 
 	return CFrame.new(px, py, pz, r00, r01, r02, r10, r11, r12, r20, r21, r22)
 end
-
 
 local function deserializeNumberSequenceKeypoint(value)
 	return NumberSequenceKeypoint.new(value.Time, value.Value)

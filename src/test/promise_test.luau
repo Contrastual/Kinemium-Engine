@@ -88,6 +88,15 @@ testing.describe("Promise", function()
 		expect(allErr).toBe("bad")
 	end)
 
+	testing.test("Promise.all with empty table resolves immediately", function()
+		local okValues = nil
+		Promise.all({}):andThen(function(v)
+			okValues = v
+		end)
+		expect(type(okValues)).toBe("table")
+		expect(#okValues).toBe(0)
+	end)
+
 	testing.test("Promise.race resolves with first settled", function()
 		local resolveA, resolveB
 		local result = nil

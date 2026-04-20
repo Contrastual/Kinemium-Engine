@@ -1,7 +1,5 @@
 local r3d = require("@r3d")
-local rlib = r3d.lib
 local raylib = require("@raylib")
-local lib = raylib.lib
 local const = raylib.const
 
 return {

@@ -49,7 +49,7 @@ local propTable = {
 return {
 	class = "Part",
 
-callback = function(instance, renderer, game)
+	callback = function(instance, renderer, game)
 		instance:SetMetadata("IsMovable", true)
 
 		local KinemiumPhysicsService = game:GetService("UnifiedPhysicsService")
@@ -117,7 +117,9 @@ callback = function(instance, renderer, game)
 
 	inherit = function(tble)
 		for prop, val in pairs(propTable) do
-			tble[prop] = val
+			if not tble[prop] then
+				tble[prop] = val
+			end
 		end
 	end,
 }

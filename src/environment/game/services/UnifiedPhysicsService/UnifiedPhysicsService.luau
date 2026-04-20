@@ -46,7 +46,7 @@ function UnifiedPhysicsService:SetPrimaryEngine(name)
 	-- Reconstruction Sweep
 	if datamodel_ref then
 		for _, descendant in ipairs(datamodel_ref:GetDescendants()) do
-			if descendant:IsA("Part") or descendant:IsA("MeshPart") then
+			if descendant.BaseClass == "BasePart" then
 				if activeEngineHandler.AddBody then
 					activeEngineHandler.AddBody(descendant)
 				end

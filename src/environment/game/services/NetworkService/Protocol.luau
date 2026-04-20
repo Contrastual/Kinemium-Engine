@@ -22,6 +22,7 @@ Protocol.Kinds = {
 	TerrainSnapshot = "terrain_snapshot",
 	TerrainChunkBatch = "terrain_chunk_batch",
 	RemoteEvent = "remote_event",
+	UnreliableRemoteEvent = "unreliable_remote_event",
 	RemoteFunctionRequest = "remote_function_request",
 	RemoteFunctionResponse = "remote_function_response",
 	RemoteDataUpdate = "remote_data_update",

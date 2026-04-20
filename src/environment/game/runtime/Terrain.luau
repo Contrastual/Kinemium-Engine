@@ -529,7 +529,7 @@ local TRI_TABLE = {
 local Terrain = Instance.new("Terrain")
 
 local CHUNK_SIZE = 16 -- voxels per chunk axis
-local MAX_REPLICATION_VOXELS_PER_BATCH = 20
+local MAX_REPLICATION_VOXELS_PER_BATCH = 4096
 local UV_SCALE = 0.5 -- scale for planar UV mapping
 
 local function chunkKey(cx, cy, cz)
@@ -1458,12 +1458,36 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 			Terrain:_clearChunkVoxels(cx, cy, cz, true)
 		end
 		for _, voxel in ipairs(chunkState.voxels or {}) do
-			Terrain:_setVoxel(cx * CHUNK_SIZE + voxel.x, cy * CHUNK_SIZE + voxel.y, cz * CHUNK_SIZE + voxel.z, {
-				density = voxel.density or 0,
-				material = voxel.material,
-				color = voxel.color and Color3.FromTable(voxel.color) or Color3.new(1, 1, 1),
-			}, true)
+			local x = cx * CHUNK_SIZE + voxel.x
+			local y = cy * CHUNK_SIZE + voxel.y
+			local z = cz * CHUNK_SIZE + voxel.z
+
+			local density = voxel.density or 0
+			if density > 0 then
+				local blocks = Terrain._blocks
+				local blockX = blocks[x]
+				if not blockX then
+					blockX = {}
+					blocks[x] = blockX
+				end
+
+				local blockY = blockX[y]
+				if not blockY then
+					blockY = {}
+					blockX[y] = blockY
+				end
+
+				blockY[z] = {
+					density = density,
+					material = voxel.material,
+					color = voxel.color and Color3.FromTable(voxel.color) or Color3.new(1, 1, 1),
+				}
+			else
+				removeVoxelFromStorage(x, y, z)
+			end
 		end
+
+		markChunkDirtyByCoords(cx, cy, cz, true)
 	end
 
 	function Terrain:ExportReplicationSnapshot()

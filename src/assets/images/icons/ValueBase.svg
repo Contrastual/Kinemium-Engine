@@ -1,8 +1,8 @@
 <!--
-tags: [pencil, change, update, edit, modify, creative, artistic, revise, adjust, visual]
-category: Design
-version: "1.0"
-unicode: "ea98"
+tags: [maths, mathematics, science, calculate, function, variable, calculation, equation, numeric, formula]
+category: Math
+version: "1.39"
+unicode: "ef05"
 -->
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -10,12 +10,12 @@ unicode: "ea98"
   height="24"
   viewBox="0 0 24 24"
   fill="none"
-  stroke="#ffffff"
+  stroke="white"
   stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
 >
-  <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
-  <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415" />
-  <path d="M16 5l3 3" />
+  <path d="M5 4c-2.5 5 -2.5 10 0 16m14 -16c2.5 5 2.5 10 0 16m-10 -11h1c1 0 1 1 2.016 3.527c.984 2.473 .984 3.473 1.984 3.473h1" />
+  <path d="M8 16c1.5 0 3 -2 4 -3.5s2.5 -3.5 4 -3.5" />
 </svg>
+

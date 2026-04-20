@@ -1,8 +1,8 @@
 <!--
-tags: [model, document, file, data, content, record, 3d, paper, text, information]
-category: Document
-version: "1.56"
-unicode: "f032"
+tags: [jigsaw, extension, add-on, puzzle, entertainment, playing, recreation, fun, activity]
+category: Games
+version: "1.0"
+unicode: "eb10"
 -->
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -10,14 +10,11 @@ unicode: "f032"
   height="24"
   viewBox="0 0 24 24"
   fill="none"
-  stroke="#ffffff"
+  stroke="white"
   stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
 >
-  <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-  <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2" />
-  <path d="M12 13.5l4 -1.5" />
-  <path d="M8 11.846l4 1.654v4.5l4 -1.846v-4.308l-4 -1.846l-4 1.846" />
-  <path d="M8 12v4.2l4 1.8" />
+  <path d="M4 7h3a1 1 0 0 0 1 -1v-1a2 2 0 0 1 4 0v1a1 1 0 0 0 1 1h3a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h1a2 2 0 0 1 0 4h-1a1 1 0 0 0 -1 1v3a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-1a2 2 0 0 0 -4 0v1a1 1 0 0 1 -1 1h-3a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1h1a2 2 0 0 0 0 -4h-1a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1" />
 </svg>
+

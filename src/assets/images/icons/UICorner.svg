@@ -10,7 +10,7 @@ unicode: "eb7c"
   height="24"
   viewBox="0 0 24 24"
   fill="none"
-  stroke="#ffffff"
+  stroke="white"
   stroke-width="2"
   stroke-linecap="round"
   stroke-linejoin="round"
@@ -28,3 +28,4 @@ unicode: "eb7c"
   <path d="M16 20l0 .01" />
   <path d="M20 20l0 .01" />
 </svg>
+

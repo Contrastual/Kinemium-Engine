@@ -174,7 +174,7 @@ return {
 	class = "ImageLabel",
 	render = propTable.render,
 	callback = function(instance, renderer)
-		if type(instance.Image) == "string" then
+		if type(instance.Image) == "string" and not _G.IsHeadless then
 			instance._cached = lib.LoadTexture(instance.Image)
 			lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 			lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
@@ -183,7 +183,7 @@ return {
 
 		instance.Changed:Connect(function(property)
 			if property == "Image" then
-				if type(instance.Image) == "string" then
+				if type(instance.Image) == "string" and not _G.IsHeadless then
 					if instance._cached then
 						lib.UnloadTexture(instance._cached)
 					end

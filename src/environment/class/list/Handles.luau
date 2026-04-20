@@ -38,7 +38,7 @@ return {
 				if part == nil then
 					return
 				end
-				if part and (part:IsA("Part") or part:IsA("MeshPart")) then
+				if part and part.BaseClass == "BasePart" then
 					local pos = part.CFrame.Position
 					instance._gizmoTransform:writef32(0, pos.X)
 					instance._gizmoTransform:writef32(4, pos.Y)

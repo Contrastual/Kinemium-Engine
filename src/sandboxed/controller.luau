@@ -26,6 +26,11 @@ local function flushDelta()
 end
 
 local CharacterModel
+print("controller started")
+while not Players.LocalPlayer do
+	task.wait()
+end
+print("controller got player")
 local player = Players.LocalPlayer
 
 if game.MultiplayerMode == Enum.MultiplayerMode.SinglePlayer and not RunService:IsClient() then

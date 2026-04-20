@@ -205,6 +205,9 @@ return {
 		instance._decalLastPath = nil
 
 		local function syncAlbedo(force)
+			if _G.IsHeadless then
+				return
+			end
 			local color = instance.Color3:ToRaylib(instance.Transparency or 0)
 			local source = instance.Texture
 

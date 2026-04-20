@@ -13,6 +13,10 @@ local FileDialogService = game:GetService("FileDialogService")
 local DiscordService = game:GetService("DiscordService")
 local ProcessService = game:GetService("Process")
 local NetworkService = game:GetService("NetworkService")
+local localServerProcess = nil
+local localServerInfo = nil
+local localServerLogs = {}
+local logBuffer = ""
 
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local arect = require("@Arect")(raylib.lib)
@@ -111,9 +115,185 @@ example server preview data:
 }
 --]]
 
-local itemSlots = {}
+-- Host Server textboxes
+local hostPortTextbox = textbox.new({
+	multiline = false,
+	placeholder = "1234",
+	fontSize = 16,
+	font = vend,
+	maxLength = 5,
+})
+
+local maxPlayersTextbox = textbox.new({
+	multiline = false,
+	placeholder = "16",
+	fontSize = 16,
+	font = vend,
+	maxLength = 3,
+})
+
+local nameTextbox = textbox.new({
+	multiline = false,
+	placeholder = "My Server",
+	fontSize = 16,
+	font = vend,
+	maxLength = 32,
+})
+
+local motdTextbox = textbox.new({
+	multiline = false,
+	placeholder = "A Kinemium server is online.",
+	fontSize = 16,
+	font = vend,
+	maxLength = 64,
+})
+
+local descriptionTextbox = textbox.new({
+	multiline = false,
+	placeholder = "Optional description",
+	fontSize = 16,
+	font = vend,
+	maxLength = 128,
+})
+
+local mapTextbox = textbox.new({
+	multiline = false,
+	placeholder = "MapName",
+	fontSize = 16,
+	font = vend,
+	maxLength = 32,
+})
+
+local modeTextbox = textbox.new({
+	multiline = false,
+	placeholder = "Survival",
+	fontSize = 16,
+	font = vend,
+	maxLength = 32,
+})
+
+local commandTextbox
+commandTextbox = textbox.new({
+	multiline = false,
+	placeholder = "Run Kilang code...",
+	fontSize = 16,
+	font = vend,
+	maxLength = 128,
+	onSubmit = function()
+		if localServerProcess then
+			local code = commandTextbox:getText()
+			if #code > 0 then
+				pcall(function()
+					localServerProcess.stdin:write(code .. "\n")
+				end)
+				commandTextbox:setText("")
+			end
+		end
+	end,
+})
+
+task.spawn(function()
+	while true do
+		if localServerProcess then
+			local err = localServerProcess.stderr:read(1024)
+			if err and #err > 0 then
+				logBuffer = logBuffer .. err
+			end
+
+			if err and #err > 0 then
+				while true do
+					local lineEnd = string.find(logBuffer, "\n")
+					if not lineEnd then
+						break
+					end
+					local line = string.sub(logBuffer, 1, lineEnd - 1)
+					logBuffer = string.sub(logBuffer, lineEnd + 1)
+					if #line > 0 then
+						table.insert(localServerLogs, line)
+						if #localServerLogs > 15 then
+							table.remove(localServerLogs, 1)
+						end
+					end
+				end
+			end
+
+			local port = tonumber(hostPortTextbox:getText()) or 1234
+			local info, p_err = NetworkService:Ping("127.0.0.1", port)
+			if info then
+				localServerInfo = info
+			else
+				localServerInfo = nil
+			end
+		else
+			localServerInfo = nil
+			localServerLogs = {}
+		end
+		task.wait(0.1)
+	end
+end)
 
 local group
+
+local function stopServer()
+	pcall(function()
+		localServerProcess:kill()
+	end)
+	localServerProcess = nil
+	group.manageServerPrompt.set("buttons", {
+		{
+			text = "Start Server",
+			color = StudioThemeService.SelectedTheme.Accent,
+			onClick = function()
+				group.manageServerPrompt.get("buttons")[1].onClick()
+			end,
+		},
+	})
+end
+
+local function startServer()
+	local port = tonumber(hostPortTextbox:getText()) or 1234
+	local maxPlayers = tonumber(maxPlayersTextbox:getText()) or 16
+	localServerProcess = ProcessService.CreateKinemiumServerProcessPiped("0.0.0.0", port, maxPlayers)
+
+	local sName = nameTextbox:getText()
+	if sName == "" then
+		sName = "My Server"
+	end
+	local sMotd = motdTextbox:getText()
+	if sMotd == "" then
+		sMotd = "A Kinemium server is online."
+	end
+	local sDesc = descriptionTextbox:getText()
+	local sMap = mapTextbox:getText()
+	if sMap == "" then
+		sMap = "MapName"
+	end
+	local sMode = modeTextbox:getText()
+	if sMode == "" then
+		sMode = "Survival"
+	end
+
+	game.NetworkService:SetPreviewData({
+		name = sName,
+		motd = sMotd,
+		description = sDesc,
+		map = sMap,
+		mode = sMode,
+	})
+
+	group.manageServerPrompt.set("buttons", {
+		{
+			text = "Stop Server",
+			color = Color3.new(0.8, 0.2, 0.2),
+			onClick = function()
+				stopServer()
+			end,
+		},
+	})
+end
+
+local itemSlots = {}
+
 group = aereon.create({
 	frame = {
 		comp = "frame",
@@ -144,7 +324,6 @@ group = aereon.create({
 		zindex = 3,
 	},
 
-	-- addition
 	addButton = {
 		comp = "imageButton",
 		image = addIcon,
@@ -153,10 +332,132 @@ group = aereon.create({
 		width = 30,
 		height = 30,
 		zindex = 3,
-
 		onClick = function()
 			group.newProjectPrompt.show()
 		end,
+	},
+
+	hostServerButton = {
+		comp = "textButton",
+		text = "Host Server",
+		y = 110,
+		x = screenx - 200,
+		width = 130,
+		height = 30,
+		zindex = 3,
+		color = Color3.new(0.368627, 0.368627, 0.368627),
+		onClick = function()
+			group.manageServerPrompt.set("visible", true)
+		end,
+	},
+
+	manageServerPrompt = {
+		comp = "prompt",
+		visible = false,
+		width = 900,
+		height = 250,
+		bodyHeight = 500,
+		font = vend,
+		backgroundColor = SecondaryBackgroundColor,
+		title = "MANAGE SERVER",
+		buttons = {
+			{
+				text = "Start Server",
+				color = StudioThemeService.SelectedTheme.Accent,
+				onClick = function()
+					if localServerProcess then
+						stopServer()
+					else
+						startServer()
+					end
+				end,
+			},
+		},
+		bodyRenderer = function(dt, x, y, width, height)
+			-- Settings column
+			lib.DrawTextEx(vend, "Settings", vector.create(x + 20, y + 20), 20, 1, TextColor)
+
+			lib.DrawTextEx(vend, "Name", vector.create(x + 20, y + 50), 16, 1, TextColor)
+			nameTextbox:drawWithExtras(x + 20, y + 70, 200, 40)
+
+			lib.DrawTextEx(vend, "MOTD", vector.create(x + 20, y + 120), 16, 1, TextColor)
+			motdTextbox:drawWithExtras(x + 20, y + 140, 200, 40)
+
+			lib.DrawTextEx(vend, "Description", vector.create(x + 20, y + 190), 16, 1, TextColor)
+			descriptionTextbox:drawWithExtras(x + 20, y + 210, 200, 40)
+
+			lib.DrawTextEx(vend, "Map", vector.create(x + 20, y + 260), 16, 1, TextColor)
+			mapTextbox:drawWithExtras(x + 20, y + 280, 200, 40)
+
+			lib.DrawTextEx(vend, "Mode", vector.create(x + 20, y + 330), 16, 1, TextColor)
+			modeTextbox:drawWithExtras(x + 20, y + 350, 200, 40)
+
+			lib.DrawTextEx(vend, "Port", vector.create(x + 20, y + 400), 16, 1, TextColor)
+			hostPortTextbox:drawWithExtras(x + 20, y + 420, 90, 40)
+
+			lib.DrawTextEx(vend, "Max Players", vector.create(x + 130, y + 400), 16, 1, TextColor)
+			maxPlayersTextbox:drawWithExtras(x + 130, y + 420, 90, 40)
+
+			-- Stats column
+			local statsX = x + 260
+			lib.DrawTextEx(vend, "Status", vector.create(statsX, y + 20), 20, 1, TextColor)
+			if localServerProcess then
+				lib.DrawTextEx(
+					vend,
+					"Server is Running!",
+					vector.create(statsX, y + 50),
+					18,
+					1,
+					StudioThemeService.SelectedTheme.TextColor:ToRaylib()
+				)
+				if localServerInfo then
+					local uptime = math.floor(localServerInfo.uptime or 0)
+					local players = tostring(#(localServerInfo.players and localServerInfo.players.sample or {}))
+						.. " / "
+						.. tostring(localServerInfo.players and localServerInfo.players.max or 0)
+					local tick = tostring(localServerInfo.tickRate or 0)
+					local smap = tostring(localServerInfo.map or "unknown")
+
+					lib.DrawTextEx(vend, "Uptime: " .. uptime .. "s", vector.create(statsX, y + 80), 16, 1, TextColor)
+					lib.DrawTextEx(vend, "Players: " .. players, vector.create(statsX, y + 110), 16, 1, TextColor)
+					lib.DrawTextEx(vend, "Tick Rate: " .. tick, vector.create(statsX, y + 140), 16, 1, TextColor)
+					lib.DrawTextEx(vend, "Map: " .. smap, vector.create(statsX, y + 170), 16, 1, TextColor)
+				else
+					lib.DrawTextEx(
+						vend,
+						"Fetching stats...",
+						vector.create(statsX, y + 80),
+						16,
+						1,
+						StudioThemeService.SelectedTheme.TextColor:ToRaylib()
+					)
+				end
+			else
+				lib.DrawTextEx(
+					vend,
+					"Server is Offline",
+					vector.create(statsX, y + 50),
+					18,
+					1,
+					StudioThemeService.SelectedTheme.TextColor:ToRaylib()
+				)
+			end
+
+			-- Terminal
+			lib.DrawTextEx(vend, "Logs", vector.create(statsX, y + 210), 20, 1, TextColor)
+			local termY = y + 240
+			local termH = 195
+			local termW = width - 280
+			lib.DrawRectangle(statsX, termY, termW, termH, raylib.const.BLACK)
+
+			for i, logLine in ipairs(localServerLogs) do
+				lib.DrawText(logLine, statsX + 5, termY + 5 + (i - 1) * 12, 10, raylib.const.WHITE)
+			end
+
+			-- Terminal input
+			commandTextbox:drawWithExtras(statsX, termY + termH + 10, termW, 30)
+		end,
+		zindex = 5,
 	},
 
 	newProjectPrompt = {
@@ -189,7 +490,6 @@ group = aereon.create({
 							y = 0,
 							width = 520,
 							font = vend,
-
 							onPlay = function()
 								ProcessService.CreateKinemiumClientProcessEx(username, server_address, server_port)
 							end,
@@ -242,6 +542,22 @@ group = aereon.create({
 	},
 })
 
+-- Fix stopServer button cycling: now that group exists, patch the Start button onClick
+-- to call the real toggle rather than re-fetching buttons[1].onClick recursively.
+group.manageServerPrompt.set("buttons", {
+	{
+		text = "Start Server",
+		color = StudioThemeService.SelectedTheme.Accent,
+		onClick = function()
+			if localServerProcess then
+				stopServer()
+			else
+				startServer()
+			end
+		end,
+	},
+})
+
 group.frame.setTransparency(1)
 
 repeat
@@ -266,8 +582,8 @@ table.insert(ishared.Home.rendering, {
 		group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
 		group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
 		group.addButton.set("obj_rect", arect.new(screenx - 50, 110, 30, 30))
-
-		group.render(dt, { "newProjectPrompt" })
+		group.hostServerButton.set("obj_rect", arect.new(screenx - 190, 110, 130, 30))
+		group.render(dt, { "newProjectPrompt", "manageServerPrompt" })
 
 		-- render each card
 		for i, card in ipairs(itemSlots) do
@@ -276,6 +592,7 @@ table.insert(ishared.Home.rendering, {
 			card.render(dt)
 		end
 
+		group.manageServerPrompt.render(dt)
 		group.newProjectPrompt.render(dt)
 	end,
 })

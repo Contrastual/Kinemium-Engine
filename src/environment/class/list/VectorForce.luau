@@ -92,7 +92,7 @@ return {
 				local attach = instance.Attachment0
 				if attach and attach:IsA("Attachment") then
 					local parent = attach.Parent
-					if (parent:IsA("Part") or parent:IsA("MeshPart")) and shouldApplyPhysics(parent) then
+					if parent.BaseClass == "BasePart" and shouldApplyPhysics(parent) then
 						PhysicsService.ApplyImpulse(parent, instance.Force)
 					end
 				end

@@ -1,0 +1,26 @@
+local propTable = {
+	CursorIcon = "",
+	CursorIconContent = "",
+	MaxActivationDistance = 32,
+}
+
+return {
+	class = "ClickDetector",
+
+	callback = function(instance)
+		instance:SetProperties(propTable)
+
+		instance.MouseClick = signal.new()
+		instance.MouseHoverEnter = signal.new()
+		instance.MouseHoverLeave = signal.new()
+		instance.RightMouseClick = signal.new()
+
+		return instance
+	end,
+
+	inherit = function(tble)
+		for prop, val in pairs(propTable) do
+			tble[prop] = val
+		end
+	end,
+}

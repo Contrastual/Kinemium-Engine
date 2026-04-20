@@ -62,6 +62,10 @@ return function(objects, data)
 		return wrapper
 	end
 
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
 	wrapper.show = function()
 		config.visible = true
 		config.isClosing = false

@@ -1,20 +1,20 @@
+[projects.fart]
+path = "./src/projects/fart"
+name = "fart"
+engine_version = "1.10.4"
+last_opened = 1776626803
+
+[projects.grace]
+engine_version = "1.10.4"
+path = "./src/projects/grace"
+name = "grace"
+last_opened = 1775828348
+
 [projects.soncrineson]
 last_opened = 1775038645
 path = "./src/projects/soncrineson"
 name = "soncrineson"
 engine_version = "1.10.4"
-
-[projects.art2]
-last_opened = 1776009783
-path = "./src/projects/art2"
-name = "art2"
-engine_version = "1.10.4"
-
-[projects.fart]
-path = "./src/projects/fart"
-name = "fart"
-engine_version = "1.10.4"
-last_opened = 1776512596
 
 [projects.game]
 last_opened = 1776009412
@@ -34,8 +34,8 @@ path = "./src/projects/Construct"
 name = "Construct"
 last_opened = 1774618445
 
-[projects.grace]
+[projects.art2]
+last_opened = 1776009783
+path = "./src/projects/art2"
+name = "art2"
 engine_version = "1.10.4"
-path = "./src/projects/grace"
-name = "grace"
-last_opened = 1775828348

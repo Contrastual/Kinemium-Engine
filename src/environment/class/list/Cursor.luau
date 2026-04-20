@@ -36,7 +36,7 @@ local function generateCursorImages(object)
 					object._cache[string.gsub(name, ".cur", "")] = raylib.lib.LoadTexture(newFilePath)
 				end
                 --]]
-			elseif string.find(name, ".png") then
+			elseif string.find(name, ".png") and not _G.IsHeadless then
 				local filePath = iconpack_path .. "/" .. name
 				object._cache[string.gsub(name, ".png", "")] = raylib.lib.LoadTexture(filePath)
 			end
