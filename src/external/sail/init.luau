@@ -84,8 +84,6 @@ local funcs = require("./sail/funcs")
 local constants = require("./sail/constants")
 local sail: funcs.Fns = ffi.dlopen(dll .. "sail." .. ffi.suffix, funcs)
 
-sail_common.sail_set_log_barrier(0)
-
 return {
 	lib = sail,
 	codecslib = sail_codecs,

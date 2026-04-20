@@ -19,8 +19,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	end
 	local registry = {}
 	local textures = {}
-	local sail = require("@Sail")
-	local structs = sail.common.structs
+
 	local raylib = require("@raylib")
 
 	local function reload()
@@ -52,6 +51,21 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	KinemiumIconLoader:SetProperties({
 		Reload = reload,
 		LoadImageCustom = function(path: string)
+			if true then
+				local image = raylib.lib.LoadImage(path)
+
+				local width = buffer.readi32(image, 0)
+				local height = buffer.readi32(image, 4)
+				return {
+					texture = raylib.lib.LoadTextureFromImage(image),
+					width = width,
+					height = height,
+					image = image,
+				}
+			end
+
+			local sail = require("@Sail")
+			local structs = sail.common.structs
 			local image_holder = ffi.alloc(8)
 			local result = sail.lib.sail_load_from_file(path, image_holder)
 
@@ -94,6 +108,13 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		ToTexture = function(path: string)
 			if textures[path] then
 				return textures[path]
+			end
+			if true then
+				return {
+					texture = raylib.lib.LoadTexture(path),
+					x = 0,
+					y = 0,
+				}
 			end
 
 			if zembed.IsEmbedded() then
