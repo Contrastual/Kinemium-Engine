@@ -9,9 +9,13 @@ local isQueueProcessing = false
 local MAX_QUEUE_SIZE = 1000
 
 local HEARTBEAT_INTERVAL = 5
+local HEARTBEAT_TIMEOUT = 15
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
 local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
-local MESSAGE_TIMEOUT = 300
+-- Replay / clock-skew window for inbound messages (seconds). The previous
+-- value of 300s allowed a 5-minute replay; this is tightened to a window
+-- that still tolerates reasonable NTP drift.
+local MESSAGE_TIMEOUT = 10
 local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
@@ -19,40 +23,63 @@ local FRAGMENT_TIMEOUT = 30
 local MAX_FRAGMENT_COUNT = 262144
 local MAX_SEQUENCE_WINDOW = 2048
 local MAX_PROCESSED_RELIABLE_MESSAGES = 2048
+local RATE_LIMIT_WINDOW_SECONDS = 1
 
 local function createMessageId(prefix, sequence)
 	return `{prefix}_{sequence}_{math.floor(os.clock() * 1000)}`
 end
 
+-- Ring-buffered dedup for inbound sequences. Previously this used
+-- `table.insert` / `table.remove(tbl, 1)` which is O(n) per packet.
 local function trackReceivedSequence(self, sequence)
 	if type(sequence) ~= "number" then
 		return true
 	end
 
-	self.ReceivedSequences = self.ReceivedSequences or {}
-	self.ReceivedSequenceOrder = self.ReceivedSequenceOrder or {}
-	self.HighestReceivedSequence = self.HighestReceivedSequence or -math.huge
+	local seen = self.ReceivedSequences
+	if not seen then
+		seen = {}
+		self.ReceivedSequences = seen
+	end
 
-	if self.ReceivedSequences[sequence] then
+	local ring = self.ReceivedSequenceRing
+	if not ring then
+		ring = table.create(MAX_SEQUENCE_WINDOW, 0)
+		self.ReceivedSequenceRing = ring
+		self.ReceivedSequenceIndex = 0
+		self.ReceivedSequenceCount = 0
+	end
+
+	if self.HighestReceivedSequence == nil then
+		self.HighestReceivedSequence = -math.huge
+	end
+
+	if seen[sequence] then
 		return false, "Duplicate message"
 	end
 
-	if self.HighestReceivedSequence ~= -math.huge and sequence <= self.HighestReceivedSequence - MAX_SEQUENCE_WINDOW then
+	if
+		self.HighestReceivedSequence ~= -math.huge
+		and sequence <= self.HighestReceivedSequence - MAX_SEQUENCE_WINDOW
+	then
 		return false, "Sequence too old"
 	end
 
-	self.ReceivedSequences[sequence] = true
-	table.insert(self.ReceivedSequenceOrder, sequence)
+	local idx = self.ReceivedSequenceIndex
+	local evicted = ring[idx + 1]
+	if evicted ~= nil and self.ReceivedSequenceCount >= MAX_SEQUENCE_WINDOW then
+		seen[evicted] = nil
+	end
+
+	ring[idx + 1] = sequence
+	seen[sequence] = true
+	self.ReceivedSequenceIndex = (idx + 1) % MAX_SEQUENCE_WINDOW
+	if self.ReceivedSequenceCount < MAX_SEQUENCE_WINDOW then
+		self.ReceivedSequenceCount += 1
+	end
 
 	if sequence > self.HighestReceivedSequence then
 		self.HighestReceivedSequence = sequence
-	end
-
-	while #self.ReceivedSequenceOrder > MAX_SEQUENCE_WINDOW do
-		local oldest = table.remove(self.ReceivedSequenceOrder, 1)
-		if oldest then
-			self.ReceivedSequences[oldest] = nil
-		end
 	end
 
 	return true
@@ -67,26 +94,41 @@ local function cleanupFragmentBuffer(fragmentBuffer, now)
 	end
 end
 
+-- Ring-buffered dedup for processed reliable message IDs.
 local function rememberReliableMessage(self, messageId)
 	if type(messageId) ~= "string" then
 		return true
 	end
 
-	self.ProcessedReliableMessages = self.ProcessedReliableMessages or {}
-	self.ProcessedReliableOrder = self.ProcessedReliableOrder or {}
+	local seen = self.ProcessedReliableMessages
+	if not seen then
+		seen = {}
+		self.ProcessedReliableMessages = seen
+	end
 
-	if self.ProcessedReliableMessages[messageId] then
+	local ring = self.ProcessedReliableRing
+	if not ring then
+		ring = table.create(MAX_PROCESSED_RELIABLE_MESSAGES)
+		self.ProcessedReliableRing = ring
+		self.ProcessedReliableIndex = 0
+		self.ProcessedReliableCount = 0
+	end
+
+	if seen[messageId] then
 		return false
 	end
 
-	self.ProcessedReliableMessages[messageId] = true
-	table.insert(self.ProcessedReliableOrder, messageId)
+	local idx = self.ProcessedReliableIndex
+	local evicted = ring[idx + 1]
+	if evicted ~= nil and self.ProcessedReliableCount >= MAX_PROCESSED_RELIABLE_MESSAGES then
+		seen[evicted] = nil
+	end
 
-	while #self.ProcessedReliableOrder > MAX_PROCESSED_RELIABLE_MESSAGES do
-		local oldest = table.remove(self.ProcessedReliableOrder, 1)
-		if oldest then
-			self.ProcessedReliableMessages[oldest] = nil
-		end
+	ring[idx + 1] = messageId
+	seen[messageId] = true
+	self.ProcessedReliableIndex = (idx + 1) % MAX_PROCESSED_RELIABLE_MESSAGES
+	if self.ProcessedReliableCount < MAX_PROCESSED_RELIABLE_MESSAGES then
+		self.ProcessedReliableCount += 1
 	end
 
 	return true
@@ -135,15 +177,22 @@ function Client:Init(serverAddress, serverPort, authToken)
 	self.LastHeartbeat = 0
 	self.MessageSequence = 0
 	self.ReceivedSequences = {}
-	self.RateLimitWindow = {}
 	self.MaxMessagesPerSecond = 300
 	self.PendingAcks = {}
 	self.FragmentBuffer = {}
 	self.ReliableQueue = {}
-	self.ReceivedSequenceOrder = {}
+	self.ReceivedSequenceRing = nil
+	self.ReceivedSequenceIndex = 0
+	self.ReceivedSequenceCount = 0
 	self.HighestReceivedSequence = -math.huge
 	self.ProcessedReliableMessages = {}
-	self.ProcessedReliableOrder = {}
+	self.ProcessedReliableRing = nil
+	self.ProcessedReliableIndex = 0
+	self.ProcessedReliableCount = 0
+	self.RateLimitRing = nil
+	self.RateLimitIndex = 0
+	self.RateLimitCount = 0
+	self.RateLimitCapacity = 0
 	self._reliableQueueRunning = false
 	self._heartbeatRunning = false
 	self._listenRunning = false
@@ -195,20 +244,33 @@ end
 
 function Client:CheckRateLimit()
 	local currentTime = os.clock()
+	local capacity = self.MaxMessagesPerSecond
 
-	local filtered = {}
-	for _, timestamp in ipairs(self.RateLimitWindow or {}) do
-		if currentTime - timestamp < 1 then
-			table.insert(filtered, timestamp)
+	local ring = self.RateLimitRing
+	if not ring or self.RateLimitCapacity ~= capacity then
+		-- Store new capacity before creating ring to prevent race condition
+		self.RateLimitCapacity = capacity
+		ring = table.create(capacity, 0)
+		self.RateLimitRing = ring
+		self.RateLimitIndex = 0
+		self.RateLimitCount = 0
+	end
+
+	local idx = self.RateLimitIndex
+
+	if self.RateLimitCount >= capacity then
+		local oldest = ring[idx + 1]
+		if oldest and currentTime - oldest < RATE_LIMIT_WINDOW_SECONDS then
+			return false
 		end
 	end
-	self.RateLimitWindow = filtered
 
-	if #self.RateLimitWindow >= self.MaxMessagesPerSecond then
-		return false
+	ring[idx + 1] = currentTime
+	self.RateLimitIndex = (idx + 1) % capacity
+	if self.RateLimitCount < capacity then
+		self.RateLimitCount += 1
 	end
 
-	table.insert(self.RateLimitWindow, currentTime)
 	return true
 end
 
@@ -221,9 +283,7 @@ function Client:FragmentMessage(data, messageId, serializedBuffer, reliable)
 
 	local totalFragments = math.ceil(buffer.len(buf) / MTU_SIZE)
 	if totalFragments > MAX_FRAGMENT_COUNT then
-		error(
-			`Message {messageId} requires {totalFragments} fragments which exceeds the limit of {MAX_FRAGMENT_COUNT}`
-		)
+		error(`Message {messageId} requires {totalFragments} fragments which exceeds the limit of {MAX_FRAGMENT_COUNT}`)
 	end
 
 	if data.kind then
@@ -259,14 +319,16 @@ function Client:ReassembleFragments(fragmentData)
 		return nil
 	end
 
-	if type(fragmentData.totalFragments) ~= "number"
+	if
+		type(fragmentData.totalFragments) ~= "number"
 		or fragmentData.totalFragments < 1
 		or fragmentData.totalFragments > MAX_FRAGMENT_COUNT
 	then
 		return nil
 	end
 
-	if type(fragmentData.fragmentIndex) ~= "number"
+	if
+		type(fragmentData.fragmentIndex) ~= "number"
 		or fragmentData.fragmentIndex < 0
 		or fragmentData.fragmentIndex >= fragmentData.totalFragments
 	then
@@ -285,6 +347,12 @@ function Client:ReassembleFragments(fragmentData)
 	end
 
 	if not self.FragmentBuffer[msgId] then
+		-- Check for potential memory exhaustion attack
+		if fragmentData.totalFragments > 10000 then
+			warn(`[KiNet][Client] Rejecting suspicious fragment request for {msgId}: {fragmentData.totalFragments} fragments`)
+			return nil
+		end
+		
 		self.FragmentBuffer[msgId] = {
 			fragments = {},
 			totalFragments = fragmentData.totalFragments,
@@ -309,9 +377,15 @@ function Client:ReassembleFragments(fragmentData)
 		fragmentState.totalBytes += chunkLength
 		if fragmentState.totalBytes > MAX_LOGICAL_MESSAGE_SIZE then
 			self.FragmentBuffer[msgId] = nil
-			warn(`[KiNet][Client] Dropping fragmented message {msgId} because it exceeds {MAX_LOGICAL_MESSAGE_SIZE} bytes`)
+			warn(
+				`[KiNet][Client] Dropping fragmented message {msgId} because it exceeds {MAX_LOGICAL_MESSAGE_SIZE} bytes`
+			)
 			return nil
 		end
+	else
+		-- Duplicate fragment detected - potential replay attack
+		warn(`[KiNet][Client] Duplicate fragment {fragmentData.fragmentIndex} for message {msgId}`)
+		return nil
 	end
 
 	if fragmentState.received == fragmentState.totalFragments then
@@ -391,14 +465,16 @@ end
 
 function Client:SendRaw(data)
 	local bypassRateLimit = type(data) == "table"
-		and (data.type == "ACK" or data.type == "HEARTBEAT" or data.type == "CONNECT" or data.type == "DISCONNECT")
+		and (data.type == "ACK" or data.type == "HEARTBEAT" or data.type == "CONNECT" or data.type == "DISCONNECT" 
+			or data.type == "AUTH_SUCCESS" or data.type == "AUTH_FAILED" or data.type == "SHUTDOWN"
+			or data.type == "SNAPSHOT_ACK")  -- Include all critical protocol messages
 
 	if not bypassRateLimit and not self:CheckRateLimit() then
 		warn("Rate limit exceeded")
 		return
 	end
 
-	data.timestamp = os.time()
+	data.timestamp = data.timestamp or os.time()
 	data.sequence = self.MessageSequence
 	self.MessageSequence = self.MessageSequence + 1
 
@@ -495,7 +571,9 @@ function Client:Connect(arguments)
 		end
 
 		if not Client.IsAuthenticated and Client.Socket then
-			warn(`[KiNet][Client] Failed to connect to {displayAddress}:{self.ServerPort} after {MAX_CONNECT_RETRIES} retries`)
+			warn(
+				`[KiNet][Client] Failed to connect to {displayAddress}:{self.ServerPort} after {MAX_CONNECT_RETRIES} retries`
+			)
 		end
 	end)
 end
@@ -530,6 +608,7 @@ function Client:Disconnect()
 
 	self._reliableQueueRunning = false
 	self._heartbeatRunning = false
+	self._monitorRunning = false
 	self._listenRunning = false
 
 	self.Socket:close()
@@ -540,11 +619,18 @@ function Client:Disconnect()
 	self.FragmentBuffer = {}
 	self.ReliableQueue = {}
 	self.ReceivedSequences = {}
-	self.ReceivedSequenceOrder = {}
+	self.ReceivedSequenceRing = nil
+	self.ReceivedSequenceIndex = 0
+	self.ReceivedSequenceCount = 0
 	self.HighestReceivedSequence = -math.huge
 	self.ProcessedReliableMessages = {}
-	self.ProcessedReliableOrder = {}
-	self.RateLimitWindow = {}
+	self.ProcessedReliableRing = nil
+	self.ProcessedReliableIndex = 0
+	self.ProcessedReliableCount = 0
+	self.RateLimitRing = nil
+	self.RateLimitIndex = 0
+	self.RateLimitCount = 0
+	self.RateLimitCapacity = 0
 
 	if Client._OnShutdown then
 		Client._OnShutdown()
@@ -575,6 +661,7 @@ function Client:Send(data, reliable)
 		if buffer.len(serialized) > MTU_SIZE then
 			local messageId = data.messageId or createMessageId("fragmented", self.MessageSequence)
 			data.messageId = messageId
+			data.timestamp = data.timestamp or os.time()
 			local largeOk, largeSerialized = pcall(Serializer.Serialize, data)
 			if not largeOk then
 				warn(`[KiNet][Client] Failed to serialize large fragmented message {messageId}: {largeSerialized}`)
@@ -608,6 +695,7 @@ function Client._middleware(v, addr)
 		if v.type == "AUTH_SUCCESS" then
 			Client.IsAuthenticated = true
 			Client.SessionId = v.sessionId
+			Client.LastHeartbeat = os.time()
 			log(`Authenticated with session: {v.sessionId}`)
 		end
 
@@ -660,6 +748,25 @@ function Client:StartHeartbeat()
 	end)
 end
 
+function Client:StartHeartbeatMonitor()
+	if self._monitorRunning then
+		return
+	end
+
+	self._monitorRunning = true
+	task.spawn(function()
+		while self._monitorRunning do
+			task.wait(HEARTBEAT_TIMEOUT / 2)
+			if Client.IsAuthenticated and Client.LastHeartbeat > 0 then
+				if os.time() - Client.LastHeartbeat > HEARTBEAT_TIMEOUT then
+					warn(`[KiNet][Client] Server timed out`)
+					Client:Disconnect()
+				end
+			end
+		end
+	end)
+end
+
 function Client:Listen()
 	if self._listenRunning then
 		return
@@ -668,6 +775,7 @@ function Client:Listen()
 	self._listenRunning = true
 	self:ProcessReliableQueue()
 	self:StartHeartbeat()
+	self:StartHeartbeatMonitor()
 
 	task.spawn(function()
 		while self._listenRunning do
@@ -721,7 +829,13 @@ function Client:Listen()
 						continue
 					end
 
-					if decoded.reliable and decoded.messageId and not rememberReliableMessage(self, decoded.messageId) then
+					self.LastHeartbeat = os.time()
+
+					if
+						decoded.reliable
+						and decoded.messageId
+						and not rememberReliableMessage(self, decoded.messageId)
+					then
 						continue
 					end
 

@@ -144,6 +144,113 @@ function StateRegistry.CloneState(state)
 	return cloneTable(state)
 end
 
+StateRegistry.NIL_VALUE = "__KINET_NIL__"
+
+local function areTablesEffectivelyEqual(a, b)
+	if a == b then return true end
+	if type(a) ~= "table" or type(b) ~= "table" then return false end
+	for k, v in pairs(a) do
+		if b[k] ~= v then
+			if type(v) == "table" and type(b[k]) == "table" then
+				if not areTablesEffectivelyEqual(v, b[k]) then
+					return false
+				end
+			else
+				return false
+			end
+		end
+	end
+	for k in pairs(b) do
+		if a[k] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+function StateRegistry.ComputeDelta(baseline, current)
+	if not baseline then
+		return StateRegistry.CloneState(current)
+	end
+	
+	local delta = { id = current.id, type = current.type, __isDelta = true }
+	local hasChanges = false
+	
+	-- Create a set of all keys from both tables for single-pass iteration
+	local allKeys = {}
+	for k in pairs(current) do
+		if k ~= "id" and k ~= "type" then
+			allKeys[k] = true
+		end
+	end
+	for k in pairs(baseline) do
+		if k ~= "id" and k ~= "type" then
+			allKeys[k] = true
+		end
+	end
+	
+	-- Single iteration through all keys
+	for k in pairs(allKeys) do
+		local v = current[k]
+		local bv = baseline[k]
+		
+		if v == nil then
+			-- Key exists in baseline but not current (deletion)
+			delta[k] = StateRegistry.NIL_VALUE
+			hasChanges = true
+		elseif bv == nil then
+			-- Key exists in current but not baseline (addition)
+			if type(v) == "table" then
+				delta[k] = cloneTable(v)
+			else
+				delta[k] = v
+			end
+			hasChanges = true
+		elseif type(v) == "table" and type(bv) == "table" then
+			-- Both are tables, compare deeply
+			if not areTablesEffectivelyEqual(v, bv) then
+				delta[k] = cloneTable(v)
+				hasChanges = true
+			end
+		elseif v ~= bv then
+			-- Simple value comparison
+			if type(v) == "table" then
+				delta[k] = cloneTable(v)
+			else
+				delta[k] = v
+			end
+			hasChanges = true
+		end
+	end
+	
+	if hasChanges then
+		return delta
+	end
+	return nil
+end
+
+function StateRegistry.ApplyDelta(baseline, delta)
+	if not delta.__isDelta then
+		return StateRegistry.CloneState(delta)
+	end
+	
+	local result = StateRegistry.CloneState(baseline)
+	for k, v in pairs(delta) do
+		if k == "id" or k == "type" or k == "__isDelta" then
+			continue
+		end
+		if v == StateRegistry.NIL_VALUE then
+			result[k] = nil
+		elseif type(v) == "table" then
+			result[k] = cloneTable(v)
+		else
+			result[k] = v
+		end
+	end
+	
+	return result
+end
+
 function StateRegistry.StatesEqual(a, b)
 	if a == nil or b == nil then
 		return false
@@ -232,15 +339,15 @@ StateRegistry.RegisterAdapter("BasePart", {
 
 		local aCF = CFrame.FromTable(a.cframe)
 		local bCF = CFrame.FromTable(b.cframe)
-		if not aCF:IsSameTransform(bCF, 0.02) then
+		if not aCF:IsSameTransform(bCF, 0.001) then
 			return false
 		end
 
-		if vectorDistanceSquared(a.linear, b.linear) > 0.01 then
+		if vectorDistanceSquared(a.linear, b.linear) > 0.001 then
 			return false
 		end
 
-		if vectorDistanceSquared(a.angular, b.angular) > 0.01 then
+		if vectorDistanceSquared(a.angular, b.angular) > 0.001 then
 			return false
 		end
 

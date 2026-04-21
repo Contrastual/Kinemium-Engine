@@ -4,6 +4,7 @@ local KiNet = require("@KiNet")
 local Protocol = require("../NetworkService/Protocol")
 local Shared = require("./Shared")
 local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
+local PredictionBuffer = require("./PredictionBuffer")
 local CFrame = require("@CFrame")
 local InputActionService = require("../InputActionService/InputActionService")
 
@@ -27,6 +28,16 @@ function Server.init(context)
 	local userdata = serializationService.userdata
 	local runService = game:GetService("RunService")
 
+	-- Register custom serializer adapters with error handling
+	local ok, SerializerAdapters = pcall(function()
+		return KiNet.SerializerAdapters
+	end)
+	if ok and SerializerAdapters and SerializerAdapters.EnsureRegistered then
+		SerializerAdapters.EnsureRegistered()
+	elseif not ok then
+		print("[Replicator][Server] SerializerAdapters not available, using default serializers")
+	end
+
 	local lookup = {}
 	local monitors = {}
 	local mutedObjects = setmetatable({}, { __mode = "k" })
@@ -45,7 +56,7 @@ function Server.init(context)
 
 	local trackedStateObjects = {}
 	local dirtyPatches = {}
-	local snapshotCacheByClient = {}
+	local objectStateHistory = {}
 	local terrainQueueByClient = {}
 	local ownershipRoots = {}
 	local ownershipStateByRoot = setmetatable({}, { __mode = "k" })
@@ -62,17 +73,11 @@ function Server.init(context)
 			return false
 		end
 
-		local ok, result = pcall(function()
-			return object.GetAttribute and object:GetAttribute("__humanoidRigRoot") == true
-		end)
-		if ok and result then
+		if type(object.GetAttribute) == "function" and object:GetAttribute("__humanoidRigRoot") == true then
 			return true
 		end
 
-		local okName, name = pcall(function()
-			return object.Name
-		end)
-		return okName and name == "HumanoidRootPart"
+		return object.Name == "HumanoidRootPart"
 	end
 
 	local function shouldLogHumanoidRoot(stage, sessionKey, object, interval)
@@ -335,6 +340,7 @@ function Server.init(context)
 		if object.NetworkId ~= nil then
 			lookup[object.NetworkId] = nil
 			trackedStateObjects[object.NetworkId] = nil
+			objectStateHistory[object.NetworkId] = nil
 		end
 	end
 
@@ -342,6 +348,10 @@ function Server.init(context)
 		local root, controller = networkOwnership.GetControllerRoot(object)
 		if root ~= nil and controller ~= nil then
 			ownershipRoots[root] = true
+		elseif object.ClassName == "Part" or object.ClassName == "MeshPart" or object.BaseClass == "BasePart" then
+			if object.Anchored == false then
+				ownershipRoots[object] = true
+			end
 		end
 	end
 
@@ -393,6 +403,16 @@ function Server.init(context)
 		monitors[object] = object.Changed:Connect(function(prop, value)
 			if mutedObjects[object] then
 				return
+			end
+			if prop == "Anchored" then
+				if value == false then
+					registerOwnershipRoot(object)
+				else
+					local root, controller = networkOwnership.GetControllerRoot(object)
+					if root == nil or controller == nil then
+						unregisterOwnershipRoot(object)
+					end
+				end
 			end
 			queuePatch(object, prop, value)
 		end)
@@ -761,10 +781,16 @@ function Server.init(context)
 						return
 					end
 
-					networkService:SendToClient(session, Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, {
-						object = self.NetworkId,
-						args = packArgs(...),
-					}, false)
+					networkService:SendToClient(
+						session,
+						Protocol.Channels.Message,
+						Protocol.Kinds.UnreliableRemoteEvent,
+						{
+							object = self.NetworkId,
+							args = packArgs(...),
+						},
+						false
+					)
 				end,
 				FireAllClients = function(self, ...)
 					networkService:Broadcast(Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, {
@@ -971,7 +997,8 @@ function Server.init(context)
 		-- server to stop processing heartbeats during sendCreate, which
 		-- triggers a heartbeat-timeout disconnect on the client.
 		task.spawn(function()
-			snapshotCacheByClient[session.key] = nil
+			session.lastSnapshotAckTick = 0
+			session.lastSentSnapshotTick = -1
 			clearTerrainQueue(session)
 			readySessions[session.key] = false -- not world-ready yet
 			local initialRoots = collectInitialRoots()
@@ -993,7 +1020,6 @@ function Server.init(context)
 
 	networkService.ClientRemoved:Connect(function(session)
 		readySessions[session.key] = nil
-		snapshotCacheByClient[session.key] = nil
 		clearTerrainQueue(session)
 		antiCheat:ClearSession(session)
 
@@ -1041,6 +1067,16 @@ function Server.init(context)
 
 			session.lastOwnedStateSequence = sequence
 			session.pendingOwnedStateBatch = payload
+		end
+	)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Replication,
+		Protocol.Kinds.SnapshotAck,
+		function(session, payload)
+			if session and payload.tick then
+				session.lastSnapshotAckTick = payload.tick
+			end
 		end
 	)
 
@@ -1353,7 +1389,8 @@ function Server.init(context)
 			end
 
 			local resolvedRoot, controller = networkOwnership.GetControllerRoot(root)
-			if resolvedRoot ~= root or controller == nil then
+			resolvedRoot = resolvedRoot or root
+			if resolvedRoot ~= root then
 				unregisterOwnershipRoot(root)
 				continue
 			end
@@ -1403,8 +1440,15 @@ function Server.init(context)
 			end
 
 			if speed < config.velocityThreshold then
-				if currentOwner ~= nil and currentSession == nil then
-					assignOwnership(root, nil, now)
+				if currentOwner ~= nil then
+					if currentSession == nil then
+						assignOwnership(root, nil, now)
+						state.cooldownUntil = now + config.transferCooldown
+					end
+				elseif canClaim then
+					-- Even if the object is stationary, if it has no owner, 
+					-- assign it to the nearest player so they can interact with it.
+					assignOwnership(root, bestPlayer, now)
 					state.cooldownUntil = now + config.transferCooldown
 				end
 				continue
@@ -1421,51 +1465,72 @@ function Server.init(context)
 	end
 
 	local function flushSnapshots(tick)
+		for netId, object in pairs(trackedStateObjects) do
+			if object.CanReplicate == false or object.Parent == nil then
+				continue
+			end
+
+			local state = stateRegistry.Capture(object)
+			if not state then
+				continue
+			end
+
+			local history = objectStateHistory[netId]
+			if not history then
+				history = PredictionBuffer.new(64)
+				objectStateHistory[netId] = history
+			end
+
+			local prev = history:GetLatest()
+			if not prev or not stateRegistry.StatesEqual(prev, state) then
+				local cloned = stateRegistry.CloneState(state)
+				history:Push(tick, cloned)
+			end
+		end
+
 		for _, session in ipairs(networkService:GetSessions()) do
 			if not readySessions[session.key] then
 				continue -- client is still loading the world; do not send snapshots yet
 			end
-			local cache = snapshotCacheByClient[session.key]
-			if not cache then
-				cache = {
-					states = {},
-					lastAck = -1,
-				}
-				snapshotCacheByClient[session.key] = cache
-			end
-
+			
+			local clientAckTick = session.lastSnapshotAckTick or 0
+			local lastSentTick = session.lastSentSnapshotTick or -1
 			local changedStates = {}
+			local numStates = 0
 
-			for netId, object in pairs(trackedStateObjects) do
-				if object.CanReplicate == false or object.Parent == nil then
-					continue
-				end
-
-				local state = stateRegistry.Capture(object)
-				if not state then
-					continue
-				end
-
-				local previous = cache.states[netId]
-				if not previous or not stateRegistry.StatesEqual(previous, state) then
-					cache.states[netId] = stateRegistry.CloneState(state)
-					table.insert(changedStates, state)
-					logHumanoidRootState("snapshot-queued", session.key, object, state, `tick={tick}`)
+			for netId, history in pairs(objectStateHistory) do
+				local latestTickSequence = history.order[#history.order]
+				if not latestTickSequence then continue end
+				
+				if latestTickSequence > clientAckTick then
+					local baseline = history:GetAtOrBefore(clientAckTick)
+					local currentState = history:GetLatest()
+					
+					local delta = stateRegistry.ComputeDelta(baseline, currentState)
+					if delta then
+						table.insert(changedStates, delta)
+						numStates += 1
+					else
+						-- if latestTickSequence > clientAckTick but delta is nil, it means 
+						-- this client already has this state effectively.
+					end
 				end
 			end
 
-			local lastAck = session.lastAppliedOwnedStateSequence or 0
-			if #changedStates > 0 or cache.lastAck ~= lastAck then
-				cache.lastAck = lastAck
-				local payloads = if #changedStates > 0
+			local lastOwnedSequence = session.lastAppliedOwnedStateSequence or 0
+			if numStates > 0 or lastSentTick ~= tick then
+				session.lastSentSnapshotTick = tick
+				local payloads = if numStates > 0
 					then buildListPayloads("states", changedStates, {
 						tick = tick,
-						lastProcessedOwnedStateSequence = lastAck,
+						baseTick = clientAckTick,
+						lastProcessedOwnedStateSequence = lastOwnedSequence,
 					}, MAX_SNAPSHOT_STATES_PER_MESSAGE, REPLICATION_TARGET_BYTES)
 					else {
 						{
 							tick = tick,
-							lastProcessedOwnedStateSequence = lastAck,
+							baseTick = clientAckTick,
+							lastProcessedOwnedStateSequence = lastOwnedSequence,
 							states = {},
 						},
 					}
@@ -1519,7 +1584,8 @@ function Server.init(context)
 			print(`[Replicator][Server] Catch-up world send for early-connected session {session.key}`)
 
 			-- Mirror exactly what ClientConnected does.
-			snapshotCacheByClient[session.key] = nil
+			session.lastSnapshotAckTick = 0
+			session.lastSentSnapshotTick = -1
 			clearTerrainQueue(session)
 			readySessions[session.key] = false
 

@@ -99,9 +99,6 @@ return {
 						handles._gizmoTransform:writef32(36, size.Z)
 					end
 				elseif part and part.ClassName == "Model" then
-					-- Track the model's live pivot + extents so the gizmo stays
-					-- centred on the model as it moves. Skip the update while the
-					-- user is actively dragging (the gizmo owns the transform then).
 					if not handles._isDragging then
 						local pivot = part:GetPivot()
 						local pos = pivot.Position

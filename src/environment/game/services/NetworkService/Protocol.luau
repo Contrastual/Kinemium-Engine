@@ -30,6 +30,7 @@ Protocol.Kinds = {
 	OwnedStateBatch = "owned_state_batch",
 	OwnedPatchBatch = "owned_patch_batch",
 	OwnershipImpact = "ownership_impact",
+	SnapshotAck = "snapshot_ack",
 }
 
 function Protocol.MakeEnvelope(channel, kind, payload, tick)

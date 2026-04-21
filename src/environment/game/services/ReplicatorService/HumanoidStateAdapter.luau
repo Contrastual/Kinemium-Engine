@@ -27,7 +27,6 @@ function HumanoidStateAdapter.capture(humanoid)
 		state = humanoid.State or 0,
 		sprinting = humanoid.Sprinting == true,
 		crouching = humanoid.Crouching == true,
-		-- MoveVelocity is needed so the replica branch can drive animations
 		velocity = humanoid.MoveVelocity and humanoid.MoveVelocity:ToTable() or nil,
 		facingDir = humanoid.FacingDirection and humanoid.FacingDirection:ToTable() or nil,
 	}

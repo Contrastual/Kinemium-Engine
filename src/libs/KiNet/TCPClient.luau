@@ -109,19 +109,29 @@ end
 function TCPClient:CheckRateLimit()
 	local currentTime = os.time()
 
-	local filtered = {}
-	for _, timestamp in ipairs(self.RateLimitWindow or {}) do
-		if currentTime - timestamp < 1 then
-			table.insert(filtered, timestamp)
+	local ring = self.RateLimitRing
+	if not ring then
+		ring = table.create(self.MaxMessagesPerSecond, 0)
+		self.RateLimitRing = ring
+		self.RateLimitIndex = 0
+		self.RateLimitCount = 0
+	end
+
+	local idx = self.RateLimitIndex
+
+	if self.RateLimitCount >= self.MaxMessagesPerSecond then
+		local oldest = ring[idx + 1]
+		if oldest and currentTime - oldest < 1 then
+			return false
 		end
 	end
-	self.RateLimitWindow = filtered
 
-	if #self.RateLimitWindow >= self.MaxMessagesPerSecond then
-		return false
+	ring[idx + 1] = currentTime
+	self.RateLimitIndex = (idx + 1) % self.MaxMessagesPerSecond
+	if self.RateLimitCount < self.MaxMessagesPerSecond then
+		self.RateLimitCount += 1
 	end
 
-	table.insert(self.RateLimitWindow, currentTime)
 	return true
 end
 

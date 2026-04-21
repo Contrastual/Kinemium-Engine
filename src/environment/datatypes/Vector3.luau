@@ -272,6 +272,8 @@ end
 function Vector3:ToTable()
 	return {
 		type = "Vector3",
+
+		__type = "Vector3",
 		X = self.X,
 		Y = self.Y,
 		Z = self.Z,
@@ -279,7 +281,7 @@ function Vector3:ToTable()
 end
 
 function Vector3.FromTable(tbl)
-	assert(tbl.type == "Vector3")
+	assert(tbl.type == "Vector3" or tbl.__type == "Vector3")
 	return Vector3.new(tbl.X, tbl.Y, tbl.Z)
 end
 

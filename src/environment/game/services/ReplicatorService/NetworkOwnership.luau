@@ -10,7 +10,8 @@ local DEFAULT_VELOCITY_THRESHOLD = 0.75
 local DEFAULT_STEAL_MARGIN = 16
 
 local function isBasePart(object)
-	return object ~= nil and (object.BaseClass == "BasePart" or object.ClassName == "Part" or object.ClassName == "MeshPart")
+	return object ~= nil
+		and (object.BaseClass == "BasePart" or object.ClassName == "Part" or object.ClassName == "MeshPart")
 end
 
 local function asNumber(value, fallback)
@@ -156,7 +157,11 @@ function NetworkOwnership.IsOwnedReplicatedPhysicsPart(object, player)
 		return false
 	end
 	local _, controller = NetworkOwnership.GetControllerRoot(object)
-	return controller ~= nil and controller.ReplicatePhysics ~= false
+	if controller ~= nil then
+		return controller.ReplicatePhysics ~= false
+	end
+
+	return object.Anchored == false
 end
 
 function NetworkOwnership.IsOwnedByPlayer(object, player)
@@ -164,7 +169,7 @@ function NetworkOwnership.IsOwnedByPlayer(object, player)
 		return false
 	end
 
-	local root = NetworkOwnership.GetControllerRoot(object)
+	local root = NetworkOwnership.GetAuthorityRoot(object)
 	if root == nil then
 		return false
 	end
@@ -266,16 +271,18 @@ function NetworkOwnership.CanAutoAssignOwnership(object, controllerOverride)
 	local config = NetworkOwnership.GetAutoOwnershipConfig(object, controllerOverride)
 	local root = config.root
 	local controller = config.controller
-	if root == nil or controller == nil then
+	if root == nil then
 		return false
 	end
 
-	if controller.Enabled == false or controller.ReplicatePhysics == false then
-		return false
-	end
+	if controller then
+		if controller.Enabled == false or controller.ReplicatePhysics == false then
+			return false
+		end
 
-	if controller.AutoAssignOwnership == false or controller.LockOwner == true then
-		return false
+		if controller.AutoAssignOwnership == false or controller.LockOwner == true then
+			return false
+		end
 	end
 
 	if root.Anchored == true then
@@ -383,11 +390,7 @@ function NetworkOwnership.ShouldSimulatePhysicsForMachine(object, game)
 		if localPlayer and matchesPlayerCharacter(target, localPlayer) then
 			return true
 		end
-		-- On the server, before ownership is formally assigned, avoid simulating
-		-- character models that belong to a connected player. The player's client
-		-- is always the physics authority for their own character. Simulating here
-		-- would write stale (spawn-position) CFrames into snapshots, causing other
-		-- clients to see the character floating at origin for ~0.2 s.
+
 		if IsServer == true and target.ClassName == "Model" and game and game.GetService then
 			local ok, players = pcall(game.GetService, game, "Players")
 			if ok and players then

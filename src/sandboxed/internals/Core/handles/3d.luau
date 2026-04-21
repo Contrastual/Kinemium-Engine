@@ -26,7 +26,7 @@ local _focusAlpha = 0
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
 ishared.Grid = 1
-ishared.ForceMoveObject = true
+ishared.ForceMoveObject = false  -- Disabled by default to prevent accidental dragging
 ishared.RotationStep = 15
 
 local aereon = require("@Aereon")
@@ -523,6 +523,17 @@ NewCategoryToolbar:Fire("Tools", {
 			hoverColor = Color3.new(0, 0, 0),
 			roundness = 0.2,
 			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Size.png"),
+		},
+		{
+			type = "ImageButton",
+			text = ishared.ForceMoveObject and "Disable Handles" or "Enable Handles",
+			callback = function()
+				ishared.ForceMoveObject = not ishared.ForceMoveObject
+				updateAdornees()
+			end,
+			hoverTransparency = 0.5,
+			hoverColor = ishared.ForceMoveObject and Color3.new(0, 1, 0) or Color3.new(0, 0.5, 0),
+			roundness = 0.2,
 		},
 		{
 			type = "Separator",

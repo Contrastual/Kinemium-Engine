@@ -273,13 +273,22 @@ local function startServer()
 		sMode = "Survival"
 	end
 
-	game.NetworkService:SetPreviewData({
-		name = sName,
-		motd = sMotd,
-		description = sDesc,
-		map = sMap,
-		mode = sMode,
-	})
+	task.spawn(function()
+		task.wait(1.5)
+		if localServerProcess then
+			local code = string.format(
+				"pcall(function() game:GetService('NetworkService'):SetPreviewData({name='%s', motd='%s', description='%s', map='%s', mode='%s'}) end)\n",
+				sName,
+				sMotd,
+				sDesc,
+				sMap,
+				sMode
+			)
+			pcall(function()
+				localServerProcess.stdin:write(code)
+			end)
+		end
+	end)
 
 	group.manageServerPrompt.set("buttons", {
 		{
@@ -484,6 +493,8 @@ group = aereon.create({
 
 					local info, err = NetworkService:Ping(server_address, server_port)
 
+					print(info, err)
+
 					if info then
 						local serverCardData = {
 							x = 0,
@@ -542,8 +553,6 @@ group = aereon.create({
 	},
 })
 
--- Fix stopServer button cycling: now that group exists, patch the Start button onClick
--- to call the real toggle rather than re-fetching buttons[1].onClick recursively.
 group.manageServerPrompt.set("buttons", {
 	{
 		text = "Start Server",

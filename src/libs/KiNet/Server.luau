@@ -9,9 +9,13 @@ local onRecieveCallbacks = {}
 local HEARTBEAT_TIMEOUT = 120
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
 local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
-local MESSAGE_TIMEOUT = 300
+-- Replay / clock-skew window for inbound messages (seconds). The previous
+-- value of 300s allowed a 5-minute replay; this is tightened to a window
+-- that still tolerates reasonable NTP drift.
+local MESSAGE_TIMEOUT = 10
 local MAX_CLIENTS = 1000
 local MAX_MESSAGES_PER_CLIENT = 1000
+local RATE_LIMIT_WINDOW_SECONDS = 1
 local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 15
@@ -29,16 +33,33 @@ local function createMessageId(prefix, sequence, client)
 	return `{prefix}_{sequence}_{suffix}_{math.floor(os.clock() * 1000)}`
 end
 
+-- Ring-buffered dedup for inbound sequences. Previously this used
+-- `table.insert` / `table.remove(tbl, 1)` which is O(n) per packet.
 local function trackClientSequence(client, sequence)
 	if type(sequence) ~= "number" then
 		return true
 	end
 
-	client.recentSequences = client.recentSequences or {}
-	client.recentSequenceOrder = client.recentSequenceOrder or {}
-	client.highestSequence = client.highestSequence or -math.huge
+	local seen = client.recentSequences
+	if not seen then
+		seen = {}
+		client.recentSequences = seen
+	end
 
-	if client.recentSequences[sequence] then
+	local ring = client.recentSequenceRing
+	if not ring then
+		-- Initialize ring buffer atomically
+		ring = table.create(MAX_SEQUENCE_WINDOW, 0)
+		client.recentSequenceRing = ring
+		client.recentSequenceIndex = 0
+		client.recentSequenceCount = 0
+	end
+
+	if client.highestSequence == nil then
+		client.highestSequence = -math.huge
+	end
+
+	if seen[sequence] then
 		return false, "Duplicate message"
 	end
 
@@ -46,18 +67,21 @@ local function trackClientSequence(client, sequence)
 		return false, "Sequence too old"
 	end
 
-	client.recentSequences[sequence] = true
-	table.insert(client.recentSequenceOrder, sequence)
+	local idx = client.recentSequenceIndex
+	local evicted = ring[idx + 1]
+	if evicted ~= nil and client.recentSequenceCount >= MAX_SEQUENCE_WINDOW then
+		seen[evicted] = nil
+	end
+
+	ring[idx + 1] = sequence
+	seen[sequence] = true
+	client.recentSequenceIndex = (idx + 1) % MAX_SEQUENCE_WINDOW
+	if client.recentSequenceCount < MAX_SEQUENCE_WINDOW then
+		client.recentSequenceCount += 1
+	end
 
 	if sequence > client.highestSequence then
 		client.highestSequence = sequence
-	end
-
-	while #client.recentSequenceOrder > MAX_SEQUENCE_WINDOW do
-		local oldest = table.remove(client.recentSequenceOrder, 1)
-		if oldest then
-			client.recentSequences[oldest] = nil
-		end
 	end
 
 	return true
@@ -72,26 +96,42 @@ local function cleanupFragmentBuffer(fragmentBuffer, now)
 	end
 end
 
+-- Ring-buffered dedup for processed reliable message IDs.
 local function rememberReliableMessage(client, messageId)
 	if type(messageId) ~= "string" then
 		return true
 	end
 
-	client.processedReliableMessages = client.processedReliableMessages or {}
-	client.processedReliableOrder = client.processedReliableOrder or {}
+	local seen = client.processedReliableMessages
+	if not seen then
+		seen = {}
+		client.processedReliableMessages = seen
+	end
 
-	if client.processedReliableMessages[messageId] then
+	local ring = client.processedReliableRing
+	if not ring then
+		-- Initialize ring buffer atomically
+		ring = table.create(MAX_PROCESSED_RELIABLE_MESSAGES)
+		client.processedReliableRing = ring
+		client.processedReliableIndex = 0
+		client.processedReliableCount = 0
+	end
+
+	if seen[messageId] then
 		return false
 	end
 
-	client.processedReliableMessages[messageId] = true
-	table.insert(client.processedReliableOrder, messageId)
+	local idx = client.processedReliableIndex
+	local evicted = ring[idx + 1]
+	if evicted ~= nil and client.processedReliableCount >= MAX_PROCESSED_RELIABLE_MESSAGES then
+		seen[evicted] = nil
+	end
 
-	while #client.processedReliableOrder > MAX_PROCESSED_RELIABLE_MESSAGES do
-		local oldest = table.remove(client.processedReliableOrder, 1)
-		if oldest then
-			client.processedReliableMessages[oldest] = nil
-		end
+	ring[idx + 1] = messageId
+	seen[messageId] = true
+	client.processedReliableIndex = (idx + 1) % MAX_PROCESSED_RELIABLE_MESSAGES
+	if client.processedReliableCount < MAX_PROCESSED_RELIABLE_MESSAGES then
+		client.processedReliableCount += 1
 	end
 
 	return true
@@ -172,26 +212,39 @@ function Server:ValidateMessage(data, client)
 	return true
 end
 
+-- Ring-buffered rate limiter. Previously allocated a new array and copied
+-- every live timestamp on each packet (O(n) per packet); this uses a fixed
+-- ring of the last MAX_MESSAGES_PER_CLIENT timestamps and only looks at the
+-- oldest slot.
 function Server:CheckRateLimit(client)
 	local currentTime = os.clock()
 
-	if not client.rateLimitWindow then
-		client.rateLimitWindow = {}
+	local ring = client.rateLimitRing
+	if not ring then
+		-- Initialize ring buffer atomically
+		ring = table.create(MAX_MESSAGES_PER_CLIENT, 0)
+		client.rateLimitRing = ring
+		client.rateLimitIndex = 0
+		client.rateLimitCount = 0
 	end
 
-	local filtered = {}
-	for _, timestamp in ipairs(client.rateLimitWindow) do
-		if currentTime - timestamp < 1 then
-			table.insert(filtered, timestamp)
+	local idx = client.rateLimitIndex
+
+	if client.rateLimitCount >= MAX_MESSAGES_PER_CLIENT then
+		-- Slot at idx is the oldest recorded timestamp. If it is still
+		-- inside the rate-limit window, the client has exceeded the cap.
+		local oldest = ring[idx + 1]
+		if oldest and currentTime - oldest < RATE_LIMIT_WINDOW_SECONDS then
+			return false
 		end
 	end
-	client.rateLimitWindow = filtered
 
-	if #client.rateLimitWindow >= MAX_MESSAGES_PER_CLIENT then
-		return false
+	ring[idx + 1] = currentTime
+	client.rateLimitIndex = (idx + 1) % MAX_MESSAGES_PER_CLIENT
+	if client.rateLimitCount < MAX_MESSAGES_PER_CLIENT then
+		client.rateLimitCount += 1
 	end
 
-	table.insert(client.rateLimitWindow, currentTime)
 	return true
 end
 
@@ -270,6 +323,12 @@ function Server:ReassembleFragments(fragmentData, client)
 	end
 
 	if not client.fragmentBuffer[msgId] then
+		-- Check for potential memory exhaustion attack
+		if fragmentData.totalFragments > 10000 then
+			warn(`[KiNet][Server] Rejecting suspicious fragment request for {msgId}: {fragmentData.totalFragments} fragments`)
+			return nil
+		end
+		
 		client.fragmentBuffer[msgId] = {
 			fragments = {},
 			totalFragments = fragmentData.totalFragments,
@@ -299,6 +358,10 @@ function Server:ReassembleFragments(fragmentData, client)
 			)
 			return nil
 		end
+	else
+		-- Duplicate fragment detected - potential replay attack
+		warn(`[KiNet][Server] Duplicate fragment {fragmentData.fragmentIndex} for message {msgId} from {clientKey(client)}`)
+		return nil
 	end
 
 	if fragmentState.received == fragmentState.totalFragments then
@@ -441,7 +504,7 @@ function Server:SendReliable(client, data)
 end
 
 function Server:SendRaw(client, data)
-	data.timestamp = os.time()
+	data.timestamp = data.timestamp or os.time()
 	data.sessionId = client.sessionId
 
 	local buf = Serializer.Serialize(data)
@@ -479,6 +542,7 @@ function Server:Send(client, data, reliable)
 		if buffer.len(serialized) > MTU_SIZE then
 			local messageId = data.messageId or createMessageId("fragmented", Server.MessageSequence, client)
 			data.messageId = messageId
+			data.timestamp = data.timestamp or os.time()
 			local largeOk, largeSerialized = pcall(Serializer.Serialize, data)
 			if not largeOk then
 				warn(`[KiNet][Server] Failed to serialize large fragmented message {messageId}: {largeSerialized}`)
@@ -564,11 +628,17 @@ function Server:AuthenticateClient(addr, authToken)
 		lastHeartbeat = os.time(),
 		lastSequence = nil,
 		recentSequences = {},
-		recentSequenceOrder = {},
+		recentSequenceRing = nil,
+		recentSequenceIndex = 0,
+		recentSequenceCount = 0,
 		highestSequence = -math.huge,
 		processedReliableMessages = {},
-		processedReliableOrder = {},
-		rateLimitWindow = {},
+		processedReliableRing = nil,
+		processedReliableIndex = 0,
+		processedReliableCount = 0,
+		rateLimitRing = nil,
+		rateLimitIndex = 0,
+		rateLimitCount = 0,
 		fragmentBuffer = {},
 		pendingAcks = {},
 	}

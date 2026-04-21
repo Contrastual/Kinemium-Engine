@@ -1,5 +1,3 @@
--- Type definitions for Server module
-
 export type Socket = {
 	bindIp: (self: Socket, ip: string, port: number) -> (),
 	sendMsg: (self: Socket, port: number, address: string, data: buffer | string) -> (),
@@ -63,11 +61,17 @@ export type ConnectedClient = {
 	lastHeartbeat: number,
 	lastSequence: number?,
 	recentSequences: { [number]: boolean }?,
-	recentSequenceOrder: { number }?,
+	recentSequenceRing: { number }?,
+	recentSequenceIndex: number?,
+	recentSequenceCount: number?,
 	highestSequence: number?,
 	processedReliableMessages: { [string]: boolean }?,
-	processedReliableOrder: { string }?,
-	rateLimitWindow: { number },
+	processedReliableRing: { string }?,
+	processedReliableIndex: number?,
+	processedReliableCount: number?,
+	rateLimitRing: { number }?,
+	rateLimitIndex: number?,
+	rateLimitCount: number?,
 	fragmentBuffer: { [string]: FragmentBuffer },
 	pendingAcks: { [string]: PendingAck },
 }

@@ -14,6 +14,7 @@ end
 
 function Client.init(context)
 	print("[Replicator][Client] ===== Client.init START =====")
+	local KiNet = require("@KiNet")
 	local game = context.game
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
@@ -22,6 +23,16 @@ function Client.init(context)
 	local userdata = serializationService.userdata
 	local runService = game:GetService("RunService")
 	print("[Replicator][Client] Services resolved")
+
+	-- Register custom serializer adapters with error handling
+	local ok, SerializerAdapters = pcall(function()
+		return KiNet.SerializerAdapters
+	end)
+	if ok and SerializerAdapters and SerializerAdapters.EnsureRegistered then
+		SerializerAdapters.EnsureRegistered()
+	elseif not ok then
+		print("[Replicator][Client] SerializerAdapters not available, using default serializers")
+	end
 
 	local lookup = {}
 	local singletonByClass = {}
@@ -35,6 +46,8 @@ function Client.init(context)
 	local monitors = {}
 	local mutedObjects = setmetatable({}, { __mode = "k" })
 	local predictionBuffer = PredictionBuffer.new(128)
+	local clientBaselineCache = {}
+	local MAX_BASELINE_CACHE_SIZE = 64  -- Limit cache size to prevent memory leaks
 	local workspace = game:GetService("Workspace")
 	local ownedStateSequence = 0
 	local outboundOwnedPatchEntries = {}
@@ -358,8 +371,6 @@ function Client.init(context)
 		local retry = {}
 
 		for _, entry in ipairs(deferredReferencePatches) do
-			-- Discard entries that are older than the TTL (the referenced object
-			-- will never arrive) or if we are already at the cap.
 			if entry.addedAt and now - entry.addedAt > DEFERRED_PATCH_TTL then
 				continue
 			end
@@ -877,7 +888,46 @@ function Client.init(context)
 
 		predictionBuffer:Acknowledge(ackSequence)
 
-		for _, state in ipairs(payload.states or {}) do
+		local baseTick = payload.baseTick or 0
+		local baselineMap = clientBaselineCache[baseTick] or {}
+		local newBaselineMap = {}
+		local statesToApply = {}
+
+		for _, stateOrDelta in ipairs(payload.states or {}) do
+			local netId = stateOrDelta.id
+			local baseline = baselineMap[netId]
+			local fullState = stateRegistry.ApplyDelta(baseline, stateOrDelta)
+			newBaselineMap[netId] = fullState
+			table.insert(statesToApply, fullState)
+		end
+
+		for netId, baseline in pairs(baselineMap) do
+			if not newBaselineMap[netId] then
+				newBaselineMap[netId] = baseline
+			end
+		end
+
+		clientBaselineCache[payload.tick] = newBaselineMap
+		
+		-- Clean up old entries and enforce maximum cache size
+		local cacheEntries = {}
+		for t in pairs(clientBaselineCache) do
+			if t < payload.tick - 120 then
+				clientBaselineCache[t] = nil
+			else
+				table.insert(cacheEntries, t)
+			end
+		end
+		
+		-- If cache exceeds maximum size, remove oldest entries
+		if #cacheEntries > MAX_BASELINE_CACHE_SIZE then
+			table.sort(cacheEntries)
+			for i = 1, #cacheEntries - MAX_BASELINE_CACHE_SIZE do
+				clientBaselineCache[cacheEntries[i]] = nil
+			end
+		end
+
+		for _, state in ipairs(statesToApply) do
 			local object = lookup[state.id]
 			if object then
 				applyOwnershipState(object, state)
@@ -885,19 +935,16 @@ function Client.init(context)
 		end
 
 		local localPlayer = game.Players.LocalPlayer
-		for _, state in ipairs(payload.states or {}) do
+		for _, state in ipairs(statesToApply) do
 			local object = lookup[state.id]
 			local ackPredictedState = ackPredictedStates[state.id]
 			if not object then
-				-- Object not yet in lookup (Create packet hasn't been processed yet).
-				-- Buffer the latest state so it can be applied the moment the object arrives.
 				if not pendingSnapshots[state.id] then
 					if pendingSnapshotsCount < MAX_PENDING_SNAPSHOTS then
 						pendingSnapshots[state.id] = { state = state, ackPredictedState = ackPredictedState }
 						pendingSnapshotsCount += 1
 					end
 				else
-					-- Update an existing entry without changing the count
 					pendingSnapshots[state.id] = { state = state, ackPredictedState = ackPredictedState }
 				end
 				continue
@@ -910,8 +957,6 @@ function Client.init(context)
 					reconcileLocalState(object, state, ackPredictedState)
 				elseif not (localPlayer and networkOwnership.IsOwnedByPlayer(object, localPlayer)) then
 					remoteTargets[state.id] = state
-					-- Apply velocity immediately so the Humanoid non-authoritative branch
-					-- can read the correct speed for animation (walk/run/idle detection)
 					withMutedObject(object, function()
 						if state.linear then
 							local linear = Vector3.FromTable(state.linear)
@@ -1070,6 +1115,9 @@ function Client.init(context)
 	end)
 
 	networkService:RegisterMessageHandler(Protocol.Channels.Replication, Protocol.Kinds.Snapshot, function(_, payload)
+		networkService:SendToServer(Protocol.Channels.Replication, Protocol.Kinds.SnapshotAck, {
+			tick = payload.tick,
+		}, false)
 		handleSnapshot(payload)
 	end)
 
@@ -1107,17 +1155,21 @@ function Client.init(context)
 		end
 	end)
 
-	networkService:RegisterMessageHandler(Protocol.Channels.Message, Protocol.Kinds.UnreliableRemoteEvent, function(_, payload)
-		local object = lookup[payload.object]
-		if not object or object.ClassName ~= "UnreliableRemoteEvent" then
-			return
-		end
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Message,
+		Protocol.Kinds.UnreliableRemoteEvent,
+		function(_, payload)
+			local object = lookup[payload.object]
+			if not object or object.ClassName ~= "UnreliableRemoteEvent" then
+				return
+			end
 
-		local args = payload.args or {}
-		if type(object.OnClientEvent.Fire) == "function" then
-			object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
+			local args = payload.args or {}
+			if type(object.OnClientEvent.Fire) == "function" then
+				object.OnClientEvent:Fire(table.unpack(args, 1, args.n or #args))
+			end
 		end
-	end)
+	)
 
 	networkService:RegisterMessageHandler(
 		Protocol.Channels.Message,

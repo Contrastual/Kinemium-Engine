@@ -13,6 +13,7 @@ local task = zune.task
 local tickSignal = signal.new()
 local clientConnectedSignal = signal.new()
 local clientRemovedSignal = signal.new()
+local disconnectedSignal = signal.new()
 local packetSignal = signal.new()
 
 local packetHandlers = {}
@@ -393,10 +394,18 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 				if msg.type == "AUTH_FAILED" or msg.type == "DISCONNECT" or msg.type == "SHUTDOWN" then
 					NetworkService.IsClientConnected = false
+					disconnectedSignal:Fire(msg.reason or msg.type)
 					return
 				end
 
 				dispatchPacket(nil, msg)
+			end)
+
+			KiNet.Client:OnShutdown(function()
+				if NetworkService.IsClientConnected then
+					NetworkService.IsClientConnected = false
+					disconnectedSignal:Fire("Connection Lost")
+				end
 			end)
 
 			KiNet.Client:Listen()
@@ -668,6 +677,7 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			Tick = tickSignal,
 			ClientConnected = clientConnectedSignal,
 			ClientRemoved = clientRemovedSignal,
+			Disconnected = disconnectedSignal,
 			PacketReceived = packetSignal,
 			TickRate = tickRate,
 			TickInterval = tickInterval,

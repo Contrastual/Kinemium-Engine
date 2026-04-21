@@ -1,6 +1,7 @@
 local propTable = {
 	Name = "TouchTransmitter",
 	BaseClass = "Kinemium.instance",
+	IsDragging = false,  -- Track drag state
 }
 
 return {

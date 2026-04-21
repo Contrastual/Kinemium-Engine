@@ -733,22 +733,23 @@ function CFrame.Angles(x, y, z)
 end
 
 function CFrame:__tostring()
-	return string.format(
-		"%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f",
-		self:GetComponents()
-	)
+	return string.format("%.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f", self:GetComponents())
 end
 
 function CFrame:ToTable()
 	return {
 		type = "CFrame",
+		-- __type opts the table into the KiNet serializer's custom-type
+		-- codec (see libs/KiNet/SerializerAdapters.luau).  The lowercase
+		-- `type` field is kept for callers that read it directly.
+		__type = "CFrame",
 		Position = self.Position:ToTable(),
 		Rotation = self.Rotation,
 	}
 end
 
 function CFrame.FromTable(tbl)
-	assert(tbl.type == "CFrame")
+	assert(tbl.type == "CFrame" or tbl.__type == "CFrame")
 	local cf = CFrame.new(Vector3.FromTable(tbl.Position))
 	cf.Rotation = tbl.Rotation
 	return cf
@@ -904,7 +905,6 @@ function CFrame.fromOrientation(rx, ry, rz)
 	local m21 = sx * cy
 	local m22 = cx * cy
 
-	-- Pos X, Y, Z, and rotation matrix components
 	return CFrame.new(0, 0, 0, m00, m01, m02, m10, m11, m12, m20, m21, m22)
 end
 

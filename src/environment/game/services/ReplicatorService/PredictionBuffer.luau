@@ -40,4 +40,20 @@ function PredictionBuffer:GetLatest()
 	return self.entries[latestSequence]
 end
 
+function PredictionBuffer:GetAtOrBefore(sequence)
+	local bestSeq = nil
+	for _, seq in ipairs(self.order) do
+		if seq <= sequence then
+			bestSeq = seq
+		else
+			break
+		end
+	end
+	
+	if bestSeq ~= nil then
+		return self.entries[bestSeq]
+	end
+	return nil
+end
+
 return PredictionBuffer
