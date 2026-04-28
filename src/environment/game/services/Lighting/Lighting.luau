@@ -105,6 +105,8 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		return
 	end
 
+	print("loading lighting")
+
 	Lighting:SetProperties({
 		Ambient = Color3.new(1, 1, 1),
 		Brightness = 2.0,
@@ -141,6 +143,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
 	})
 
+	print("1")
 	if zune.platform.os == "linux" then
 		loadSky("./src/assets/sky/test/images/sky.png")
 	else

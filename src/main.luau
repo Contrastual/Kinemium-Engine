@@ -198,6 +198,7 @@ end
 
 -- SETUP CAMERA
 local instancePointer = Instance.new("Camera")
+
 local Kinemium_camera = cam.callback(instancePointer, renderer)
 Kinemium_camera.Parent = sandboxer.environment.Workspace
 

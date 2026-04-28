@@ -83,6 +83,8 @@ function KiRend.new(config: KiRendConf)
 	pcall(rlib.R3D_SetUpscaleMode, 1)
 	pcall(rlib.R3D_SetTextureWrap, raylib.const.TextureWrap.TEXTURE_WRAP_REPEAT)
 
+	print(1)
+
 	local lastRenderWidth, lastRenderHeight = config.width, config.height
 	local requested3DRenderScale = math.clamp(config.renderScale or 1, 0.1, 1)
 	local autoScale3D = if config.autoScale3D == nil then true else config.autoScale3D
@@ -93,6 +95,8 @@ function KiRend.new(config: KiRendConf)
 
 	local sortedPoolCache = {}
 	local sortedPoolDirty = {}
+
+	print(2)
 
 	local function getSortedPool(pool)
 		if sortedPoolCache[pool] and not sortedPoolDirty[pool] then
@@ -183,6 +187,8 @@ function KiRend.new(config: KiRendConf)
 		return width, height, scale
 	end
 
+	print(3)
+
 	local function apply3DResolution(targetWidth, targetHeight)
 		local width, height, scale = compute3DResolution(targetWidth, targetHeight)
 		internalRenderWidth = width
@@ -192,10 +198,13 @@ function KiRend.new(config: KiRendConf)
 		perf_stats.render_height = height
 		perf_stats.render_scale = scale
 
+		print("resolution..")
 		rlib.R3D_SetResolution(width, height)
-
+		print(6)
 		return width, height, scale
 	end
+
+	print(4)
 
 	apply3DResolution(config.width, config.height)
 

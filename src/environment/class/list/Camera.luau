@@ -23,6 +23,8 @@ return {
 	callback = function(instance, renderer)
 		instance:SetProperties(propTable)
 
+		if IsHeadless then return instance end
+
 		local camera = structs.Camera3D:new({
 			position = vector.create(0, 0, 0),
 			target = vector.create(0, 0, 0),

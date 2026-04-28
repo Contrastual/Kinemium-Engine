@@ -49,6 +49,7 @@ function DataModel.new(RENDERER, ...)
 
 	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
+		print(service.name)
 		local addServiceStart = os.clock()
 		local name
 		local path

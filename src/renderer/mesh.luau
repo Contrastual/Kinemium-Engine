@@ -39,6 +39,8 @@ local function GenerateMesh(meshId: string, params: any)
 	local meshData
 	local gpuMesh
 
+	print(meshId)
+
 	if meshId == "cube" then
 		meshData = r3d.R3D_GenMeshDataCube(params.width or 1, params.height or 1, params.length or 1)
 		gpuMesh = r3d.R3D_LoadMesh(4, meshData, ffi.null, 0) -- 4 = R3D_PRIMITIVE_TRIANGLES, 0 = Static usages
