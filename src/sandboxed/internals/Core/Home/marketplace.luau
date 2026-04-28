@@ -15,33 +15,32 @@ local scrollY = 0
 
 local StudioThemeService = game:GetService("StudioThemeService")
 
-local backButton = gui.button({
-	x = 60,
-	y = 20,
-	width = 100,
-	height = 30,
-	text = "<- Back",
-	fontSize = 20,
-	onClick = function()
-		activePluginPage = nil
-	end,
-})
+local boldFont = KinemiumFontService.GetBoldFont()
 
-local function createCard(plugin)
+local function createCard(plugin, textureData, thumbnailData)
 	local manifest = plugin.manifest
 	local card = gui.itemcard({
 		x = 100,
 		y = 100,
-		width = 300,
-		height = 300,
+		width = 320,
+		height = 360,
+		rounded = { 0.05, 12 },
 
 		title = manifest.name,
-		description = manifest.description or "",
+		description = manifest.description or "No description provided.",
 		downloads = "0",
 		likes = "0",
 		category = manifest.keywords and manifest.keywords[1] or "Plugin",
+		icon = textureData,
+		bannerImage = thumbnailData,
 
 		font = vend,
+
+		backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+		darkBackgroundColor = StudioThemeService.SelectedTheme.BackgroundColor,
+		textColor = StudioThemeService.SelectedTheme.TextColor,
+		dimTextColor = StudioThemeService.SelectedTheme.SecondaryTextColor,
+		categoryColor = StudioThemeService.SelectedTheme.Accent,
 
 		onClick = function()
 			activePluginPage = plugin.manifest.id
@@ -51,15 +50,16 @@ local function createCard(plugin)
 	return card
 end
 
-local function createPage(plugin)
+local function createPage(plugin, textureData, thumbnailData)
 	local manifest = plugin.manifest
-	local modcard = gui.modcard({
-		x = 60,
-		y = 60,
-		width = 1280,
-		height = 800,
+	local modcard
+	modcard = gui.modcard({
+		x = 20,
+		y = 20,
+		width = 1360,
+		height = 860,
 		font = vend,
-		boldFont = vend,
+		boldFont = boldFont,
 
 		title = manifest.name,
 		description = manifest.description or "",
@@ -85,16 +85,25 @@ local function createPage(plugin)
 		pageBg = StudioThemeService.SelectedTheme.BackgroundColor,
 		headerBg = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
 		iconBg = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
-		text = StudioThemeService.SelectedTheme.Text,
-		muted = StudioThemeService.SelectedTheme.Muted,
+		text = StudioThemeService.SelectedTheme.TextColor,
+		muted = StudioThemeService.SelectedTheme.SecondaryTextColor,
 		bg = StudioThemeService.SelectedTheme.BackgroundColor,
 		lightText = StudioThemeService.SelectedTheme.LightText,
 		sidebarBg = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
 		buttonBg = StudioThemeService.SelectedTheme.Accent,
 		buttonBgHover = StudioThemeService.SelectedTheme.Accent,
+		white = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+
+		icon = textureData,
+		bannerImage = thumbnailData,
 
 		onDownload = function()
-			game.PluginLoader.LoadPlugin(plugin.manifest.id)
+			modcard.set("downloadText", "Installing..")
+
+			local success, result = game.PluginLoader.DownloadPlugin(plugin.manifest, true)
+			if success then
+				modcard.set("downloadText", "Installed")
+			end
 		end,
 	})
 	return modcard
@@ -109,68 +118,109 @@ repeat
 	task.wait()
 until ishared.Home
 
-local arect = require("@Arect")(raylib.lib)
+local arect = require("@arect")
 
-table.insert(ishared.Home.rendering, {
-	render = function(dt)
-		if ishared.Home.activePage ~= "Marketplace" then
-			return
-		end
+ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
+	local fade = function(col, a)
+		return col:ToRaylib(1 - (a or 1) * alpha)
+	end
 
-		if not plugins then
-			plugins = game.PluginLoader.GetPluginsMarketplace()
-			for _, plugin in pairs(plugins) do
-				table.insert(cards, createCard(plugin))
-				pages[plugin.manifest.id] = createPage(plugin)
-				print("Created for plugin " .. plugin.manifest.name)
+	if ishared.Home.activePage ~= "Marketplace" and ishared.Home.previousPage ~= "Marketplace" then
+		return
+	end
+
+	if not plugins then
+		plugins = game.PluginLoader.GetPluginsMarketplace()
+		for _, plugin in pairs(plugins) do
+			local textureData
+			if plugin.icon then
+				textureData = KinemiumIconLoader.ToTextureBuffer(plugin.icon, plugin.manifest.icon or ".png")
 			end
-		end
-
-		local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
-
-		if activePluginPage then
-			local page = pages[activePluginPage]
-			if page then
-				page.set("obj_rect", arect.new(60, 60, screenx - 120, screeny - 120))
-				page.render(dt)
+			if not textureData then
+				textureData = kilLogo
 			end
-			backButton.render(dt)
-			return
-		end
 
-		-- Handle scrolling
-		local wheel = lib.GetMouseWheelMove()
-		if wheel ~= 0 then
-			scrollY = scrollY - wheel * 40
-			if scrollY < 0 then
-				scrollY = 0
+			local thumbnailData
+			if plugin.thumbnail then
+				thumbnailData =
+					KinemiumIconLoader.ToTextureBuffer(plugin.thumbnail, plugin.manifest.thumbnail or ".png")
 			end
+
+			table.insert(cards, createCard(plugin, textureData, thumbnailData))
+			pages[plugin.manifest.id] = createPage(plugin, textureData, thumbnailData)
+		end
+	end
+
+	local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+
+	if activePluginPage then
+		local page = pages[activePluginPage]
+		local pageX = 96
+		local pageY = 80 + slideOffset
+		local pageW = screenx - 100
+		local pageH = screeny - 100
+		if page then
+			page.set("obj_rect", arect.new(pageX, pageY, pageW, pageH))
+			page.render(dt)
 		end
 
-		local startX = 60
-		local startY = 60 - scrollY
-		local padding = 20
-		local cardWidth = 300
-		local cardHeight = 300
+		return
+	end
 
-		local x = startX
-		local y = startY
-
-		for _, card in ipairs(cards) do
-			card.set("obj_rect", arect.new(x, y, cardWidth, cardHeight))
-			card.render(dt)
-
-			x = x + cardWidth + padding
-			if x + cardWidth > screenx - 60 then
-				x = startX
-				y = y + cardHeight + padding
-			end
+	-- Handle scrolling
+	local wheel = lib.GetMouseWheelMove()
+	if wheel ~= 0 then
+		scrollY = scrollY - wheel * 40
+		if scrollY < 0 then
+			scrollY = 0
 		end
+	end
 
-		local contentHeight = y + cardHeight - startY + padding
-		local maxScroll = math.max(0, contentHeight - screeny + 60)
-		if scrollY > maxScroll then
-			scrollY = maxScroll
+	local headerHeight = 120
+	local startX = 100
+	local startY = headerHeight - scrollY + slideOffset
+	local x = startX
+	local y = startY + 30
+	local padding = 24
+	local cardWidth = 320
+	local cardHeight = 360
+
+	local headerY = 80 + slideOffset
+	local headerDesc = 120 + slideOffset
+
+	if vend then
+		raylib.lib.DrawTextEx(
+			boldFont,
+			"Plugin Marketplace",
+			vector.create(startX, headerY),
+			32,
+			1,
+			fade(StudioThemeService.SelectedTheme.TextColor, 1)
+		)
+		raylib.lib.DrawTextEx(
+			vend,
+			"Discover tools and extensions for Kinemium Engine",
+			vector.create(startX, headerDesc),
+			16,
+			1,
+			fade(StudioThemeService.SelectedTheme.SecondaryTextColor, 1)
+		)
+	end
+
+	for _, card in ipairs(cards) do
+		card.set("obj_rect", arect.new(x, y, cardWidth, cardHeight))
+		card.render(dt)
+
+		x = x + cardWidth + padding
+		if x + cardWidth > screenx - 100 then
+			x = startX
+			y = y + cardHeight + padding
 		end
-	end,
-})
+	end
+
+	local contentHeight = y + cardHeight - (startY + 40) + padding
+	local maxScroll = math.max(0, contentHeight - screeny + 100)
+	if scrollY > maxScroll then
+		scrollY = maxScroll
+	end
+end

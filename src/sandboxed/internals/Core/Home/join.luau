@@ -1,37 +1,34 @@
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
+local MouseCursor = require("@Kinemium.MouseCursor")
 local lib = raylib.lib
-local renderer = rlservice.GetRenderer()
 local aereon = require("@Aereon")
 local gui = aereon.gui
-local rect = require("@Arect")(lib)
+local rect = require("@arect")
 local transparent = Color3.new(1, 1, 1):ToRaylib(0.5)
 
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local FileDialogService = game:GetService("FileDialogService")
-local DiscordService = game:GetService("DiscordService")
 local ProcessService = game:GetService("Process")
 local NetworkService = game:GetService("NetworkService")
 local localServerProcess = nil
 local localServerInfo = nil
 local localServerLogs = {}
 local logBuffer = ""
+local scrollY = 0
 
-local vend = KinemiumFontService.GetDefaultFontSmall()
-local arect = require("@Arect")(raylib.lib)
+local vend = KinemiumFontService.GetDefaultFont()
+local boldFont = KinemiumFontService.GetBoldFont()
+local arect = require("@arect")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
 local defaultKinemiumIcon = "./src/assets/images/kinemium/KinemiumWhite.png"
 local logoIcon = KinemiumIconLoader.ToTexture(defaultKinemiumIcon)
 
-local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
 local TextColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(StudioThemeService.SelectedTheme.TextTransparency)
 
 local SecondaryBackgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor
-local SecondaryBackgroundColorRaylib = StudioThemeService.SelectedTheme.SecondaryBackgroundColor:ToRaylib(
-	StudioThemeService.SelectedTheme.SecondaryBackgroundColorTransparency
-)
 local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
 KinemiumIconLoader.new("Add", "./src/assets/images/plus.png")
@@ -304,35 +301,6 @@ end
 local itemSlots = {}
 
 group = aereon.create({
-	frame = {
-		comp = "frame",
-		x = 0,
-		y = 0,
-		width = screenx,
-		height = screeny,
-		zindex = 1,
-	},
-	background = {
-		comp = "frame",
-		x = 0,
-		y = 0,
-		width = screenx,
-		height = screeny,
-		raylib_color = SecondaryBackgroundColorRaylib,
-		zindex = 2,
-		rounded = { 0, 10 },
-	},
-	title = {
-		comp = "label",
-		text = "Servers",
-		x = 120,
-		y = 120,
-		font = vend,
-		textColor = TextColor,
-		backgroundColor = backgroundColor,
-		zindex = 3,
-	},
-
 	addButton = {
 		comp = "imageButton",
 		image = addIcon,
@@ -520,9 +488,9 @@ group = aereon.create({
 			local tint = raylib.const.WHITE
 			if rect.MouseIsInRect(iconRect) then
 				tint = transparent
-				lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
+				MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
 			else
-				lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+				MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 			end
 			lib.DrawTexturePro(
 				logoIcon.texture,
@@ -567,41 +535,71 @@ group.manageServerPrompt.set("buttons", {
 	},
 })
 
-group.frame.setTransparency(1)
-
 repeat
 	task.wait()
 until ishared.Home
 
-table.insert(ishared.Home.rendering, {
-	render = function(dt)
-		if ishared.Home.activePage ~= "Join" then
-			return
+ishared.Home.pages["Servers"] = function(dt, alpha, slideOffset)
+	local fade = function(col, a)
+		return col:ToRaylib(1 - (a or 1) * alpha)
+	end
+
+	if ishared.Home.activePage ~= "Servers" and ishared.Home.previousPage ~= "Servers" then
+		return
+	end
+
+	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+
+	-- Handle scrolling
+	local wheel = lib.GetMouseWheelMove()
+	if wheel ~= 0 then
+		scrollY = scrollY - wheel * 40
+		if scrollY < 0 then
+			scrollY = 0
 		end
+	end
 
-		DiscordService.SetRPC({
-			details = "Viewing Servers",
-		})
+	local startX = 100
+	local headerY = 80 + slideOffset
+	local headerDesc = 120 + slideOffset
 
-		screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+	group.addButton.set("obj_rect", arect.new(screenx - 50, 110 + slideOffset - scrollY, 30, 30))
+	group.hostServerButton.set("obj_rect", arect.new(screenx - 190, 110 + slideOffset - scrollY, 130, 30))
+	group.render(dt, { "newProjectPrompt", "manageServerPrompt" })
 
-		local x = 60
-		local y = 60
+	if vend then
+		raylib.lib.DrawTextEx(
+			boldFont,
+			"Servers",
+			vector.create(startX, headerY),
+			32,
+			1,
+			fade(StudioThemeService.SelectedTheme.TextColor, 1)
+		)
+		raylib.lib.DrawTextEx(
+			vend,
+			"Connect to Kinemium servers and explore multiplayer worlds",
+			vector.create(startX, headerDesc),
+			16,
+			1,
+			fade(StudioThemeService.SelectedTheme.SecondaryTextColor, 1)
+		)
+	end
 
-		group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
-		group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
-		group.addButton.set("obj_rect", arect.new(screenx - 50, 110, 30, 30))
-		group.hostServerButton.set("obj_rect", arect.new(screenx - 190, 110, 130, 30))
-		group.render(dt, { "newProjectPrompt", "manageServerPrompt" })
+	-- render each card
+	local currentY = 150 - scrollY + slideOffset
+	for i, card in ipairs(itemSlots) do
+		card.set("obj_rect", arect.new(120, currentY, screenx - 135, 80))
+		card.render(dt)
+		currentY = currentY + 90
+	end
 
-		-- render each card
-		for i, card in ipairs(itemSlots) do
-			local card_y = 150 + (i - 1) * 90
-			card.set("obj_rect", arect.new(120, card_y, screenx - 135, 80))
-			card.render(dt)
-		end
+	local contentHeight = #itemSlots * 90 + 150
+	local maxScroll = math.max(0, contentHeight - screeny + 100)
+	if scrollY > maxScroll then
+		scrollY = maxScroll
+	end
 
-		group.manageServerPrompt.render(dt)
-		group.newProjectPrompt.render(dt)
-	end,
-})
+	group.manageServerPrompt.render(dt)
+	group.newProjectPrompt.render(dt)
+end

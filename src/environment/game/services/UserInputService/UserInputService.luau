@@ -100,10 +100,8 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 	end
 
 	function UserInputService:GetMouseDelta()
-		local mousePos = raylib.lib.GetMousePosition()
-		local delta = Vector2.new(mousePos.X - prevMousePos.X, mousePos.Y - prevMousePos.Y)
-		prevMousePos = mousePos
-		return delta
+		local delta = raylib.lib.GetMouseDelta()
+		return Vector2.new(delta.X, delta.Y)
 	end
 
 	function UserInputService:IsKeyDown(key)

@@ -1,7 +1,5 @@
 local GuiObject = require("@GuiObject")
 local raylib = require("@Raylib")
-local structs = raylib.structs
-
 local aereon = require("@Aereon")
 local gui = aereon.gui
 local signal = require("@Kinemium.signal")

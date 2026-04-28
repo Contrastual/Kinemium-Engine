@@ -1,4 +1,3 @@
-local Vector3 = require("@Vector3")
 local Enum = require("@EnumMap")
 
 local propTable = {

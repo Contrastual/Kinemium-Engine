@@ -1,5 +1,5 @@
 local raylib = require("@raylib")
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local Color3 = require("@Color3")
 
 return function(objects, data)

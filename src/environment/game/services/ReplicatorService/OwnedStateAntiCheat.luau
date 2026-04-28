@@ -162,16 +162,26 @@ function OwnedStateAntiCheat.new(context)
 		end
 
 		--  Decode & basic sanity
-		local linear = decodeVectorState(state.linear)
-		local angular = decodeVectorState(state.angular)
 		local cframe = decodeCFrameState(state.cframe)
-		if not linear or not angular or not cframe then
+		if not cframe then
 			registerStrike(session, object, "malformed basepart state")
 			return false
 		end
 
 		if not validateRotationMatrix(cframe) then
 			registerStrike(session, object, "non-orthonormal rotation matrix")
+			return false
+		end
+
+		-- Anchored parts don't have velocity, skip velocity validation
+		if object.Anchored == true then
+			return true
+		end
+
+		local linear = decodeVectorState(state.linear)
+		local angular = decodeVectorState(state.angular)
+		if not linear or not angular then
+			registerStrike(session, object, "malformed basepart state - missing velocity for unanchored part")
 			return false
 		end
 

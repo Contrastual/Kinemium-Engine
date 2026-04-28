@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 return function(objects, data)
@@ -61,7 +51,7 @@ return function(objects, data)
 			rect:translate(r),
 			config.rounded[1],
 			config.rounded[2],
-			c3tr(config.backgroundColor, 0)
+			config.backgroundColor:ToRaylib(0)
 		)
 
 		local padding = 12
@@ -88,8 +78,8 @@ return function(objects, data)
 				bannerRect.y,
 				bannerRect.width,
 				bannerRect.height,
-				c3tr(color3.new(0.45, 0.65, 0.50), 0),
-				c3tr(color3.new(0.30, 0.50, 0.70), 0)
+				config.backgroundColor:ToRaylib(0.65),
+				config.darkBackgroundColor:ToRaylib(0.50)
 			)
 		end
 
@@ -98,7 +88,7 @@ return function(objects, data)
 		local iconY = contentY - iconSize / 2
 		local iconRect = rect.new(r.x + iconPadding, iconY, iconSize, iconSize)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(iconRect), 0.15, 8, c3tr(config.iconBackgroundColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(iconRect), 0.15, 8, config.iconBackgroundColor:ToRaylib(0))
 
 		if config.icon then
 			raylib.lib.DrawTexturePro(
@@ -123,10 +113,10 @@ return function(objects, data)
 				vector.create(r.x + iconPadding, titleY),
 				titleFontSize,
 				titleSpacing,
-				c3tr(config.textColor, 0)
+				config.textColor:ToRaylib(0)
 			)
 		else
-			raylib.lib.DrawText(config.title, r.x + iconPadding, titleY, titleFontSize, c3tr(config.textColor, 0))
+			raylib.lib.DrawText(config.title, r.x + iconPadding, titleY, titleFontSize, config.textColor:ToRaylib(0))
 		end
 
 		-- Description with custom font and word wrapping
@@ -162,7 +152,7 @@ return function(objects, data)
 						vector.create(r.x + iconPadding, lineY),
 						descFontSize,
 						descSpacing,
-						c3tr(config.dimTextColor, 0)
+						config.dimTextColor:ToRaylib(0)
 					)
 				else
 					raylib.lib.DrawText(
@@ -170,7 +160,7 @@ return function(objects, data)
 						r.x + iconPadding,
 						lineY,
 						descFontSize,
-						c3tr(config.dimTextColor, 0)
+						config.dimTextColor:ToRaylib(0)
 					)
 				end
 				currentLine = word
@@ -188,10 +178,16 @@ return function(objects, data)
 					vector.create(r.x + iconPadding, lineY),
 					descFontSize,
 					descSpacing,
-					c3tr(config.dimTextColor, 0)
+					config.dimTextColor:ToRaylib(0)
 				)
 			else
-				raylib.lib.DrawText(currentLine, r.x + iconPadding, lineY, descFontSize, c3tr(config.dimTextColor, 0))
+				raylib.lib.DrawText(
+					currentLine,
+					r.x + iconPadding,
+					lineY,
+					descFontSize,
+					config.dimTextColor:ToRaylib(0)
+				)
 			end
 		end
 
@@ -206,7 +202,7 @@ return function(objects, data)
 			statsY + 4,
 			statsIconSize,
 			statsIconSize,
-			c3tr(config.dimTextColor, 0)
+			config.dimTextColor:ToRaylib(0)
 		)
 
 		if config.font then
@@ -216,7 +212,7 @@ return function(objects, data)
 				vector.create(r.x + iconPadding + statsIconSize + 6, statsY + 2),
 				statsFontSize,
 				statsSpacing,
-				c3tr(config.dimTextColor, 0)
+				config.dimTextColor:ToRaylib(0)
 			)
 		else
 			raylib.lib.DrawText(
@@ -224,12 +220,12 @@ return function(objects, data)
 				r.x + iconPadding + statsIconSize + 6,
 				statsY + 2,
 				statsFontSize,
-				c3tr(config.dimTextColor, 0)
+				config.dimTextColor:ToRaylib(0)
 			)
 		end
 
 		local likesX = r.x + iconPadding + 100
-		raylib.lib.DrawRectangle(likesX, statsY + 4, statsIconSize, statsIconSize, c3tr(config.dimTextColor, 0))
+		raylib.lib.DrawRectangle(likesX, statsY + 4, statsIconSize, statsIconSize, config.dimTextColor:ToRaylib(0))
 
 		if config.font then
 			raylib.lib.DrawTextEx(
@@ -238,7 +234,7 @@ return function(objects, data)
 				vector.create(likesX + statsIconSize + 6, statsY + 2),
 				statsFontSize,
 				statsSpacing,
-				c3tr(config.dimTextColor, 0)
+				config.dimTextColor:ToRaylib(0)
 			)
 		else
 			raylib.lib.DrawText(
@@ -246,12 +242,12 @@ return function(objects, data)
 				likesX + statsIconSize + 6,
 				statsY + 2,
 				statsFontSize,
-				c3tr(config.dimTextColor, 0)
+				config.dimTextColor:ToRaylib(0)
 			)
 		end
 
 		local categoryX = r.x + r.width - iconPadding - 100
-		raylib.lib.DrawRectangle(categoryX, statsY + 4, statsIconSize, statsIconSize, c3tr(config.categoryColor, 0))
+		raylib.lib.DrawRectangle(categoryX, statsY + 4, statsIconSize, statsIconSize, config.categoryColor:ToRaylib(0))
 
 		if config.font then
 			raylib.lib.DrawTextEx(
@@ -260,7 +256,7 @@ return function(objects, data)
 				vector.create(categoryX + statsIconSize + 6, statsY + 2),
 				statsFontSize,
 				statsSpacing,
-				c3tr(config.categoryColor, 0)
+				config.categoryColor:ToRaylib(0)
 			)
 		else
 			raylib.lib.DrawText(
@@ -268,7 +264,7 @@ return function(objects, data)
 				categoryX + statsIconSize + 6,
 				statsY + 2,
 				statsFontSize,
-				c3tr(config.categoryColor, 0)
+				config.categoryColor:ToRaylib(0)
 			)
 		end
 
@@ -277,7 +273,7 @@ return function(objects, data)
 				rect:translate(r),
 				config.rounded[1],
 				config.rounded[2],
-				c3tr(color3.new(1, 1, 1), 0.95)
+				config.backgroundColor:ToRaylib(0.95)
 			)
 		end
 

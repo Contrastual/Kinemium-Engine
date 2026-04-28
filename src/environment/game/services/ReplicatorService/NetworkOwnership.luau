@@ -120,6 +120,9 @@ end
 function NetworkOwnership.GetControllerRoot(object)
 	local current = object
 	while current do
+		if current.ClassName == "Workspace" or current.ClassName == "DataModel" then
+			break
+		end
 		local controller = getEnabledController(current)
 		if controller then
 			return current, controller
@@ -374,6 +377,12 @@ function NetworkOwnership.ShouldSimulateConstraintForMachine(constraint, game)
 end
 
 function NetworkOwnership.ShouldSimulatePhysicsForMachine(object, game)
+	-- Editor/studio mode: neither server nor client, always simulate locally.
+	-- This avoids expensive GetControllerRoot tree walks for every part every frame.
+	if IsServer ~= true and IsClient ~= true then
+		return true
+	end
+
 	local root, controller = NetworkOwnership.GetControllerRoot(object)
 	local target = root or object
 	if not target then

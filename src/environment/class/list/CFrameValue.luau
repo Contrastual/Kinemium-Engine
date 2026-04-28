@@ -1,5 +1,3 @@
-local UDim = require("@UDim")
-local Color3 = require("@Color3")
 local CFrame = require("@CFrame")
 
 local propTable = {

@@ -1,7 +1,5 @@
 local Vector2 = require("@Vector2")
-local Enum = require("@EnumMap")
 local UDim2 = require("@UDim2")
-local renderpool = {}
 
 local propTable = {
 	-- world state
@@ -80,7 +78,8 @@ return {
 		local Box2DService = game.Box2DService
 
 		instance.render = function(lib, instance, dt, structs)
-			instance.Size = UDim2.new(0, lib.GetRenderWidth(), 0, lib.GetRenderHeight())
+			local dpiScale = lib.GetWindowScaleDPI()
+			instance.Size = UDim2.new(0, lib.GetRenderWidth() / dpiScale.x, 0, lib.GetRenderHeight() / dpiScale.y)
 
 			for _, child in pairs(instance:GetChildren()) do
 				if child["render"] then

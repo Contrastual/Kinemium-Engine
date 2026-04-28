@@ -29,7 +29,7 @@ local dragStartMouse = nil
 local dragStartPos = nil
 local dragStartSize = nil
 
-local Arect = require("@Arect")(raylib.lib)
+local Arect = require("@arect")
 
 Selection.SelectionAdded:Connect(function(selected) end)
 

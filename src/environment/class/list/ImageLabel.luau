@@ -5,7 +5,6 @@ local _Enum = require("@EnumMap")
 local GuiObject = require("@GuiObject")
 local raylib = require("@raylib")
 local lib = raylib.lib
-local shaderlib = require("@kineshader")
 
 local function resolveBlendMode(value)
 	if type(value) == "number" then

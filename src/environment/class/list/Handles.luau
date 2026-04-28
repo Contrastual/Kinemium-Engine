@@ -55,7 +55,6 @@ return {
 					instance._gizmoTransform:writef32(32, size.Y)
 					instance._gizmoTransform:writef32(36, size.Z)
 				elseif part and part.ClassName == "Model" then
-					-- Seed the gizmo at the model's world pivot and bounding-box size.
 					local pivot = part:GetPivot()
 					local pos = pivot.Position
 					instance._gizmoTransform:writef32(0, pos.X)
@@ -80,7 +79,6 @@ return {
 			if handles.Adornee then
 				local part = handles.Adornee
 				if part and part:IsA("BasePart") then
-					-- ONLY update buffer from part if NOT currently dragging
 					if not handles._isDragging then
 						local pos = part.CFrame.Position
 						handles._gizmoTransform:writef32(0, pos.X)
@@ -120,10 +118,6 @@ return {
 				end
 
 				local success = false
-
-				if handles.Style == Enum.HandlesStyle.Rotation then
-					gizmo.SetGizmoRotateSnapDegrees(handles.RotationSnap or 0)
-				end
 
 				if handles.Style == Enum.HandlesStyle.Movement then
 					success = gizmo.DrawGizmo3D(gizmo.Flags.TRANSLATE, handles._gizmoTransform)

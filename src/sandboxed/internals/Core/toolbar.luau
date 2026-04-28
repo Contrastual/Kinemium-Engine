@@ -8,6 +8,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.GetLib()
+local renderer = KinemiumRaylib.GetRenderer()
+
 local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local currentlySelected = ""
@@ -63,8 +65,9 @@ end)
 
 local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
-local aRect = require("@Arect")(KinemiumRaylib.GetLib())
+local aRect = require("@Arect")
 local gui = aereon.gui
+local componentCache = {}
 
 local tooltipState = {
 	hoveredKey = nil,
@@ -173,6 +176,17 @@ local fileMenu = gui.menu({
 		{ type = "separator" },
 
 		{
+			label = "Exit to Menu",
+			onClick = function()
+				ishared.GameName = "Not in a game"
+				ishared.FolderPath = ""
+				ishared.GameIcon = ""
+				ishared.EnableHomescreen = true
+				renderer:SetDimension("2D")
+			end,
+		},
+
+		{
 			label = "Exit",
 			shortcut = "Alt+F4",
 			onClick = function()
@@ -198,7 +212,6 @@ local function create_window(title, frame)
 			{
 				name = "File",
 				render = function(windowData)
-					local dt = KinemiumRaylib.GetLib().GetFrameTime()
 					local menuRect = aRect.new(windowData.x, windowData.y + 60, 200, 300)
 
 					fileMenu:show()
@@ -207,10 +220,6 @@ local function create_window(title, frame)
 					fileMenu.set("obj_rect", menuRect)
 					renderFileMenu = true
 				end,
-			},
-			{
-				name = "Plugins",
-				render = function(windowData) end,
 			},
 		},
 	})
@@ -289,251 +298,270 @@ local function updateTooltip(dt, hoveredKey, hoveredText, mouseX, mouseY)
 end
 
 local function renderButton(xPos, name, element, windowData, dt)
-    local winX, winY = windowData.x, windowData.y + 80
-    local cellWidth = element.width or 50
-    local cellHeight = element.height or 50
-    local rectX = winX + xPos
-    local rectY = winY
-    local labelWidth = name and measureTextWidth(name) or 0
-    local effectiveWidth = math.max(cellWidth, labelWidth)
-
-    local rectData = aRect.new(rectX, rectY, effectiveWidth, cellHeight)
-
-    local transparency = 1
-    local color = Color3.new(0.5, 0.5, 0.5)
-
-    local isHovered = aRect.MouseIsInRect(rectData)
-
-    if isHovered then
-        color = element.hoverColor
-        transparency = element.hoverTransparency
-    end
-
-    aRect.Button(rectData, function()
-        element.callback(element, rectData)
-    end)
-
-    local bgColor = color:ToRaylib(transparency)
-    rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
-
-    if name then
-        labelWidth = measureTextWidth(name)
-        local textX = rectData.x + effectiveWidth / 2 - labelWidth / 2
-        local textY = rectData.y + cellHeight + 5
-        rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
-    end
-
-    if element.texture then
-        local scale = element.scale or 1.6
-
-        local texW = element.texture.x * scale
-        local texH = element.texture.y * scale
-
-        local iconX = rectData.x + effectiveWidth / 2 - texW / 2
-        local iconY = rectData.y + cellHeight / 2 - texH / 2
-
-        local iconRect = aRect.new(iconX, iconY, texW, texH)
-
-        rl.DrawTexturePro(
-        element.texture.texture,
-        structs.Rectangle:new({
-        x = 0,
-        y = 0,
-        width = element.texture.x, -- ✅ ORIGINAL SIZE
-        height = element.texture.y, -- ✅ ORIGINAL SIZE
-        }),
-        aRect:translate(iconRect),
-        vector.create(0, 0),
-        element.rotation or 0,
-        ImageColor
-        )
-    end
-
-    if element.render then
-        element.render(aRect)
-    end
-
-    if isHovered and element.tooltip then
-        local mx = rl.GetMouseX and rl.GetMouseX() or rectData.x
-        local my = rl.GetMouseY and rl.GetMouseY() or rectData.y
-        updateTooltip(dt, tostring(element), element.tooltip, mx, my)
-    end
-
-    return effectiveWidth + (element.padding or 10)
- end
-
-local function renderToggleButton(xPos, name, element, windowData, dt)
 	local winX, winY = windowData.x, windowData.y + 80
 	local cellWidth = element.width or 50
-	local cellHeight = element.height or 50
-	local rectX = winX + xPos
-	local rectY = winY
-	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
+	local cellHeight = element.height or 80
+	local labelWidth = name and measureTextWidth(name) or 0
+	local effectiveWidth = math.max(cellWidth, labelWidth + 10)
 
-	local key = element.text or name or tostring(element)
-	if toggleStates[key] == nil then
-		toggleStates[key] = element.defaultOn or false
-	end
-	local isOn = toggleStates[key]
-	local isHovered = aRect.MouseIsInRect(rectData)
-
-	aRect.Button(rectData, function()
-		toggleStates[key] = not toggleStates[key]
-		if element.callback then
-			element.callback(element, rectData, toggleStates[key])
-		end
-	end)
-
-	local bgColor
-	if isOn then
-		bgColor = (element.activeColor or Color3.new(0.2, 0.5, 0.9)):ToRaylib(0)
-	elseif isHovered then
-		bgColor = (element.hoverColor or Color3.new(0.35, 0.35, 0.35)):ToRaylib(0)
-	else
-		bgColor = Color3.new(0.18, 0.18, 0.18):ToRaylib(0)
+	local key = element
+	local aereonElement = componentCache[key]
+	if not aereonElement then
+		aereonElement = gui.button({
+			x = winX + xPos,
+			y = winY,
+			width = effectiveWidth,
+			height = cellHeight,
+			text = "",
+			backgroundTransparency = 1,
+			backgroundColor = element.backgroundColor or Color3.new(0.18, 0.18, 0.18),
+			hoverColor = element.hoverColor or Color3.new(0.35, 0.35, 0.35),
+			onClick = function()
+				element.callback(element, aRect.new(winX + xPos, winY, effectiveWidth, cellHeight))
+			end,
+		})
+		componentCache[key] = aereonElement
 	end
 
-	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness or 0.3, 8, bgColor)
-
-	if isOn then
-		local dotR = 3
-		local dotX = math.floor(rectData.x + cellWidth / 2)
-		local dotY = math.floor(rectData.y + cellHeight - dotR - 3)
-		rl.DrawCircle(dotX, dotY, dotR, (element.activeColor or Color3.new(0.2, 0.5, 0.9)):ToRaylib(0))
-	end
+	local currentRect = aRect.new(winX + xPos, winY, effectiveWidth, cellHeight)
+	aereonElement.set("obj_rect", currentRect)
+	aereonElement.render(dt)
 
 	if element.texture then
+		local scale = element.scale or 2.0
+		local texW = element.texture.x * scale
+		local texH = element.texture.y * scale
+
+		local iconX = currentRect.x + effectiveWidth / 2 - texW / 2
+		local iconY = currentRect.y + (name and (cellHeight / 2 - texH / 2 - 8) or (cellHeight / 2 - texH / 2))
+
+		local iconRect = aRect.new(iconX, iconY, texW, texH)
+
 		rl.DrawTexturePro(
 			element.texture.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
-			aRect:translate(rectData),
+			structs.Rectangle:new({
+				x = 0,
+				y = 0,
+				width = element.texture.x,
+				height = element.texture.y,
+			}),
+			aRect:translate(iconRect),
 			vector.create(0, 0),
 			element.rotation or 0,
 			ImageColor
 		)
 	end
 
-	local labelWidth = 0
 	if name then
-		labelWidth = measureTextWidth(name)
-		local textX = rectData.x + cellWidth / 2 - labelWidth / 2
-		local textY = rectData.y + cellHeight + 5
-		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
+		local textX = currentRect.x + effectiveWidth / 2 - labelWidth / 2
+		local textY = currentRect.y + cellHeight - 18
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 16, 1, TextColor)
 	end
 
-	if isHovered and element.tooltip then
-		local mx = rl.GetMouseX and rl.GetMouseX() or rectData.x
-		local my = rl.GetMouseY and rl.GetMouseY() or rectData.y
-		updateTooltip(dt, key .. "_toggle", element.tooltip, mx, my)
+	if aRect.MouseIsInRect(currentRect) and element.tooltip then
+		local mx = rl.GetMouseX and rl.GetMouseX() or currentRect.x
+		local my = rl.GetMouseY and rl.GetMouseY() or currentRect.y
+		updateTooltip(dt, tostring(element), element.tooltip, mx, my)
 	end
 
-	local leftOverhang = math.max(0, (labelWidth - cellWidth) / 2)
-	local effectiveWidth = math.max(cellWidth, labelWidth) + leftOverhang
-	return effectiveWidth + (element.padding or 10)
+	return effectiveWidth + (element.padding or 5)
+end
+
+local function renderToggleButton(xPos, name, element, windowData, dt)
+	local winX, winY = windowData.x, windowData.y + 80
+	local cellWidth = element.width or 50
+	local cellHeight = element.height or 60
+	local labelWidth = name and measureTextWidth(name) or 0
+	local effectiveWidth = math.max(cellWidth, labelWidth + 10)
+
+	local key = element
+	if toggleStates[key] == nil then
+		toggleStates[key] = element.defaultOn or false
+	end
+	local isOn = toggleStates[key]
+
+	local aereonElement = componentCache[key]
+	if not aereonElement then
+		aereonElement = gui.button({
+			x = winX + xPos,
+			y = winY,
+			width = effectiveWidth,
+			height = cellHeight,
+			text = "",
+			backgroundTransparency = 1,
+			onClick = function()
+				toggleStates[key] = not toggleStates[key]
+				if element.callback then
+					element.callback(
+						element,
+						aRect.new(winX + xPos, winY, effectiveWidth, cellHeight),
+						toggleStates[key]
+					)
+				end
+			end,
+		})
+		componentCache[key] = aereonElement
+	end
+
+	local currentRect = aRect.new(winX + xPos, winY, effectiveWidth, cellHeight)
+	aereonElement.set("obj_rect", currentRect)
+
+	if isOn then
+		aereonElement.set("backgroundColor", element.activeColor or Color3.new(0.2, 0.5, 0.9))
+		aereonElement.set("hoverColor", element.activeColor or Color3.new(0.2, 0.5, 0.9))
+	else
+		aereonElement.set("backgroundColor", element.backgroundColor or Color3.new(0.18, 0.18, 0.18))
+		aereonElement.set("hoverColor", element.hoverColor or Color3.new(0.35, 0.35, 0.35))
+	end
+
+	aereonElement.render(dt)
+
+	if element.texture then
+		local scale = element.scale or 2.0
+		local texW = element.texture.x * scale
+		local texH = element.texture.y * scale
+
+		local iconX = currentRect.x + effectiveWidth / 2 - texW / 2
+		local iconY = currentRect.y + (name and (cellHeight / 2 - texH / 2 - 8) or (cellHeight / 2 - texH / 2))
+
+		local iconRect = aRect.new(iconX, iconY, texW, texH)
+
+		rl.DrawTexturePro(
+			element.texture.texture,
+			structs.Rectangle:new({
+				x = 0,
+				y = 0,
+				width = element.texture.x,
+				height = element.texture.y,
+			}),
+			aRect:translate(iconRect),
+			vector.create(0, 0),
+			element.rotation or 0,
+			ImageColor
+		)
+	end
+
+	if name then
+		local textX = currentRect.x + effectiveWidth / 2 - labelWidth / 2
+		local textY = currentRect.y + cellHeight - 18
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 16, 1, TextColor)
+	end
+
+	if isOn then
+		local dotR = 3
+		local dotX = math.floor(currentRect.x + effectiveWidth / 2)
+		local dotY = math.floor(currentRect.y + cellHeight - dotR - 3)
+		rl.DrawCircle(dotX, dotY, dotR, (element.activeColor or Color3.new(0.2, 0.5, 0.9)):ToRaylib(0))
+	end
+
+	if aRect.MouseIsInRect(currentRect) and element.tooltip then
+		local mx = rl.GetMouseX and rl.GetMouseX() or currentRect.x
+		local my = rl.GetMouseY and rl.GetMouseY() or currentRect.y
+		updateTooltip(dt, tostring(element) .. "_toggle", element.tooltip, mx, my)
+	end
+
+	return effectiveWidth + (element.padding or 5)
 end
 
 local function renderDropdownButton(xPos, name, element, windowData, dt)
 	local winX, winY = windowData.x, windowData.y + 80
 	local cellWidth = element.width or 80
 	local cellHeight = element.height or 30
-	local rectX = winX + xPos
-	local rectY = winY
-	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
 
-	local key = element.text or name or tostring(element)
-	local isOpen = dropdownState.openKey == key
-	local isHovered = aRect.MouseIsInRect(rectData)
+	local key = element
+	local aereonElement = componentCache[key]
+	if not aereonElement then
+		local opts = {}
+		for _, opt in ipairs(element.options or {}) do
+			table.insert(opts, opt.label)
+		end
 
-	aRect.Button(rectData, function()
-		dropdownState.openKey = isOpen and nil or key
-	end)
-
-	local bgColor
-	if isOpen or isHovered then
-		bgColor = (element.hoverColor or Color3.new(0.3, 0.3, 0.3)):ToRaylib(0)
-	else
-		bgColor = Color3.new(0.18, 0.18, 0.18):ToRaylib(0)
+		aereonElement = gui.dropdown({
+			x = winX + xPos,
+			y = winY,
+			width = cellWidth,
+			height = cellHeight,
+			options = opts,
+			selectedIndex = 1,
+			backgroundColor = Color3.new(0.18, 0.18, 0.18),
+			hoverColor = element.hoverColor or Color3.new(0.3, 0.3, 0.3),
+			textColor = Theme.TextColor,
+			onSelect = function(idx, optLabel)
+				local opt
+				for _, o in ipairs(element.options or {}) do
+					if o.label == optLabel then
+						opt = o
+						break
+					end
+				end
+				if opt then
+					element._selected = opt.label
+					if opt.onClick then
+						opt.onClick(opt)
+					end
+					if element.onSelect then
+						element.onSelect(opt)
+					elseif element.callback then
+						element.callback(opt)
+					end
+				end
+			end,
+		})
+		componentCache[key] = aereonElement
 	end
-	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness or 0.3, 8, bgColor)
 
-	local faceLabel = element._selected or element.text or name or "Select"
-	local arrowChar = "v"
-	local arrowW = measureTextWidth(arrowChar)
-	local arrowPad = 6
+	local currentRect = aRect.new(winX + xPos, winY, cellWidth, cellHeight)
+	aereonElement.set("obj_rect", currentRect)
 
-	local textY = rectData.y + cellHeight / 2 - 9
-	rl.DrawTextEx(vend, faceLabel, vector.create(rectData.x + 8, textY), 18, 1, TextColor)
-	rl.DrawTextEx(vend, arrowChar, vector.create(rectData.x + cellWidth - arrowW - arrowPad, textY), 18, 1, TextColor)
+	if element._selected then
+		local idx = 1
+		for i, o in ipairs(element.options or {}) do
+			if o.label == element._selected then
+				idx = i
+				break
+			end
+		end
+		aereonElement.set("selectedIndex", idx)
+	end
+
+	aereonElement.render(dt)
 
 	local labelWidth = 0
-	if name and name ~= faceLabel then
+	if name and name ~= (element._selected or "") then
 		labelWidth = measureTextWidth(name)
-		local lx = rectData.x + cellWidth / 2 - labelWidth / 2
-		rl.DrawTextEx(vend, name, vector.create(lx, rectData.y + cellHeight + 5), 18, 1, TextColor)
+		local lx = currentRect.x + cellWidth / 2 - labelWidth / 2
+		rl.DrawTextEx(vend, name, vector.create(lx, currentRect.y + cellHeight + 5), 18, 1, TextColor)
 	end
 
-	if isOpen and element.options then
-		local optionH = 28
-		local panelPad = 4
-		local panelW = cellWidth
-		local panelH = #element.options * optionH + panelPad * 2
-		local panelX = rectData.x
-		local panelY = rectData.y + cellHeight + 2
-
-		local panelBg = Color3.new(0.12, 0.12, 0.12):ToRaylib(0)
-		rl.DrawRectangleRounded({ x = panelX, y = panelY, width = panelW, height = panelH }, 0.3, 8, panelBg)
-
-		for i, option in ipairs(element.options) do
-			local optRect =
-				aRect.new(panelX + panelPad, panelY + panelPad + (i - 1) * optionH, panelW - panelPad * 2, optionH - 2)
-
-			if aRect.MouseIsInRect(optRect) then
-				rl.DrawRectangleRounded(aRect:translate(optRect), 0.3, 6, Color3.new(0.25, 0.25, 0.25):ToRaylib(0))
-			end
-
-			aRect.Button(optRect, function()
-				element._selected = option.label
-				dropdownState.openKey = nil
-				if option.onClick then
-					option.onClick(option)
-				end
-				if element.onSelect then
-					element.onSelect(option)
-				elseif element.callback then
-					element.callback(option)
-				end
-			end)
-
-			rl.DrawTextEx(
-				vend,
-				option.label,
-				vector.create(optRect.x + 8, optRect.y + optionH / 2 - 9),
-				18,
-				1,
-				TextColor
-			)
-		end
+	if aRect.MouseIsInRect(currentRect) and element.tooltip then
+		local mx = rl.GetMouseX and rl.GetMouseX() or currentRect.x
+		local my = rl.GetMouseY and rl.GetMouseY() or currentRect.y
+		updateTooltip(dt, tostring(element) .. "_dropdown", element.tooltip, mx, my)
 	end
 
-	if isHovered and element.tooltip then
-		local mx = rl.GetMouseX and rl.GetMouseX() or rectData.x
-		local my = rl.GetMouseY and rl.GetMouseY() or rectData.y
-		updateTooltip(dt, key .. "_dropdown", element.tooltip, mx, my)
-	end
-
-	local faceLabelW = measureTextWidth(faceLabel)
-	local baseWidth = math.max(cellWidth, labelWidth, faceLabelW + arrowW + arrowPad * 2 + 16)
 	local leftOverhang = math.max(0, (labelWidth - cellWidth) / 2)
-	return baseWidth + leftOverhang + (element.padding or 10)
+	return cellWidth + leftOverhang + (element.padding or 10)
 end
 
-local function renderSeperator(xPos, windowData, element)
+local function renderSeperator(xPos, windowData, element, dt)
 	local winX, winY = windowData.x, windowData.y + 80
-	local rectX = winX + xPos
-	local rectY = winY
+	local key = element
+	local aereonElement = componentCache[key]
+	if not aereonElement then
+		aereonElement = gui.divider({
+			x = winX + xPos,
+			y = winY + 5,
+			width = element.width or 2,
+			height = element.height or 70,
+			color = element.color or Color3.new(0.2, 0.2, 0.2),
+			vertical = false,
+		})
+		componentCache[key] = aereonElement
+	end
 
-	local sepColor = (element.color or Color3.new(0.7, 0.7, 0.7)):ToRaylib(0)
-	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 70, sepColor)
+	aereonElement.set("x", winX + xPos)
+	aereonElement.set("y", winY + 5)
+	aereonElement.render(dt)
 
 	return (element.width or 2) + (element.padding or 20)
 end
@@ -545,7 +573,7 @@ NewToolbarElement:Connect(function(categoryName, elementName, element)
 	if not categoryRegistry[categoryName] then
 		categoryRegistry[categoryName] = {
 			title = categoryName,
-			elements = {}
+			elements = {},
 		}
 	end
 
@@ -558,7 +586,7 @@ game.EngineSignal:Connect(function(route, name, data)
 	end
 end)
 
-local function drawCategories(windowData)
+local function drawCategories(windowData, dt)
 	local buttonWidth = 100
 	local buttonHeight = 30
 	local padding = 5
@@ -582,23 +610,37 @@ local function drawCategories(windowData)
 	local startX = x + extraPadding / 2
 	local i = 0
 	for name, category in pairs(categoryRegistry) do
-		local rect =
-			aRect.new(startX + i * (buttonWidth + padding), y + (height - buttonHeight) / 2, buttonWidth, buttonHeight)
-
-		aRect.Button(rect, function()
-			currentlySelected = name
-		end)
-
-		local bg = Color3.new(0.12549, 0.12549, 0.12549):ToRaylib(1)
-		if currentlySelected == name then
-			bg = SecondaryBackgroundColor
+		local key = "CategoryTab_" .. name
+		local aereonElement = componentCache[key]
+		if not aereonElement then
+			aereonElement = gui.textButton({
+				x = startX + i * (buttonWidth + padding),
+				y = y + (height - buttonHeight) / 2,
+				width = buttonWidth,
+				height = buttonHeight,
+				text = name,
+				backgroundColor = Color3.new(0.12549, 0.12549, 0.12549),
+				hoverColor = Theme.SecondaryBackgroundColor,
+				pressColor = Theme.SecondaryBackgroundColor,
+				textColor = Theme.TextColor,
+				rounded = { 0.5, 5 },
+				onClick = function()
+					currentlySelected = name
+				end,
+			})
+			componentCache[key] = aereonElement
 		end
 
-		rl.DrawRectangleRounded(aRect:translate(rect), 0.5, 5, bg)
-
-		local textX = rect.x + buttonWidth / 2 - measureTextWidth(name) / 2
-		local textY = rect.y + buttonHeight / 2 - 9
-		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, TextColor)
+		aereonElement.set(
+			"obj_rect",
+			aRect.new(startX + i * (buttonWidth + padding), y + (height - buttonHeight) / 2, buttonWidth, buttonHeight)
+		)
+		if currentlySelected == name then
+			aereonElement.set("backgroundColor", Theme.SecondaryBackgroundColor)
+		else
+			aereonElement.set("backgroundColor", Color3.new(0.12549, 0.12549, 0.12549))
+		end
+		aereonElement.render(dt)
 
 		i += 1
 	end
@@ -637,7 +679,7 @@ propback.stepped = function(propback)
 					local width = renderDropdownButton(currentX, element.text, element, propback, dt)
 					currentX = currentX + width
 				elseif element.type == "Separator" then
-					local width = renderSeperator(currentX, propback, element)
+					local width = renderSeperator(currentX, propback, element, dt)
 					currentX = currentX + width
 				elseif element.type == "Custom" then
 					if element.render then
@@ -667,7 +709,7 @@ propback.stepped = function(propback)
 			tooltipState.visible = false
 		end
 
-		drawCategories(propback)
+		drawCategories(propback, dt)
 
 		if tooltipState.visible then
 			drawTooltip(tooltipState.text, tooltipState.x, tooltipState.y)

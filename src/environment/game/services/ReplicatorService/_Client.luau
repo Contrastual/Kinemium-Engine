@@ -97,6 +97,26 @@ function Client.init(context)
 		return `({string.format("%.2f", value.X)}, {string.format("%.2f", value.Y)}, {string.format("%.2f", value.Z)})`
 	end
 
+	local function getBestBaselineMap(baseTick)
+		local exact = clientBaselineCache[baseTick]
+		if exact then
+			return exact, baseTick
+		end
+
+		local bestTick = nil
+		for tick in pairs(clientBaselineCache) do
+			if tick <= baseTick and (bestTick == nil or tick > bestTick) then
+				bestTick = tick
+			end
+		end
+
+		if bestTick ~= nil then
+			return clientBaselineCache[bestTick], bestTick
+		end
+
+		return {}, nil
+	end
+
 	local function decodeStatePosition(state)
 		if type(state) ~= "table" or type(state.cframe) ~= "table" then
 			return nil
@@ -176,6 +196,39 @@ function Client.init(context)
 
 	local function isReplicationSettled()
 		return pendingSnapshotsCount == 0 and #deferredReferencePatches == 0
+	end
+
+	local function collectKnownNetworkIds()
+		local known = {}
+		local ids = { 0, 1, 2, 3, 4, 5, 6 }
+		for _, id in ipairs(ids) do
+			known[id] = true
+		end
+
+		for _, object in ipairs(game:GetDescendants()) do
+			local netId = object.NetworkId
+			if type(netId) == "number" then
+				known[netId] = true
+			end
+		end
+
+		local list = {}
+		for netId in pairs(known) do
+			table.insert(list, netId)
+		end
+		table.sort(list)
+		return list
+	end
+
+	local function sendObjectInventoryToServer()
+		local netIds = collectKnownNetworkIds()
+		print(`[Replicator][Client] Sending object inventory to server: {#netIds} netIds`)
+		networkService:SendToServer(
+			Protocol.Channels.Control,
+			Protocol.Kinds.ClientObjectInventoryResponse,
+			{ netIds = netIds },
+			true
+		)
 	end
 
 	local function withMutedObject(object, callback)
@@ -889,21 +942,32 @@ function Client.init(context)
 		predictionBuffer:Acknowledge(ackSequence)
 
 		local baseTick = payload.baseTick or 0
-		local baselineMap = clientBaselineCache[baseTick] or {}
-		local newBaselineMap = {}
+		local baselineMap, resolvedBaseTick = getBestBaselineMap(baseTick)
+		local newBaselineMap = clientBaselineCache[payload.tick]
+		if not newBaselineMap then
+			newBaselineMap = {}
+			for netId, baseline in pairs(baselineMap) do
+				newBaselineMap[netId] = baseline
+			end
+		end
 		local statesToApply = {}
 
 		for _, stateOrDelta in ipairs(payload.states or {}) do
 			local netId = stateOrDelta.id
-			local baseline = baselineMap[netId]
+			local baseline = newBaselineMap[netId] or baselineMap[netId]
 			local fullState = stateRegistry.ApplyDelta(baseline, stateOrDelta)
-			newBaselineMap[netId] = fullState
-			table.insert(statesToApply, fullState)
-		end
-
-		for netId, baseline in pairs(baselineMap) do
-			if not newBaselineMap[netId] then
-				newBaselineMap[netId] = baseline
+			if fullState ~= nil then
+				newBaselineMap[netId] = fullState
+				table.insert(statesToApply, fullState)
+			elseif stateOrDelta.__isDelta then
+				local fallbackSuffix = ""
+				if resolvedBaseTick ~= nil then
+					fallbackSuffix = ` (using fallback tick {resolvedBaseTick})`
+				end
+				warn(
+					`[Replicator][Client] Dropping delta for object {tostring(netId)} at tick {payload.tick} because object baseline was unavailable for base tick {baseTick}`
+						.. fallbackSuffix
+				)
 			end
 		end
 
@@ -1115,10 +1179,10 @@ function Client.init(context)
 	end)
 
 	networkService:RegisterMessageHandler(Protocol.Channels.Replication, Protocol.Kinds.Snapshot, function(_, payload)
+		handleSnapshot(payload)
 		networkService:SendToServer(Protocol.Channels.Replication, Protocol.Kinds.SnapshotAck, {
 			tick = payload.tick,
-		}, false)
-		handleSnapshot(payload)
+		}, true)
 	end)
 
 	networkService:RegisterMessageHandler(
@@ -1262,6 +1326,23 @@ function Client.init(context)
 			)
 			print("[Replicator][Client] ClientReady sent successfully")
 		end)
+	end)
+
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Control,
+		Protocol.Kinds.ClientObjectInventoryRequest,
+		function(_, _payload)
+			sendObjectInventoryToServer()
+		end
+	)
+
+	task.spawn(function()
+		-- Proactively announce inventory in case the request arrives before this
+		-- handler is fully active or gets dropped.
+		task.wait(0.5)
+		if networkService.IsClientConnected and not worldLoadedHandled then
+			sendObjectInventoryToServer()
+		end
 	end)
 
 	runService:BindToSimulation(function(dt)

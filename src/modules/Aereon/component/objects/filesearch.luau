@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 return function(objects, data)
@@ -101,18 +91,18 @@ return function(objects, data)
 			rect:translate(r),
 			config.rounded[1],
 			config.rounded[2],
-			c3tr(config.backgroundColor, 0)
+			config.backgroundColor:ToRaylib(0)
 		)
 
 		local searchHeight = 36
 		local searchRect =
 			rect.new(r.x + config.padding, r.y + config.padding, r.width - config.padding * 2, searchHeight)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(searchRect), 0.12, 8, c3tr(config.searchBgColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(searchRect), 0.12, 8, config.searchBgColor:ToRaylib(0))
 
 		local searchDisplayText = config.searchText == "" and "init" or config.searchText
 		local searchColor = config.searchText == "" and config.dimTextColor or config.textColor
-		raylib.lib.DrawText(searchDisplayText, searchRect.x + 10, searchRect.y + 10, 14, c3tr(searchColor, 0))
+		raylib.lib.DrawText(searchDisplayText, searchRect.x + 10, searchRect.y + 10, 14, searchColor:ToRaylib(0))
 
 		local resultsY = r.y + config.padding + searchHeight + config.padding
 		local resultsHeight = r.height - searchHeight - config.padding * 3
@@ -121,12 +111,18 @@ return function(objects, data)
 		local headerHeight = 0
 		if #config.recentlyOpened > 0 and config.searchText == "" then
 			headerHeight = 28
-			raylib.lib.DrawText("recently opened", resultsRect.x + 10, resultsY + 6, 11, c3tr(config.dimTextColor, 0))
+			raylib.lib.DrawText(
+				"recently opened",
+				resultsRect.x + 10,
+				resultsY + 6,
+				11,
+				config.dimTextColor:ToRaylib(0)
+			)
 
 			-- Icons on the right
 			local iconX = resultsRect.x + resultsRect.width - 50
-			raylib.lib.DrawRectangle(iconX, resultsY + 8, 14, 14, c3tr(config.dimTextColor, 0.3))
-			raylib.lib.DrawRectangle(iconX + 20, resultsY + 8, 14, 14, c3tr(config.dimTextColor, 0.3))
+			raylib.lib.DrawRectangle(iconX, resultsY + 8, 14, 14, config.dimTextColor:ToRaylib(0.3))
+			raylib.lib.DrawRectangle(iconX + 20, resultsY + 8, 14, 14, config.dimTextColor:ToRaylib(0.3))
 		end
 
 		if rect.MouseIsInRect(resultsRect) then
@@ -156,9 +152,9 @@ return function(objects, data)
 			end
 
 			if isSelected then
-				raylib.lib.DrawRectangleRounded(rect:translate(itemRect), 0.15, 4, c3tr(config.selectedColor, 0))
+				raylib.lib.DrawRectangleRounded(rect:translate(itemRect), 0.15, 4, config.selectedColor:ToRaylib(0))
 			elseif isHovered then
-				raylib.lib.DrawRectangleRounded(rect:translate(itemRect), 0.15, 4, c3tr(config.hoverColor, 0))
+				raylib.lib.DrawRectangleRounded(rect:translate(itemRect), 0.15, 4, config.hoverColor:ToRaylib(0))
 			end
 
 			local iconSize = 16
@@ -166,22 +162,22 @@ return function(objects, data)
 			local iconY = itemY + (config.itemHeight - iconSize) / 2
 
 			local iconColor = file.type == "lua" and color3.new(0.8, 0.3, 0.3) or color3.new(0.4, 0.5, 0.6)
-			raylib.lib.DrawRectangle(iconX, iconY, iconSize, iconSize, c3tr(iconColor, 0))
+			raylib.lib.DrawRectangle(iconX, iconY, iconSize, iconSize, iconColor:ToRaylib(0))
 
 			local textX = iconX + iconSize + 8
 			local fileName = file.name
 			local fileNameColor = config.accentColor
 
-			raylib.lib.DrawText(fileName, textX, itemY + 5, 12, c3tr(fileNameColor, 0))
+			raylib.lib.DrawText(fileName, textX, itemY + 5, 12, fileNameColor:ToRaylib(0))
 
 			local fileNameWidth = raylib.lib.MeasureText(fileName, 12)
 			local pathText = file.path or ""
-			raylib.lib.DrawText(pathText, textX + fileNameWidth + 4, itemY + 5, 12, c3tr(config.dimTextColor, 0))
+			raylib.lib.DrawText(pathText, textX + fileNameWidth + 4, itemY + 5, 12, config.dimTextColor:ToRaylib(0))
 
 			if isHovered or isSelected then
 				local iconX = itemRect.x + itemRect.width - 40
-				raylib.lib.DrawRectangle(iconX, itemY + 6, 12, 12, c3tr(config.dimTextColor, 0.3))
-				raylib.lib.DrawRectangle(iconX + 18, itemY + 6, 12, 12, c3tr(config.dimTextColor, 0.3))
+				raylib.lib.DrawRectangle(iconX, itemY + 6, 12, 12, config.dimTextColor:ToRaylib(0.3))
+				raylib.lib.DrawRectangle(iconX + 18, itemY + 6, 12, 12, config.dimTextColor:ToRaylib(0.3))
 			end
 
 			if isHovered and mousePressed then
@@ -210,7 +206,7 @@ return function(objects, data)
 				}),
 				0.5,
 				4,
-				c3tr(config.dimTextColor, 0.5)
+				config.dimTextColor:ToRaylib(0.5)
 			)
 		end
 

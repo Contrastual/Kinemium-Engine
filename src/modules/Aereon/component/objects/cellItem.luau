@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 return function(objects, data)
@@ -97,7 +87,7 @@ return function(objects, data)
 	end
 
 	local function drawRoundedCellBackground(r, bgColor, position, roundness, segments)
-		local col = c3tr(bgColor, config.backgroundTransparency)
+		local col = bgColor:ToRaylib(config.backgroundTransparency)
 
 		if position == "single" then
 			raylib.lib.DrawRectangleRounded(rect:translate(r), roundness, segments, col)
@@ -129,7 +119,7 @@ return function(objects, data)
 				r.y + r.height - config.separatorHeight,
 				r.width - config.padding * 2,
 				config.separatorHeight,
-				c3tr(config.separatorColor, 0)
+				config.separatorColor:ToRaylib(0)
 			)
 		end
 
@@ -151,7 +141,7 @@ return function(objects, data)
 			vector.create(nameX, nameY),
 			config.nameFontSize,
 			config.fontSpacing,
-			c3tr(config.textColor, 0)
+			config.textColor:ToRaylib(0)
 		)
 
 		-- Draw description if provided
@@ -163,7 +153,7 @@ return function(objects, data)
 				vector.create(nameX, descY),
 				config.descFontSize,
 				config.fontSpacing,
-				c3tr(config.descriptionColor, 0)
+				config.descriptionColor:ToRaylib(0)
 			)
 		end
 

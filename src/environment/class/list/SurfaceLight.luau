@@ -1,11 +1,9 @@
 local a = require("@Vector3")
 local b = require("@Color3")
 local c = require("@EnumMap")
-require("@CFrame")
 
 local d = require("@r3d")
 local e = d.lib
-require("@raylib")
 
 local f = {
 	Angle = 90,
@@ -74,7 +72,11 @@ return {
 
 		h.Hook.new("Renderstep", function()
 			if g.Parent and g.Parent.CFrame then
-				g.Position = g.Parent.CFrame.Position
+				local newPos = g.Parent.CFrame.Position
+				local dx, dy, dz = newPos.X - g.Position.X, newPos.Y - g.Position.Y, newPos.Z - g.Position.Z
+				if dx * dx + dy * dy + dz * dz > 0.0001 then
+					g.Position = newPos
+				end
 				local k = g.Parent.CFrame:GetLookVector()
 				if g.Face == c.NormalId.Top then
 					k = g.Parent.CFrame:GetUpVector()

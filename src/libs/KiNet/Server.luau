@@ -12,7 +12,7 @@ local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
 -- Replay / clock-skew window for inbound messages (seconds). The previous
 -- value of 300s allowed a 5-minute replay; this is tightened to a window
 -- that still tolerates reasonable NTP drift.
-local MESSAGE_TIMEOUT = 10
+local MESSAGE_TIMEOUT = 30
 local MAX_CLIENTS = 1000
 local MAX_MESSAGES_PER_CLIENT = 1000
 local RATE_LIMIT_WINDOW_SECONDS = 1
@@ -395,6 +395,11 @@ function Server:ReassembleFragments(fragmentData, client)
 			return nil
 		end
 
+		-- Large logical messages can spend meaningful time in fragmentation
+		-- and reassembly. Refresh the timestamp so validation measures the
+		-- timeout window from successful reassembly instead of initial encode.
+		decoded.timestamp = os.time()
+
 		return decoded
 	end
 
@@ -445,6 +450,29 @@ function Server:SendAll(data, reliable)
 
 	if not success then
 		warn(`SendAll error: {err}`)
+	end
+end
+
+-- Send data to a subset of authenticated clients that pass a filter function.
+-- filterFn receives the client key and the client table; return true to send.
+function Server:SendFiltered(data, reliable, filterFn)
+	local success, err = pcall(function()
+		for key, client in pairs(Server.ConnectedClients) do
+			if client.authenticated then
+				if filterFn == nil or filterFn(key, client) then
+					local sendSuccess, sendErr = pcall(function()
+						self:Send(client, data, reliable)
+					end)
+					if not sendSuccess then
+						warn(`Failed to send to {key}: {sendErr}`)
+					end
+				end
+			end
+		end
+	end)
+
+	if not success then
+		warn(`SendFiltered error: {err}`)
 	end
 end
 
@@ -504,7 +532,8 @@ function Server:SendReliable(client, data)
 end
 
 function Server:SendRaw(client, data)
-	data.timestamp = data.timestamp or os.time()
+	-- Always refresh timestamp at send time so retries cannot become stale.
+	data.timestamp = os.time()
 	data.sessionId = client.sessionId
 
 	local buf = Serializer.Serialize(data)

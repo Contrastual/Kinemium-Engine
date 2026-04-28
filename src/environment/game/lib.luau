@@ -10,7 +10,6 @@ local fs = zune.fs
 
 local aliases = {}
 local HEADLESS_SKIP_INIT = {
-	DiscordService = true,
 	FileDialogService = true,
 	GuiStackService = true,
 	KinemiumFontService = true,
@@ -24,7 +23,6 @@ local HEADLESS_SKIP_INIT = {
 	StudioThemeService = true,
 	UserInputService = true,
 	VideoService = true,
-	WebviewService = true,
 }
 
 function DataModel.new(RENDERER, ...)

@@ -590,7 +590,7 @@ local funcs = {
 		returns = structs.R3D_Mesh,
 		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
-	R3D_GenMeshSphere = { returns = structs.R3D_Mesh, args = { ffi.types.float, ffi.types.i32, ffi.types.i32 } },
+	R3D_GenMeshSphere = { returns = structs.R3D_Mesh, args = { ffi.types.i32, ffi.types.i32, ffi.types.i32 } },
 	R3D_GenMeshHemiSphere = { returns = structs.R3D_Mesh, args = { ffi.types.float, ffi.types.i32, ffi.types.i32 } },
 	R3D_GenMeshCylinder = {
 		returns = structs.R3D_Mesh,
@@ -726,7 +726,7 @@ local funcs = {
 	},
 
 	R3D_GenProceduralSky = { returns = structs.R3D_Cubemap, args = { ffi.types.i32, structs.R3D_ProceduralSky } },
-	R3D_GenCustomSky = { returns = ffi.types.pointer, args = { ffi.types.i32, ffi.types.pointer } },
+	R3D_GenCustomSky = { returns = structs.R3D_Cubemap, args = { ffi.types.i32, ffi.types.pointer } },
 	R3D_UpdateProceduralSky = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	R3D_UpdateCustomSky = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 

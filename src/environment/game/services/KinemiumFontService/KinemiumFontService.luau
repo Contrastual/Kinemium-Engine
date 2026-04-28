@@ -9,6 +9,7 @@ local FontAdded = signal.new()
 
 local DEFAULT_FONT_PATH = "./src/assets/fonts/Montserrat-Medium.ttf"
 local DEFAULT_CODE_FONT_PATH = "./src/assets/fonts/JetBrainsMono-Light.ttf"
+local DEFAULT_FONT_BOLD_PATH = "./src/assets/fonts/Montserrat-Bold.ttf"
 
 local ENGINE_FONT_FILES = {
 	Legacy = DEFAULT_FONT_PATH,
@@ -25,6 +26,7 @@ local ENGINE_FONT_FILES = {
 	GoogleSansCode = "./src/assets/fonts/GoogleSansCode-Regular.ttf",
 	DefaultEngineFont = DEFAULT_FONT_PATH,
 	DefaultCodeEngineFont = DEFAULT_CODE_FONT_PATH,
+	MontserratBold = DEFAULT_FONT_BOLD_PATH,
 	Highway = "./src/assets/fonts/HWYGOTH.ttf",
 	SciFi = "./src/assets/fonts/Zekton.ttf",
 	Arcade = "./src/assets/fonts/PressStart2P-Regular.ttf",
@@ -155,6 +157,10 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 		GetMonoFontDefault = function()
 			return loaded_cf
+		end,
+
+		GetBoldFont = function()
+			return loadEngineFont("MontserratBold", 32)
 		end,
 
 		LoadAllEngineFonts = function()

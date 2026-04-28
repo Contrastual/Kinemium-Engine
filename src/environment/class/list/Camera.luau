@@ -1,9 +1,7 @@
 local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
 local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
-local bufferUtils = require("@bufferutils")
 local Vector2 = require("@Vector2")
 
 local lib = raylib.lib
@@ -40,7 +38,8 @@ return {
 			local rollRad = math.rad(instance.Roll)
 
 			instance.Position = instance.CFrame.Position
-			instance.ViewportSize = Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
+			local dpiScale = lib.GetWindowScaleDPI()
+			instance.ViewportSize = Vector2.new(lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y)
 
 			if instance.CameraType == Enum.CameraType.Scriptable then
 				-- position

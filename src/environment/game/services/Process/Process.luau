@@ -15,6 +15,9 @@ Process.InitRenderer = function(renderer, renderer_signal)
 				"--client",
 				"--username",
 				"Dev",
+				"--max3dpixels",
+				"144000",
+				"--perfoverlay",
 			}
 
 			if flags then
@@ -29,7 +32,7 @@ Process.InitRenderer = function(renderer, renderer_signal)
 			return process
 		end,
 
-		CreateKinemiumClientProcessEx = function(username, ip, port)
+		CreateKinemiumClientProcessEx = function(username, ip, port, flags)
 			local info = {
 				"run",
 				"game",
@@ -40,7 +43,17 @@ Process.InitRenderer = function(renderer, renderer_signal)
 				ip,
 				"--port",
 				tostring(port),
+				"--max3dpixels",
+				"144000",
+				"--perfoverlay",
 			}
+
+			if flags then
+				for _, flag in ipairs(flags) do
+					table.insert(info, flag)
+				end
+			end
+
 			local process = zune.process.create(zune.fs.getExePath(), info, {
 				opts = { stdin = "inherit", stdout = "inherit", stderr = "inherit" },
 			})

@@ -9,7 +9,7 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 
 local vend = KinemiumFontService.GetDefaultFontSmall()
-local arect = require("@Arect")(raylib.lib)
+local arect = require("@arect")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 
 local ThirdBackgroundColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor
@@ -66,7 +66,7 @@ local cells = gui.cellparser({
 
 	aboutSection = {
 		{
-			name = "Version 1.9.0",
+			name = "Version " .. ENGINE_VERSION,
 			font = vend,
 			backgroundColor = ThirdBackgroundColor,
 		},
@@ -140,21 +140,21 @@ repeat
 	task.wait()
 until ishared.Home
 
-table.insert(ishared.Home.rendering, {
-	render = function(dt)
-		if ishared.Home.activePage ~= "Settings" then
-			return
-		end
+ishared.Home.pages["Settings"] = function(dt, alpha, slideOffset)
+	if ishared.Home.activePage ~= "Settings" and ishared.Home.previousPage ~= "Settings" then
+		return
+	end
 
-		screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-		local x = 60
-		local y = 60
+	local x = 60
+	local y = 60 + slideOffset
 
-		group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
-		group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
-		cells.setWidth(screenx - 150)
-		group.render(dt, { "newProjectPrompt" })
-		cells.render(dt)
-	end,
-})
+	group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
+	group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
+	cells.setPosition(120, 150 + slideOffset)
+	cells.setWidth(screenx - 150)
+
+	group.render(dt, { "newProjectPrompt" })
+	cells.render(dt)
+end

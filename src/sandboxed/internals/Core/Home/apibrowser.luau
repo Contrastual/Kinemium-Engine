@@ -7,7 +7,8 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 
 local vend = KinemiumFontService.GetDefaultFont()
-local arect = require("@Arect")(raylib.lib)
+local arect = require("@arect")
+local boldFont = KinemiumFontService.GetBoldFont()
 local backgroundColor = StudioThemeService.SelectedTheme.BackgroundColor
 local SecondaryBackgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor
 
@@ -32,18 +33,43 @@ repeat
 	task.wait()
 until ishared.Home
 
-table.insert(ishared.Home.rendering, {
-	render = function(dt)
-		if ishared.Home.activePage ~= "API" then
-			return
-		end
+ishared.Home.pages["API"] = function(dt, alpha, slideOffset)
+	local fade = function(col, a)
+		return col:ToRaylib(1 - (a or 1) * alpha)
+	end
 
-		screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+	if ishared.Home.activePage ~= "API" and ishared.Home.previousPage ~= "API" then
+		return
+	end
 
-		browser.set("backgroundColor", backgroundColor)
-		browser.set("headerColor", SecondaryBackgroundColor)
+	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-		browser.set("obj_rect", arect.new(70, 60, screenx - 60, screeny - 60))
-		browser.render(dt)
-	end,
-})
+	local startX = 100
+	local headerY = 80 + slideOffset
+	local headerDesc = 120 + slideOffset
+
+	if vend then
+		raylib.lib.DrawTextEx(
+			boldFont,
+			"API Documentation",
+			vector.create(startX, headerY),
+			32,
+			1,
+			fade(StudioThemeService.SelectedTheme.TextColor, 1)
+		)
+		raylib.lib.DrawTextEx(
+			vend,
+			"Explore the Kinemium Engine API and builtin services",
+			vector.create(startX, headerDesc),
+			16,
+			1,
+			fade(StudioThemeService.SelectedTheme.SecondaryTextColor, 1)
+		)
+	end
+
+	browser.set("backgroundColor", backgroundColor)
+	browser.set("headerColor", SecondaryBackgroundColor)
+
+	browser.set("obj_rect", arect.new(startX, 160 + slideOffset, screenx - 130, screeny - 190))
+	browser.render(dt)
+end

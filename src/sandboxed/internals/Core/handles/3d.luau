@@ -24,9 +24,12 @@ local _focusTargetCF = nil
 local vend = KinemiumFontService.GetDefaultFont()
 local _focusAlpha = 0
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
+local moveIcon = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Move.png")
+local rotIcon = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Rotate.png")
 
+ishared.isToolsActive = false
 ishared.Grid = 1
-ishared.ForceMoveObject = false  -- Disabled by default to prevent accidental dragging
+ishared.ForceMoveObject = false -- Disabled by default to prevent accidental dragging
 ishared.RotationStep = 15
 
 local aereon = require("@Aereon")
@@ -50,7 +53,13 @@ local ScaleDragging = false
 
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
 
+local snapMoveEnabled = true
+local snapRotEnabled = true
+
 local function snap(v)
+	if not snapMoveEnabled then
+		return v
+	end
 	return math.round(v / ishared.Grid) * ishared.Grid
 end
 
@@ -134,6 +143,7 @@ local gridInput = textbox.new({
 	font = vend,
 	maxLength = 56,
 	numeric = true,
+	suffix = "    studs",
 	numericMin = 0,
 	numericMax = 10000,
 	numericPrecision = 1,
@@ -166,7 +176,7 @@ local rotateGrid = textbox.new({
 			ishared.RotationStep = 15
 		end
 		if Rotation then
-			Rotation.RotationSnap = ishared.RotationStep
+			Rotation.RotationSnap = snapRotEnabled and ishared.RotationStep or 0
 		end
 	end,
 })
@@ -321,12 +331,15 @@ local _resizeConnection = Resize.MouseDrag:Connect(function(newCF, newSize)
 	end
 end)
 
-local handlestype = "MOVEMENT"
+local handlestype = ""
 
 -- Read Offsets:
 -- 0, 4, 8 = Position (x,y,z) (Vector3)
 -- 12, 16, 20, 24 = Rotation (x,y,z,w) (Quaternion)
 -- 28, 32, 36 = Scale (x,y,z) (Vector3)
+
+-- Expose updateAdornees for external use
+ishared.Update3DHandles = updateAdornees
 
 --  Selection signals
 
@@ -405,6 +418,12 @@ end
 --  Render loop
 
 renderer.Pool.new("gizmo", function()
+	if ishared.MouseDragging then
+		Movement.Adornee = nil
+		Resize.Adornee = nil
+		Rotation.Adornee = nil
+	end
+
 	Movement.render(Movement, renderer, game)
 	Resize.render(Resize, renderer, game)
 	Rotation.render(Rotation, renderer, game)
@@ -492,6 +511,7 @@ NewCategoryToolbar:Fire("Tools", {
 			type = "ImageButton",
 			text = "Move",
 			callback = function()
+				ishared.isToolsActive = true
 				handlestype = "MOVEMENT"
 				updateAdornees()
 			end,
@@ -503,6 +523,7 @@ NewCategoryToolbar:Fire("Tools", {
 		{
 			type = "ImageButton",
 			callback = function()
+				ishared.isToolsActive = true
 				handlestype = "ROTATE"
 				updateAdornees()
 			end,
@@ -517,6 +538,7 @@ NewCategoryToolbar:Fire("Tools", {
 			text = "Resize",
 			callback = function()
 				handlestype = "SCALE"
+				ishared.isToolsActive = true
 				updateAdornees()
 			end,
 			hoverTransparency = 0.5,
@@ -525,36 +547,144 @@ NewCategoryToolbar:Fire("Tools", {
 			texture = KinemiumIconLoader.ToTexture("./src/assets/images/icons/Size.png"),
 		},
 		{
-			type = "ImageButton",
-			text = ishared.ForceMoveObject and "Disable Handles" or "Enable Handles",
-			callback = function()
-				ishared.ForceMoveObject = not ishared.ForceMoveObject
-				updateAdornees()
-			end,
-			hoverTransparency = 0.5,
-			hoverColor = ishared.ForceMoveObject and Color3.new(0, 1, 0) or Color3.new(0, 0.5, 0),
-			roundness = 0.2,
-		},
-		{
 			type = "Separator",
 		},
 		{
 			type = "Custom",
 			width = 250,
 			render = function(arect, data)
-				local x, y = data.x, data.y
-				local width, height = data.width, data.height + 25
+				local x, y = data.x, data.y + 15
+				local width, height = data.width, data.height
 
-				lib.DrawRectangle(x, y, width, height, raylib.const.WHITE)
+				-- layout config
+				local padding = 12
+				local spacing = 8
+				local rowHeight = 26
+				local checkboxSize = 16
+				local smallIconSize = 16
+				local geoSize = 28
 
-				local textboxWidth = 60
-				local textboxHeight = height
-				local textboxX = x + width - textboxWidth - 10
-				local textboxY = y
+				-- vertical centering
+				local contentHeight = rowHeight * 2 + spacing
+				local startY = y + (height - contentHeight) / 2
 
-				gridInput:drawWithExtras(textboxX, textboxY, textboxWidth, textboxHeight)
-				rotateGrid:drawWithExtras(textboxX + textboxWidth + 2, textboxY, textboxWidth, textboxHeight)
+				local row1Y = startY
+				local row2Y = startY + rowHeight + spacing
+
+				-- theme
+				local iconColor = StudioThemeService.SelectedTheme.ImageColor:ToRaylib(0)
+				local textColor = StudioThemeService.SelectedTheme.TextColor:ToRaylib(0)
+
+				-- === COLUMN POSITIONS ===
+				local cbX = x + padding
+				local iconX = cbX + checkboxSize + 10
+				local textboxX = iconX + smallIconSize + 10
+				local textboxWidth = width - (textboxX - x) - padding
+
+				-- mouse
+				local mx, my = lib.GetMouseX(), lib.GetMouseY()
+				local function isHovered(rx, ry, rw, rh)
+					return mx >= rx and mx <= rx + rw and my >= ry and my <= ry + rh
+				end
+
+				-- === CHECKBOX DRAW FUNCTION ===
+				local function drawCheckbox(px, py, state)
+					local hovered = isHovered(px, py, checkboxSize, checkboxSize)
+
+					local bg = state and Color3.new(0.2, 0.5, 0.9):ToRaylib(0)
+						or (
+							hovered and Color3.new(0.3, 0.3, 0.3):ToRaylib(0)
+							or Color3.new(0.18, 0.18, 0.18):ToRaylib(0)
+						)
+
+					lib.DrawRectangleRounded(
+						raylib.structs.Rectangle:new({
+							x = px,
+							y = py,
+							width = checkboxSize,
+							height = checkboxSize,
+						}),
+						0.25,
+						4,
+						bg
+					)
+
+					if state then
+						lib.DrawLineEx(
+							vector.create(px + 3, py + 9),
+							vector.create(px + 7, py + 13),
+							2,
+							raylib.const.WHITE
+						)
+						lib.DrawLineEx(
+							vector.create(px + 7, py + 13),
+							vector.create(px + 13, py + 4),
+							2,
+							raylib.const.WHITE
+						)
+					end
+
+					return hovered
+				end
+
+				-- === ROW 1 (MOVE) ===
+				local cbMoveY = row1Y + (rowHeight - checkboxSize) / 2
+				local moveHovered = drawCheckbox(cbX, cbMoveY, snapMoveEnabled)
+
+				if moveHovered and lib.IsMouseButtonPressed(0) == 1 then
+					snapMoveEnabled = not snapMoveEnabled
+				end
+
+				if moveIcon then
+					lib.DrawTexturePro(
+						moveIcon.texture,
+						raylib.structs.Rectangle:new({ x = 0, y = 0, width = moveIcon.x, height = moveIcon.y }),
+						raylib.structs.Rectangle:new({
+							x = iconX,
+							y = row1Y + (rowHeight - smallIconSize) / 2,
+							width = smallIconSize,
+							height = smallIconSize,
+						}),
+						vector.create(0, 0),
+						0,
+						iconColor
+					)
+				end
+
+				gridInput:drawWithExtras(textboxX, row1Y, textboxWidth, rowHeight)
+
+				-- === ROW 2 (ROTATE) ===
+				local cbRotY = row2Y + (rowHeight - checkboxSize) / 2
+				local rotHovered = drawCheckbox(cbX, cbRotY, snapRotEnabled)
+
+				if rotHovered and lib.IsMouseButtonPressed(0) == 1 then
+					snapRotEnabled = not snapRotEnabled
+					if Rotation then
+						Rotation.RotationSnap = snapRotEnabled and ishared.RotationStep or 0
+					end
+				end
+
+				if rotIcon then
+					lib.DrawTexturePro(
+						rotIcon.texture,
+						raylib.structs.Rectangle:new({ x = 0, y = 0, width = rotIcon.x, height = rotIcon.y }),
+						raylib.structs.Rectangle:new({
+							x = iconX,
+							y = row2Y + (rowHeight - smallIconSize) / 2,
+							width = smallIconSize,
+							height = smallIconSize,
+						}),
+						vector.create(0, 0),
+						0,
+						iconColor
+					)
+				end
+
+				rotateGrid:drawWithExtras(textboxX, row2Y, textboxWidth, rowHeight)
 			end,
+		},
+		{
+			type = "Separator",
 		},
 	},
 })

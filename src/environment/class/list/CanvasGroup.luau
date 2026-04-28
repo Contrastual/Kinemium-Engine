@@ -14,17 +14,18 @@ local propTable = {
 }
 
 local function improveQuality(tex)
-	local tex = utils.extract.texture(tex)
-	raylib.lib.SetTextureFilter(tex, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-	raylib.lib.SetTextureWrap(tex, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
-	raylib.lib.GenTextureMipmaps(tex)
+	local texture = utils.extract.texture(tex)
+	raylib.lib.SetTextureFilter(texture, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+	raylib.lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+	raylib.lib.GenTextureMipmaps(texture)
 end
 
 GuiObject.inherit(propTable)
 
 propTable.render = function(lib, object, dt, structs, renderer)
 	if raylib.lib.IsWindowResized() == 1 then
-		local width, height = lib.GetRenderWidth(), lib.GetRenderHeight()
+		local dpiScale = lib.GetWindowScaleDPI()
+		local width, height = lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y
 		local texture = raylib.lib.LoadRenderTexture(width, height)
 		if object._rendertex then
 			raylib.lib.UnloadRenderTexture(object._rendertex)
@@ -48,7 +49,8 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		GuiObject.renderChildren(lib, object, dt, structs, renderer)
 		raylib.lib.EndTextureMode()
 
-		local W, H = lib.GetRenderWidth(), lib.GetRenderHeight()
+		local dpiScale = lib.GetWindowScaleDPI()
+		local W, H = lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y
 		local source = raylib.structs.Rectangle:new({ x = 0, y = 0, width = W, height = -H })
 		local dest = raylib.structs.Rectangle:new({ x = 0, y = 0, width = W, height = -H })
 
@@ -67,7 +69,8 @@ return {
 	class = "CanvasGroup",
 	render = propTable.render,
 	callback = function(instance, renderer)
-		local width, height = lib.GetRenderWidth(), lib.GetRenderHeight()
+		local dpiScale = lib.GetWindowScaleDPI()
+		local width, height = lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y
 		local texture = raylib.lib.LoadRenderTexture(width, height)
 		instance:SetProperties(propTable)
 		instance._rendertex = texture

@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -39,7 +29,7 @@ immediate.switch = function(data)
 		offColor.B + (onColor.B - offColor.B) * animProgress
 	)
 
-	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, c3tr(currentColor, 0))
+	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, currentColor:ToRaylib(0))
 
 	local handleSize = r.height - 6
 	local handleMinX = r.x + 3
@@ -51,7 +41,7 @@ immediate.switch = function(data)
 		structs.Rectangle:new({ x = handleX, y = handleY, width = handleSize, height = handleSize }),
 		0.5,
 		8,
-		c3tr(handleColor, 0)
+		handleColor:ToRaylib(0)
 	)
 
 	if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then
@@ -86,8 +76,8 @@ immediate.textbox = function(data)
 
 	local borderColor = focused and focusColor or color3.new(0.3, 0.3, 0.3)
 
-	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(backgroundColor, 0))
-	raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 2, c3tr(borderColor, 0))
+	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, backgroundColor:ToRaylib(0))
+	raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 2, borderColor:ToRaylib(0))
 
 	local displayText = text
 	local displayColor = textColor
@@ -99,11 +89,11 @@ immediate.textbox = function(data)
 	local textX = r.x + 8
 	local textY = r.y + (r.height - fontSize) / 2
 
-	raylib.lib.DrawText(tostring(displayText), textX, textY, fontSize, c3tr(displayColor, 0))
+	raylib.lib.DrawText(tostring(displayText), textX, textY, fontSize, displayColor:ToRaylib(0))
 
 	if focused and math.floor(cursorBlink * 2) % 2 == 0 then
 		local textWidth = raylib.lib.MeasureText(text, fontSize)
-		raylib.lib.DrawRectangle(textX + textWidth + 2, textY, 2, fontSize, c3tr(textColor, 0))
+		raylib.lib.DrawRectangle(textX + textWidth + 2, textY, 2, fontSize, textColor:ToRaylib(0))
 	end
 
 	if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then
@@ -152,13 +142,13 @@ immediate.dropdown = function(data)
 
 	local expanded = data.expanded or false
 
-	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(backgroundColor, 0))
+	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, backgroundColor:ToRaylib(0))
 
 	local selectedText = options[selectedIndex] or "Select..."
 	local textX = r.x + 8
 	local textY = r.y + (r.height - fontSize) / 2
 
-	raylib.lib.DrawText(selectedText, textX, textY, fontSize, c3tr(textColor, 0))
+	raylib.lib.DrawText(selectedText, textX, textY, fontSize, textColor:ToRaylib(0))
 
 	local arrowSize = 8
 	local arrowX = r.x + r.width - arrowSize - 8
@@ -168,14 +158,14 @@ immediate.dropdown = function(data)
 			vector.create(arrowX, arrowY + arrowSize / 2),
 			vector.create(arrowX + arrowSize, arrowY + arrowSize / 2),
 			vector.create(arrowX + arrowSize / 2, arrowY - arrowSize / 2),
-			c3tr(textColor, 0)
+			textColor:ToRaylib(0)
 		)
 	else
 		raylib.lib.DrawTriangle(
 			vector.create(arrowX, arrowY - arrowSize / 2),
 			vector.create(arrowX + arrowSize, arrowY - arrowSize / 2),
 			vector.create(arrowX + arrowSize / 2, arrowY + arrowSize / 2),
-			c3tr(textColor, 0)
+			textColor:ToRaylib(0)
 		)
 	end
 
@@ -192,7 +182,7 @@ immediate.dropdown = function(data)
 			structs.Rectangle:new({ x = r.x, y = listY, width = r.width, height = listHeight }),
 			0.2,
 			8,
-			c3tr(backgroundColor, 0)
+			backgroundColor:ToRaylib(0)
 		)
 
 		for i, option in ipairs(options) do
@@ -200,7 +190,13 @@ immediate.dropdown = function(data)
 			local itemRect = rect.new(r.x, itemY, r.width, itemHeight)
 
 			if rect.MouseIsInRect(itemRect) then
-				raylib.lib.DrawRectangle(itemRect.x, itemRect.y, itemRect.width, itemRect.height, c3tr(hoverColor, 0))
+				raylib.lib.DrawRectangle(
+					itemRect.x,
+					itemRect.y,
+					itemRect.width,
+					itemRect.height,
+					hoverColor:ToRaylib(0)
+				)
 
 				if raylib.lib.IsMouseButtonReleased(0) == 1 then
 					selectedIndex = i
@@ -211,7 +207,7 @@ immediate.dropdown = function(data)
 				end
 			end
 
-			raylib.lib.DrawText(option, r.x + 8, itemY + (itemHeight - fontSize) / 2, fontSize, c3tr(textColor, 0))
+			raylib.lib.DrawText(option, r.x + 8, itemY + (itemHeight - fontSize) / 2, fontSize, textColor:ToRaylib(0))
 		end
 	end
 
@@ -261,7 +257,7 @@ immediate.colorpicker = function(data)
 			raylib.lib.DrawPixel(
 				gradientRect.x + x,
 				gradientRect.y + y,
-				c3tr(color3.new(r_val + m, g_val + m, b_val + m), 0)
+				color3.new(r_val + m, g_val + m, b_val + m):ToRaylib(0)
 			)
 		end
 	end
@@ -272,7 +268,7 @@ immediate.colorpicker = function(data)
 	for y = 0, hueBarRect.height - 1 do
 		local hue = (y / hueBarRect.height) * 360
 		local hueColor = color3.fromHSV(hue, 1, 1)
-		raylib.lib.DrawRectangle(hueBarRect.x, hueBarRect.y + y, hueBarRect.width, 1, c3tr(hueColor, 0))
+		raylib.lib.DrawRectangle(hueBarRect.x, hueBarRect.y + y, hueBarRect.width, 1, hueColor:ToRaylib(0))
 	end
 
 	if rect.MouseIsInRect(gradientRect) and raylib.lib.IsMouseButtonDown(0) == 1 then
@@ -303,11 +299,11 @@ immediate.colorpicker = function(data)
 	local h, s, v = color:ToHSV()
 	local circleX = gradientRect.x + s * gradientRect.width
 	local circleY = gradientRect.y + (1 - v) * gradientRect.height
-	raylib.lib.DrawCircleLines(circleX, circleY, 5, c3tr(color3.new(1, 1, 1), 0))
-	raylib.lib.DrawCircleLines(circleX, circleY, 6, c3tr(color3.new(0, 0, 0), 0))
+	raylib.lib.DrawCircleLines(circleX, circleY, 5, color3.new(1, 1, 1):ToRaylib(0))
+	raylib.lib.DrawCircleLines(circleX, circleY, 6, color3.new(0, 0, 0):ToRaylib(0))
 
 	local hueY = hueBarRect.y + (h / 360) * hueBarRect.height
-	raylib.lib.DrawRectangle(hueBarRect.x, hueY - 2, hueBarRect.width, 4, c3tr(color3.new(1, 1, 1), 0))
+	raylib.lib.DrawRectangle(hueBarRect.x, hueY - 2, hueBarRect.width, 4, color3.new(1, 1, 1):ToRaylib(0))
 
 	return color
 end
@@ -332,7 +328,7 @@ immediate.slider = function(data)
 	local handleY = r.y - 2
 
 	-- Background
-	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, c3tr(backgroundColor, 0))
+	raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, backgroundColor:ToRaylib(0))
 
 	-- Fill
 	local fillWidth = (value - min) / (max - min) * r.width
@@ -340,7 +336,7 @@ immediate.slider = function(data)
 		structs.Rectangle:new({ x = r.x, y = r.y, width = fillWidth, height = r.height }),
 		0.5,
 		8,
-		c3tr(fillColor, 0)
+		fillColor:ToRaylib(0)
 	)
 
 	-- Handle
@@ -348,7 +344,7 @@ immediate.slider = function(data)
 		structs.Rectangle:new({ x = handleX, y = handleY, width = handleSize, height = handleSize }),
 		0.5,
 		8,
-		c3tr(handleColor, 0)
+		handleColor:ToRaylib(0)
 	)
 
 	-- Handle interaction
@@ -394,14 +390,14 @@ immediate.textbutton = function(data)
 	end
 
 	-- Draw button background
-	raylib.lib.DrawRectangleRounded(rect:translate(r), cornerRadius, 8, c3tr(currentColor, 0))
+	raylib.lib.DrawRectangleRounded(rect:translate(r), cornerRadius, 8, currentColor:ToRaylib(0))
 
 	-- Draw text centered
 	local textWidth = raylib.lib.MeasureText(text, fontSize)
 	local textX = r.x + (r.width - textWidth) / 2
 	local textY = r.y + (r.height - fontSize) / 2
 
-	raylib.lib.DrawText(text, textX, textY, fontSize, c3tr(textColor, 0))
+	raylib.lib.DrawText(text, textX, textY, fontSize, textColor:ToRaylib(0))
 
 	-- Handle click
 	if wasClicked and onClick then

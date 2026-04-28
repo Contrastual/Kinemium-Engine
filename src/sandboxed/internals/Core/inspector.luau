@@ -13,6 +13,7 @@ local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local PropertyCategories = require("@PropertyCategories")
 local Theme = game:GetService("StudioThemeService").SelectedTheme
+local boldFont = KinemiumFontService.GetBoldFont()
 
 local TextColor = Theme.TextColor:ToRaylib(Theme.TextTransparency)
 local SecondaryBackgroundColor = Theme.SecondaryBackgroundColor:ToRaylib(Theme.SecondaryBackgroundColorTransparency)
@@ -84,10 +85,17 @@ end)
 -- state
 
 local scrollOffset = 0
+local scrollTarget = 0
 local maxScrollOffset = 0
 local openCategories = {}
 local overlapping = {}
 local editorComps = {} -- [propName] = { comp, typeName }
+
+-- Scrollbar drag state
+local scrollbarDrag = {
+	active = false,
+	offset = 0,
+}
 
 local blacklisted = { "Children", "UniqueId" }
 
@@ -747,7 +755,7 @@ local function drawCategoryHeader(winX, winW, y, label, isOpen, mousePos)
 
 	rl.DrawRectangle(winX, centerY, PADDING - 4, 1, lineColor)
 	rl.DrawTextEx(
-		vend,
+		boldFont,
 		indicatorText,
 		vector.create(blockX, centerY - 6),
 		11,
@@ -755,7 +763,7 @@ local function drawCategoryHeader(winX, winW, y, label, isOpen, mousePos)
 		Theme.SecondaryTextColor:ToRaylib(0.4)
 	)
 	rl.DrawTextEx(
-		vend,
+		boldFont,
 		labelText,
 		vector.create(blockX + indicatorSize.x + gap, centerY - 6),
 		11,
@@ -884,7 +892,7 @@ window.stepped = function(windowData)
 		and mousePos.y >= winY
 		and mousePos.y <= winY + winH
 	then
-		scrollOffset = math.clamp(scrollOffset - mouseWheel * 40, 0, math.max(0, maxScrollOffset))
+		scrollTarget = math.clamp(scrollTarget - mouseWheel * 40, 0, math.max(0, maxScrollOffset))
 	end
 
 	if rl.IsWindowResized() == 1 then
@@ -914,7 +922,10 @@ window.stepped = function(windowData)
 		end
 	end
 	maxScrollOffset = math.max(0, totalH - winH)
-	scrollOffset = math.clamp(scrollOffset, 0, maxScrollOffset)
+	scrollTarget = math.clamp(scrollTarget, 0, maxScrollOffset)
+
+	local dt = rl.GetFrameTime()
+	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
 
 	rl.BeginScissorMode(winX, winY, winW, winH)
 
@@ -975,13 +986,55 @@ window.stepped = function(windowData)
 		local sbX = winX + winW - sbW - 2
 		local thumbH = math.max(24, (winH / totalH) * winH)
 		local thumbY = winY + (scrollOffset / maxScrollOffset) * (winH - thumbH)
+		local trackY = winY
+		local trackH = winH
+		local thumbRange = winH - thumbH
+
+		local mousePos = rl.GetMousePosition()
+		local mousePressed = rl.IsMouseButtonPressed(0) == 1
+		local mouseDown = rl.IsMouseButtonDown(0) == 1
+
+		local thumbRect = { x = sbX, y = thumbY, width = sbW, height = thumbH }
+		local trackRect = { x = sbX, y = trackY, width = sbW, height = trackH }
+		local isThumbHovered = mousePos.x >= sbX and mousePos.x <= sbX + sbW and mousePos.y >= thumbY and mousePos.y <= thumbY + thumbH
+		local isTrackHovered = mousePos.x >= sbX and mousePos.x <= sbX + sbW and mousePos.y >= trackY and mousePos.y <= trackY + trackH
+
+		-- Handle thumb drag start
+		if mousePressed and isThumbHovered then
+			scrollbarDrag.active = true
+			scrollbarDrag.offset = mousePos.y - thumbY
+		end
+
+		-- Handle track click
+		if mousePressed and isTrackHovered and not isThumbHovered then
+			local newThumbY = math.clamp(mousePos.y - thumbH / 2, trackY, trackY + thumbRange)
+			local percent = thumbRange > 0 and ((newThumbY - trackY) / thumbRange) or 0
+			scrollTarget = percent * maxScrollOffset
+			scrollbarDrag.active = true
+			scrollbarDrag.offset = mousePos.y - newThumbY
+		end
+
+		-- Handle dragging
+		if scrollbarDrag.active then
+			if mouseDown then
+				local newThumbY = math.clamp(mousePos.y - scrollbarDrag.offset, trackY, trackY + thumbRange)
+				local percent = thumbRange > 0 and ((newThumbY - trackY) / thumbRange) or 0
+				scrollTarget = percent * maxScrollOffset
+			else
+				scrollbarDrag.active = false
+			end
+		end
+
+		-- Recalculate thumbY after potential drag
+		thumbY = winY + (scrollOffset / maxScrollOffset) * (winH - thumbH)
 
 		rl.DrawRectangle(sbX, winY, sbW, winH, Theme.SecondaryBackgroundColor:ToRaylib(0.6))
+		local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.4, 0.4, 0.4) or Color3.new(0.3, 0.3, 0.3)
 		rl.DrawRectangleRounded(
 			structs.Rectangle:new({ x = sbX, y = thumbY, width = sbW, height = thumbH }),
 			0.5,
 			4,
-			Color3.new(0.3, 0.3, 0.3):ToRaylib(0)
+			thumbColor:ToRaylib(0)
 		)
 	end
 end

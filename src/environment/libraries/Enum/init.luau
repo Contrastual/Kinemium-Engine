@@ -13,6 +13,29 @@ function EnumItem:__eq(other)
 	return false
 end
 
+local function createEnumValue(itemName, itemValue, enumType)
+	local item = setmetatable({}, EnumItem)
+	item.Name = itemName
+	item.Value = itemValue
+	item.EnumType = enumType
+	item.__type = "EnumItem"
+
+	function item:ToTable()
+		return {
+			Name = itemName,
+			Value = itemValue,
+			EnumType = enumType.Name,
+			type = "EnumItem",
+		}
+	end
+
+	if type(itemValue) == "number" then
+		Enum._numberIndex[itemName] = item
+	end
+
+	enumType[itemName] = item
+end
+
 local function createEnum(api)
 	Enum._numberIndex = {}
 
@@ -74,5 +97,6 @@ local function createEnum(api)
 end
 
 Enum.new = createEnum
+Enum.newValue = createEnumValue
 
 return Enum

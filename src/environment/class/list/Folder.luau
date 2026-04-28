@@ -8,8 +8,6 @@ return {
 	class = "Folder",
 	callback = function(instance)
 		instance:SetProperties(propTable)
-		instance:SetMetadata("ExplorerIconColor", Color3.new(1, 0, 0))
-		instance:SetMetadata("ExplorerIconTransparency", 0.3)
 
 		return instance
 	end,

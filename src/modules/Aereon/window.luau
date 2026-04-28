@@ -5,6 +5,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local dragOffset = { x = 0, y = 0 }
 	local Color3 = require("@Color3")
 	local Enum = require("@EnumMap")
+	local MouseCursor = require("@Kinemium.MouseCursor")
 	local spring = require("@kispring")
 	local KinemiumFontService = game:GetService("KinemiumFontService")
 
@@ -104,7 +105,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 	local function setCursorForResize(sides)
 		if not sides then
-			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 			return
 		end
 		local hasH, hasV = false, false
@@ -117,11 +118,11 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			end
 		end
 		if hasH and hasV then
-			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NWSE.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NWSE.Value)
 		elseif hasH then
-			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
 		elseif hasV then
-			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
 		end
 	end
 
@@ -612,7 +613,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 		if mouseDown == 1 then
 			if draggedWindow then
-				raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_ALL.Value)
+				MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_ALL.Value)
 				draggedWindow.x = mousePos.x - dragOffset.x
 				draggedWindow.y = mousePos.y - dragOffset.y
 				if not draggedWindow.Maximized then
@@ -660,13 +661,13 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					end
 				end
 				if not anySide then
-					raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+					MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 				end
 			end
 		end
 
 		if mouseReleased == 1 then
-			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 			if draggedWindow then
 				draggedWindow.IsDragging = false
 				module.dragEnd(draggedWindow)

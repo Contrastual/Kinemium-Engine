@@ -105,6 +105,38 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			end
 			return
 		end,
+		ToTextureBuffer = function(buffer_data: buffer, filename: string)
+			if not buffer_data then
+				return nil
+			end
+
+			local ext = filename and raylib.lib.GetFileExtension(filename) or ".png"
+			local image_ptr = raylib.lib.LoadImageFromMemory(ext, buffer_data, buffer.len(buffer_data))
+
+			if typeof(image_ptr) == "buffer" then
+				local image_struct = raylib.structs.Image:new({})
+				zune.mem.copy(image_struct, 0, image_ptr, 0, 24)
+
+				local succ, texture = pcall(raylib.lib.LoadTextureFromImage, image_struct)
+				raylib.lib.UnloadImage(image_struct)
+				if succ and typeof(texture) == "buffer" then
+					local size = vector.create(buffer.readi32(texture, 4), buffer.readi32(texture, 8))
+
+					local data = {
+						texture = texture,
+						x = size.x,
+						y = size.y,
+					}
+
+					raylib.lib.SetTextureFilter(texture, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+					raylib.lib.SetTextureWrap(texture, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
+					raylib.lib.GenTextureMipmaps(texture)
+
+					return data
+				end
+			end
+			return nil
+		end,
 		ToTexture = function(path: string)
 			if zembed.IsEmbedded() then
 				if not path:match("^%a:") then -- ignore C:\ style paths

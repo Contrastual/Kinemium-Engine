@@ -1,3 +1,5 @@
+local signal = require("@Kinemium.signal")
+
 local propTable = {
 	CursorIcon = "",
 	CursorIconContent = "",
@@ -9,6 +11,8 @@ return {
 
 	callback = function(instance)
 		instance:SetProperties(propTable)
+
+		-- TODO: Implement functionality
 
 		instance.MouseClick = signal.new()
 		instance.MouseHoverEnter = signal.new()

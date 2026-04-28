@@ -3,12 +3,13 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
-local Selection = game:GetService("Selection")
+local vend = KinemiumFontService.GetDefaultFont()
+local boldFont = KinemiumFontService.GetBoldFont()
 local Players = game:GetService("Players")
 local FileDialogService = game:GetService("FileDialogService")
 local KineFileService = game:GetService("KineFileService")
-local ScriptRunnerService = game:GetService("ScriptRunnerService")
 local RBXModelImporter = game:GetService("RBXModelImporter")
+local Selection = game:GetService("Selection")
 
 if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") then
 	return
@@ -19,10 +20,11 @@ local DOUBLE_CLICK_THRESHOLD = 0.3
 local NODE_HEIGHT = 25
 local NODE_WIDTH = 330
 local PADDING = 10
-local INDENT_SIZE = 12
-local ADD_MENU_WIDTH = 200
-local ADD_MENU_ITEM_HEIGHT = 22
-local MAX_VISIBLE_ITEMS = 15
+local INDENT_SIZE = 20
+local ADD_MENU_WIDTH = 300
+local ADD_MENU_ITEM_HEIGHT = 24
+local MAX_VISIBLE_ITEMS = 20
+local ADD_MENU_TITLE_HEIGHT = 30
 local MENU_PADDING = 4
 local TOGGLE_SIZE = 20
 local SCROLL_SPEED = 3
@@ -73,15 +75,73 @@ local expanded = {}
 local loadedIcon = {}
 local addMenuOpen = {}
 local addMenuScroll = {}
+local addMenuScrollTarget = {}
+local addMenuSearch = {}
+local addMenuExpandedCategories = {}
+local addMenuHoverAnim = {}
 local lastClickTime = {}
 local lastClicked = nil
 local activeAddMenu = nil
 local yOffset = 0
 local windowObject = nil
-local arect = require("@Arect")(rl)
+local arect = require("@arect")
 local textbox = aereon.textbox(Theme, game)
 
 local ContextMenuOpen = false
+
+local ADD_MENU_SEARCH_HEIGHT = 30
+local CATEGORY_HEADER_HEIGHT = 24
+
+local function getClassCategory(className)
+	local lowerName = className:lower()
+
+	-- Services
+	if lowerName:find("service") then
+		return "Services"
+	end
+
+	-- UI
+	if lowerName:find("gui") or lowerName:find("screen") or lowerName:find("frame") or lowerName:find("text") or lowerName:find("button") or lowerName:find("scroll") or lowerName:find("image") or lowerName:find("textbox") or lowerName:find("viewport") or lowerName:find("billboard") or lowerName:find("surface") then
+		return "UI"
+	end
+
+	-- Effects
+	if lowerName:find("particle") or lowerName:find("light") or lowerName:find("beam") or lowerName:find("trail") or lowerName:find("fire") or lowerName:find("smoke") or lowerName:find("sparkles") or lowerName:find("constraint") then
+		return "Effects"
+	end
+
+	-- Scripting
+	if lowerName:find("script") or lowerName:find("module") or lowerName:find("bindable") or lowerName:find("remote") then
+		return "Scripting"
+	end
+
+	-- Objects
+	if lowerName:find("part") or lowerName:find("mesh") or lowerName:find("model") or lowerName:find("attachment") or lowerName:find("motor") or lowerName:find("weld") then
+		return "Objects"
+	end
+
+	-- Data
+	if lowerName:find("value") or lowerName:find("object") or lowerName:find("bool") or lowerName:find("number") or lowerName:find("string") or lowerName:find("vector") or lowerName:find("color") or lowerName:find("cframe") or lowerName:find("udim") or lowerName:find("brick") then
+		return "Data"
+	end
+
+	-- Audio
+	if lowerName:find("sound") or lowerName:find("audio") or lowerName:find("reverb") or lowerName:find("echo") or lowerName:find("distortion") or lowerName:find("flange") or lowerName:find("chorus") or lowerName:find("equalizer") then
+		return "Audio"
+	end
+
+	-- Animation
+	if lowerName:find("animation") or lowerName:find("animator") or lowerName:find("humanoid") or lowerName:find("character") then
+		return "Animation"
+	end
+
+	-- Camera
+	if lowerName:find("camera") then
+		return "Camera"
+	end
+
+	return "Other"
+end
 
 local searchBox = textbox.new({
 	multiline = false,
@@ -94,6 +154,19 @@ local searchBox = textbox.new({
 	BorderTransparency = 1,
 	TextColor = ThemeColors.text,
 	padding = 5,
+})
+
+local addMenuSearchBox = textbox.new({
+	multiline = false,
+	placeholder = "Search classes..",
+	fontSize = 14,
+	font = vend,
+	maxLength = 56,
+
+	cornerRadius = 0.3,
+	BorderTransparency = 1,
+	TextColor = ThemeColors.text,
+	padding = 4,
 })
 
 local searchQuery = searchBox:getText() or ""
@@ -200,7 +273,6 @@ local SelectionMenu = gui.menu({
 						local object = Selection:Get()[1]
 
 						if object.BaseClass == "ScriptContainer" then
-							ScriptRunnerService.OpenInExternalEditor(object, "vscode", ishared.FolderPath)
 						end
 					end,
 				},
@@ -211,7 +283,6 @@ local SelectionMenu = gui.menu({
 						local object = Selection:Get()[1]
 
 						if object.BaseClass == "ScriptContainer" then
-							ScriptRunnerService.OpenInExternalEditor(object, "os", ishared.FolderPath)
 						end
 					end,
 				},
@@ -222,7 +293,6 @@ local SelectionMenu = gui.menu({
 						local object = Selection:Get()[1]
 
 						if object.BaseClass == "ScriptContainer" then
-							ScriptRunnerService.OpenInExternalEditor(object, "note", ishared.FolderPath)
 						end
 					end,
 				},
@@ -287,33 +357,60 @@ local SelectionMenu = gui.menu({
 				{
 					label = ".KINEOBJ",
 					onClick = function()
-						local path = FileDialogService.RequestFile({})
+						task.spawn(function()
+							local path = FileDialogService.RequestFile({})
 
-						local ins = KineFileService.DecodeFile(path)
+							if not path then
+								return
+							end
+							if path == "" then
+								return
+							end
+							if not string.find(path, ".kineobj") then
+								return
+							end
 
-						local object = Selection:Get()[1]
-						if object and ins then
-							ins.Parent = object
-						end
+							local ins = KineFileService.DecodeFile(path)
+
+							local object = Selection:Get()[1]
+							if object and ins then
+								ins.Parent = object
+							end
+						end)
 					end,
 				},
 
 				{
 					label = ".RBXM, .RBXMX",
 					onClick = function()
-						local path = FileDialogService.RequestFile({})
+						task.spawn(function()
+							local path = FileDialogService.RequestFile({})
 
-						local read = Filesystem.readFile(path, true)
-
-						local new = RBXModelImporter.ImportModel(read)
-						if new then
-							local selected = Selection:Get()[1]
-							if selected then
-								new.Parent = selected
-							else
-								new.Parent = workspace
+							if not path then
+								return
 							end
-						end
+							if path == "" then
+								return
+							end
+							if not string.find(path, ".rbxm") then
+								return
+							end
+
+							local read = Filesystem.readFile(path, true)
+							if not read then
+								return
+							end
+
+							local new = RBXModelImporter.ImportModel(read)
+							if new then
+								local selected = Selection:Get()[1]
+								if selected then
+									new.Parent = selected
+								else
+									new.Parent = workspace
+								end
+							end
+						end)
 					end,
 				},
 			},
@@ -326,6 +423,12 @@ SelectionMenu:hide()
 local scrollOffset = 0
 local contentHeight = 0
 local maxScroll = 0
+
+-- Scrollbar drag state
+local scrollbarDrag = {
+	active = false,
+	offset = 0,
+}
 
 KinemiumIconLoader.new("Add", "./src/assets/images/icons/Add.png")
 KinemiumIconLoader.new("ArrowRight", "./src/assets/images/icons/ArrowRight.png")
@@ -384,7 +487,6 @@ local function getServicesInOrder()
 	return services
 end
 
--- Selection handling
 local function handleSelection(instance, rectData, mousePos)
 	if
 		not isMouseInRect(rectData, mousePos)
@@ -451,6 +553,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	end
 
 	addMenuScroll[instance] = addMenuScroll[instance] or 0
+	addMenuScrollTarget[instance] = addMenuScrollTarget[instance] or 0
+	addMenuSearch[instance] = addMenuSearch[instance] or ""
 
 	local instanceTypes = Instance.getClasses()
 
@@ -463,10 +567,49 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		return a < b -- alphabetical
 	end)
 
-	local totalItems = #sortedClasses
+	-- Filter classes based on search query
+	local filteredClasses = {}
+	local searchQuery = addMenuSearch[instance]:lower()
+	for _, class in ipairs(sortedClasses) do
+		if searchQuery == "" or class:lower():find(searchQuery, 1, true) then
+			table.insert(filteredClasses, class)
+		end
+	end
 
-	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2
-	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT
+	-- Group classes by category
+	local categoryBuckets = {}
+	local categoryOrder = {}
+	for _, class in ipairs(filteredClasses) do
+		local category = getClassCategory(class)
+		if not categoryBuckets[category] then
+			categoryBuckets[category] = {}
+			table.insert(categoryOrder, category)
+		end
+		table.insert(categoryBuckets[category], class)
+	end
+
+	table.sort(categoryOrder, function(a, b)
+		return a < b
+	end)
+
+	-- Initialize category expansion state
+	if not addMenuExpandedCategories[instance] then
+		addMenuExpandedCategories[instance] = {}
+	end
+
+	-- Calculate total visible items (only count expanded categories)
+	local totalVisibleItems = 0
+	for _, category in ipairs(categoryOrder) do
+		if addMenuExpandedCategories[instance][category] ~= false then
+			totalVisibleItems = totalVisibleItems + #categoryBuckets[category]
+		end
+		totalVisibleItems = totalVisibleItems + 1 -- +1 for category header
+	end
+
+	local totalItems = totalVisibleItems
+
+	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2 + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
+	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT + #categoryOrder * CATEGORY_HEADER_HEIGHT
 	local menuX = toggleX - ADD_MENU_WIDTH - 10
 	local menuY = btnY + 30
 
@@ -478,84 +621,177 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		Theme.SecondaryBackgroundColor:ToRaylib(0)
 	)
 
+	-- Draw title
+	rl.DrawTextEx(vend, "Add Object", vector.create(menuX + MENU_PADDING, menuY + MENU_PADDING), 18, 1, ThemeColors.text)
+
 	local menuRect = { x = menuX, y = menuY, width = ADD_MENU_WIDTH, height = menuHeight }
-	if isMouseInRect(menuRect, mousePos) then
+	local itemsRect = { x = menuX, y = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT, width = ADD_MENU_WIDTH, height = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT }
+
+	-- Handle mouse wheel scrolling on items area
+	if isMouseInRect(itemsRect, mousePos) then
 		local mouseWheel = rl.GetMouseWheelMove()
 		if math.abs(mouseWheel) > 0.01 then
-			addMenuScroll[instance] = addMenuScroll[instance] - (mouseWheel * ADD_MENU_ITEM_HEIGHT * 2)
+			addMenuScrollTarget[instance] = addMenuScrollTarget[instance] - (mouseWheel * ADD_MENU_ITEM_HEIGHT * 2)
 			local maxScroll = math.max(0, contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT))
-			addMenuScroll[instance] = math.max(0, math.min(addMenuScroll[instance], maxScroll))
+			addMenuScrollTarget[instance] = math.max(0, math.min(addMenuScrollTarget[instance], maxScroll))
 		end
+	end
+
+	-- Smooth interpolation for scroll
+	local dt = rl.GetFrameTime()
+	local maxScroll = math.max(0, contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT))
+	addMenuScrollTarget[instance] = math.clamp(addMenuScrollTarget[instance], 0, maxScroll)
+	addMenuScroll[instance] = addMenuScroll[instance] + (addMenuScrollTarget[instance] - addMenuScroll[instance]) * math.min(dt * 18, 1)
+
+	-- Draw search textbox
+	local searchBoxX = menuX + MENU_PADDING
+	local searchBoxY = menuY + MENU_PADDING + ADD_MENU_TITLE_HEIGHT
+	local searchBoxW = ADD_MENU_WIDTH - MENU_PADDING * 2
+	addMenuSearchBox:drawWithExtras(searchBoxX, searchBoxY, searchBoxW, ADD_MENU_SEARCH_HEIGHT - 6)
+
+	-- Update search query from textbox
+	local currentSearchText = addMenuSearchBox:getText() or ""
+	if currentSearchText ~= addMenuSearch[instance] then
+		addMenuSearch[instance] = currentSearchText
+		addMenuScroll[instance] = 0 -- Reset scroll when search changes
+		addMenuScrollTarget[instance] = 0
 	end
 
 	-- Draw items with scissor
 	local scissorPadding = 2
 	rl.BeginScissorMode(
 		math.floor(menuX + scissorPadding),
-		math.floor(menuY + MENU_PADDING),
+		math.floor(menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT),
 		math.floor(ADD_MENU_WIDTH - scissorPadding * 2),
-		math.floor(menuHeight - MENU_PADDING * 2)
+		math.floor(menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT)
 	)
 
-	local i = 0
-	for _, class in ipairs(sortedClasses) do
-		i = i + 1
-		local itemY = menuY + MENU_PADDING + ((i - 1) * ADD_MENU_ITEM_HEIGHT) - addMenuScroll[instance]
+	local cursorY = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT - addMenuScroll[instance]
 
-		if itemY + ADD_MENU_ITEM_HEIGHT < menuY or itemY > menuY + menuHeight then
-			continue
-		end
+	for _, category in ipairs(categoryOrder) do
+		local categoryY = cursorY
+		cursorY = cursorY + CATEGORY_HEADER_HEIGHT
 
-		local itemRect = { x = menuX, y = itemY, width = ADD_MENU_WIDTH, height = ADD_MENU_ITEM_HEIGHT }
-		local isHovered = isMouseInRect(itemRect, mousePos)
-			and mousePos.y >= menuY + MENU_PADDING
+		-- Draw category header in inspector style
+		local labelText = string.upper(category)
+		local labelSize = rl.MeasureTextEx(vend, labelText, 11, 1.5)
+		local indicatorText = addMenuExpandedCategories[instance][category] ~= false and "v" or ">"
+		local indicatorSize = rl.MeasureTextEx(vend, indicatorText, 11, 1)
+
+		local gap = 5
+		local blockW = indicatorSize.x + gap + labelSize.x
+		local blockX = menuX + MENU_PADDING
+		local centerY = categoryY + (CATEGORY_HEADER_HEIGHT / 2)
+		local lineColor = Theme.SecondaryBackgroundColor:ToRaylib(0)
+
+		rl.DrawRectangle(menuX, centerY, MENU_PADDING - 4, 1, lineColor)
+		rl.DrawTextEx(
+			boldFont,
+			indicatorText,
+			vector.create(blockX, centerY - 6),
+			11,
+			1,
+			Theme.SecondaryTextColor:ToRaylib(0.4)
+		)
+		rl.DrawTextEx(
+			boldFont,
+			labelText,
+			vector.create(blockX + indicatorSize.x + gap, centerY - 6),
+			11,
+			1.5,
+			Theme.SecondaryTextColor:ToRaylib(0)
+		)
+		local lineStartX = blockX + blockW + MENU_PADDING - 4
+		rl.DrawRectangle(lineStartX, centerY, ADD_MENU_WIDTH - lineStartX + menuX, 1, lineColor)
+
+		-- Handle category click
+		local categoryRect = { x = menuX, y = categoryY, width = ADD_MENU_WIDTH, height = CATEGORY_HEADER_HEIGHT }
+		local isCategoryHovered = isMouseInRect(categoryRect, mousePos)
+			and mousePos.y >= menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
 			and mousePos.y <= menuY + menuHeight - MENU_PADDING
 
-		if isHovered then
-			rl.DrawRectangle(menuX, itemY, ADD_MENU_WIDTH, ADD_MENU_ITEM_HEIGHT, Color3.new(0.2, 0.2, 0.2):ToRaylib(1))
+		if isCategoryHovered and rl.IsMouseButtonPressed(0) == 1 then
+			addMenuExpandedCategories[instance][category] = not addMenuExpandedCategories[instance][category]
+		end
 
-			if rl.IsMouseButtonPressed(0) == 1 then
-				local success, newObj = pcall(Instance.new, class)
-				if success then
-					newObj.Parent = instance
+		-- Draw items in this category if expanded
+		local isExpanded = addMenuExpandedCategories[instance][category] ~= false
+		if isExpanded then
+			for _, class in ipairs(categoryBuckets[category]) do
+				local itemY = cursorY
+				cursorY = cursorY + ADD_MENU_ITEM_HEIGHT
+
+				if itemY + ADD_MENU_ITEM_HEIGHT < menuY or itemY > menuY + menuHeight then
+					continue
 				end
-				addMenuOpen[instance] = false
-				addMenuOpenBool = false
-				addMenuScroll[instance] = 0
+
+				local itemRect = { x = menuX, y = itemY, width = ADD_MENU_WIDTH, height = ADD_MENU_ITEM_HEIGHT }
+				local isHovered = isMouseInRect(itemRect, mousePos)
+					and mousePos.y >= menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
+					and mousePos.y <= menuY + menuHeight - MENU_PADDING
+
+				-- Initialize and animate hover state
+				local itemKey = instance.UniqueId .. class
+				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] or 0
+				local hoverTarget = isHovered and 1 or 0
+				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] + (hoverTarget - addMenuHoverAnim[itemKey]) * math.min(dt * 15, 1)
+
+				if addMenuHoverAnim[itemKey] > 0.01 then
+					rl.DrawRectangle(
+						menuX,
+						itemY,
+						ADD_MENU_WIDTH,
+						ADD_MENU_ITEM_HEIGHT,
+						Color3.new(0.2, 0.2, 0.2):ToRaylib(addMenuHoverAnim[itemKey])
+					)
+				end
+
+				if isHovered and rl.IsMouseButtonPressed(0) == 1 and not addMenuSearchBox.isFocused then
+					local success, newObj = pcall(Instance.new, class)
+					if success then
+						newObj.Parent = instance
+					end
+					addMenuOpen[instance] = false
+					addMenuOpenBool = false
+					addMenuScroll[instance] = 0
+					addMenuScrollTarget[instance] = 0
+					addMenuSearch[instance] = ""
+					addMenuSearchBox:setText("")
+				end
+
+				local iconTex = loadedIcon[class] or notfound_tex
+				if iconTex and iconTex.texture then
+					local iconSize = ADD_MENU_ITEM_HEIGHT - 6
+					rl.DrawTexturePro(
+						iconTex.texture,
+						structs.Rectangle:new({ x = 0, y = 0, width = iconTex.x, height = iconTex.y }),
+						structs.Rectangle:new({ x = menuX + 4, y = itemY + 3, width = iconSize, height = iconSize }),
+						vector.create(0, 0),
+						0,
+						ThemeColors.image
+					)
+				end
+
+				-- Draw text
+				rl.DrawTextEx(vend, class, vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3), 17, 1, ThemeColors.text)
 			end
 		end
-
-		local iconTex = loadedIcon[class] or notfound_tex
-		if iconTex and iconTex.texture then
-			local iconSize = ADD_MENU_ITEM_HEIGHT - 6
-			rl.DrawTexturePro(
-				iconTex.texture,
-				structs.Rectangle:new({ x = 0, y = 0, width = iconTex.x, height = iconTex.y }),
-				structs.Rectangle:new({ x = menuX + 4, y = itemY + 3, width = iconSize, height = iconSize }),
-				vector.create(0, 0),
-				0,
-				ThemeColors.image
-			)
-		end
-
-		-- Draw text
-		rl.DrawTextEx(vend, class, vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3), 17, 1, ThemeColors.text)
 	end
 
 	rl.EndScissorMode()
 
 	-- Draw scrollbar
 	if contentHeight > MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT then
-		local scrollbarWidth = 6
+		local scrollbarWidth = 8
 		local scrollbarX = menuX + ADD_MENU_WIDTH - scrollbarWidth - 2
-		local scrollbarHeight = menuHeight - MENU_PADDING * 2
+		local scrollbarHeight = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT
 		local scrollbarTrackHeight = scrollbarHeight - 4
+		local scrollbarY = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
 
 		local thumbHeight =
 			math.max(20, (scrollbarTrackHeight * (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)) / contentHeight)
 		local maxScroll = contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)
-		local thumbY = menuY
-			+ MENU_PADDING
+		local thumbY = scrollbarY
 			+ 2
 			+ (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
 
@@ -563,7 +799,7 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		rl.DrawRectangleRounded(
 			structs.Rectangle:new({
 				x = scrollbarX,
-				y = menuY + MENU_PADDING + 2,
+				y = scrollbarY + 2,
 				width = scrollbarWidth,
 				height = scrollbarTrackHeight,
 			}),
@@ -588,7 +824,7 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 end
 
 -- Tree drawing
-local function DrawTree(instance, indent, winX, winY, winWidth)
+local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 	if instance.Destroyed or instance.ExplorerHidden then
 		return
 	end
@@ -607,105 +843,144 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	local mousePos = rl.GetMousePosition()
 	local windowRect = { x = winX, y = winY, width = winWidth, height = windowObject and windowObject.height or 600 }
 
-	-- Early culling
-	if not isRectVisible(rectData, windowRect) then
-		yOffset = yOffset + NODE_HEIGHT + 2
-		return
-	end
+	-- Early culling check (only skip drawing, still process height/children)
+	local isVisible = isRectVisible(rectData, windowRect)
 
-	-- Determine visual state
-	local isHovered = isMouseInRect(rectData, mousePos)
-	local isSelected = Selection.IsSelected(instance)
-	local transparency = isSelected and 0 or (isHovered and 0.5 or 1)
-	local color = isSelected and Color3.new(0, 0.533333, 1) or Color3.new()
+	if isVisible then
+		-- Draw simple vertical guide line for hierarchy
+		if indent > 0 then
+			local lineX = btnX - INDENT_SIZE / 2
+			local lineColor = Theme.SecondaryTextColor
+			lineColor = Color3.new(lineColor.R * 0.5, lineColor.G * 0.5, lineColor.B * 0.5)
 
-	-- Draw node background
-	rl.DrawRectangleRounded(structs.Rectangle:new(rectData), 0.5, 20, color:ToRaylib(transparency))
+			-- Vertical line - only go up to the middle for last child, otherwise go through entire node
+			local lineEndY = isLastChild and (btnY + NODE_HEIGHT / 2) or (btnY + NODE_HEIGHT)
+			rl.DrawLine(
+				lineX,
+				btnY,
+				lineX,
+				lineEndY,
+				lineColor:ToRaylib(0.3)
+			)
 
-	if not loadedIcon[instance.ClassName] then
-		local svg = KinemiumIconLoader.Get(instance.ClassName .. ".png")
-		if svg then
-			loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
+			-- Horizontal line connecting to node
+			rl.DrawLine(
+				lineX,
+				btnY + NODE_HEIGHT / 2,
+				btnX - 2,
+				btnY + NODE_HEIGHT / 2,
+				lineColor:ToRaylib(0.3)
+			)
 		end
-	end
+		-- Determine visual state
+		local isHovered = isMouseInRect(rectData, mousePos)
+		local isSelected = Selection.IsSelected(instance)
+		local transparency = isSelected and 0 or (isHovered and 0.5 or 1)
+		local color = isSelected and Color3.new(0, 0.533333, 1) or Color3.new()
 
-	-- Draw icon
-	local icon = loadedIcon[instance.ClassName] or notfound_tex
-	local iconSize = instance.IconSize or NODE_HEIGHT - 4
-	rl.DrawTexturePro(
-		icon.texture,
-		structs.Rectangle:new({ x = 0, y = 0, width = icon.x, height = icon.y }),
-		structs.Rectangle:new({ x = btnX + 2, y = btnY + 2, width = iconSize, height = iconSize }),
-		vector.create(0, 0),
-		0,
-		instance:GetMetadata("ExplorerIconColor")
-				and instance:GetMetadata("ExplorerIconColor"):ToRaylib(instance:GetMetadata("ExplorerIconTransparency"))
-			or ThemeColors.image
-	)
+		-- Draw node background
+		rl.DrawRectangleRounded(structs.Rectangle:new(rectData), 0.5, 20, color:ToRaylib(transparency))
 
-	-- Draw text
-	rl.DrawTextEx(vend, instance.Name, vector.create(btnX + 28, btnY + 5), 18, 1, ThemeColors.text)
-
-	if isHovered then
-		local iconSize = NODE_HEIGHT - 4
-		local addData = { x = toggleX - 50, y = btnY + 2, width = iconSize, height = iconSize }
-
-		rl.DrawTexturePro(
-			addIcon.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = addIcon.x, height = addIcon.y }),
-			structs.Rectangle:new(addData),
-			vector.create(0, 0),
-			0,
-			ThemeColors.arrowImage
-		)
-
-		if isMouseInRect(addData, mousePos) and rl.IsMouseButtonReleased(0) == 1 then
-			-- Close all other menus
-			for key in pairs(addMenuOpen) do
-				addMenuOpen[key] = false
-			end
-			addMenuOpenBool = true
-			addMenuOpen[instance] = not addMenuOpen[instance]
-			activeAddMenu = addMenuOpen[instance]
-					and {
-						instance = instance,
-						btnY = btnY,
-						toggleX = toggleX,
-					}
-				or nil
-		end
-
-		-- Selection Menu
-		if rl.IsMouseButtonReleased(1) == 1 then
-			if isSelected then
-				SelectionMenu.set("obj_rect", arect.new(mousePos.x, mousePos.y, 200, 0))
-				SelectionMenu:show()
-				ContextMenuOpen = true
-			else
-				SelectionMenu:hide()
-				ContextMenuOpen = false
+		if not loadedIcon[instance.ClassName] then
+			local svg = KinemiumIconLoader.Get(instance.ClassName .. ".png")
+			if svg then
+				loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
 			end
 		end
-	end
 
-	-- Handle selection
-	handleSelection(instance, rectData, mousePos)
-
-	if hasChildren then
-		local toggleTexture = expanded[instance] and ArrowDown or ArrowRight
-		local buttonData = { x = rectData.x - 25, y = rectData.y, width = TOGGLE_SIZE, height = TOGGLE_SIZE }
-
+		-- Draw icon
+		local icon = loadedIcon[instance.ClassName] or notfound_tex
+		local iconSize = instance.IconSize or NODE_HEIGHT - 4
 		rl.DrawTexturePro(
-			toggleTexture.texture,
-			structs.Rectangle:new({ x = 0, y = 0, width = toggleTexture.x, height = toggleTexture.y }),
-			structs.Rectangle:new(buttonData),
+			icon.texture,
+			structs.Rectangle:new({ x = 0, y = 0, width = icon.x, height = icon.y }),
+			structs.Rectangle:new({ x = btnX + 2, y = btnY + 2, width = iconSize, height = iconSize }),
 			vector.create(0, 0),
 			0,
-			ThemeColors.arrowImage
+			instance:GetMetadata("ExplorerIconColor")
+					and instance
+						:GetMetadata("ExplorerIconColor")
+						:ToRaylib(instance:GetMetadata("ExplorerIconTransparency"))
+				or ThemeColors.image
 		)
 
-		if isMouseInRect(buttonData, mousePos) and rl.IsMouseButtonReleased(0) == 1 then
-			expanded[instance] = not expanded[instance]
+		-- Draw text
+		rl.DrawTextEx(vend, instance.Name, vector.create(btnX + 28, btnY + 5), 18, 1, ThemeColors.text)
+
+		if isHovered then
+			local iconSize = NODE_HEIGHT - 4
+			local addData = { x = toggleX - 50, y = btnY + 2, width = iconSize, height = iconSize }
+
+			rl.DrawTexturePro(
+				addIcon.texture,
+				structs.Rectangle:new({ x = 0, y = 0, width = addIcon.x, height = addIcon.y }),
+				structs.Rectangle:new(addData),
+				vector.create(0, 0),
+				0,
+				ThemeColors.arrowImage
+			)
+
+			if isMouseInRect(addData, mousePos) and rl.IsMouseButtonReleased(0) == 1 then
+				-- Close all other menus
+				for key in pairs(addMenuOpen) do
+					addMenuOpen[key] = false
+				end
+				addMenuOpenBool = true
+				addMenuOpen[instance] = not addMenuOpen[instance]
+
+				if addMenuOpen[instance] then
+					-- Initialize search textbox when menu opens
+					addMenuSearchBox:setText(addMenuSearch[instance] or "")
+					addMenuScroll[instance] = 0
+					addMenuScrollTarget[instance] = 0
+				else
+					-- Reset search when menu closes
+					addMenuSearch[instance] = ""
+					addMenuScroll[instance] = 0
+					addMenuScrollTarget[instance] = 0
+				end
+
+				activeAddMenu = addMenuOpen[instance]
+						and {
+							instance = instance,
+							btnY = btnY,
+							toggleX = toggleX,
+						}
+					or nil
+			end
+
+			-- Selection Menu
+			if rl.IsMouseButtonReleased(1) == 1 then
+				if isSelected then
+					SelectionMenu.set("obj_rect", arect.new(mousePos.x, mousePos.y, 200, 0))
+					SelectionMenu:show()
+					ContextMenuOpen = true
+				else
+					SelectionMenu:hide()
+					ContextMenuOpen = false
+				end
+			end
+		end
+
+		-- Handle selection
+		handleSelection(instance, rectData, mousePos)
+
+		if hasChildren then
+			local toggleTexture = expanded[instance] and ArrowDown or ArrowRight
+			local buttonData = { x = rectData.x - 25, y = rectData.y, width = TOGGLE_SIZE, height = TOGGLE_SIZE }
+
+			rl.DrawTexturePro(
+				toggleTexture.texture,
+				structs.Rectangle:new({ x = 0, y = 0, width = toggleTexture.x, height = toggleTexture.y }),
+				structs.Rectangle:new(buttonData),
+				vector.create(0, 0),
+				0,
+				ThemeColors.arrowImage
+			)
+
+			if isMouseInRect(buttonData, mousePos) and rl.IsMouseButtonReleased(0) == 1 then
+				expanded[instance] = not expanded[instance]
+			end
 		end
 	end
 
@@ -716,8 +991,9 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 		or hasSelectedDescendant(instance)
 
 	if hasChildren and shouldExpand then
-		for _, child in ipairs(children) do
-			DrawTree(child, indent + 1, winX, winY, winWidth)
+		for i, child in ipairs(children) do
+			local isLastChild = i == #children
+			DrawTree(child, indent + 1, winX, winY, winWidth, isLastChild)
 		end
 	end
 end
@@ -730,6 +1006,44 @@ local function drawScrollbar(windowData)
 
 	local thumbHeight = math.max(30, (scrollbarHeight * scrollbarHeight) / contentHeight)
 	local thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
+
+	local mousePos = rl.GetMousePosition()
+	local mousePressed = rl.IsMouseButtonPressed(0) == 1
+	local mouseDown = rl.IsMouseButtonDown(0) == 1
+
+	local scrollbarRect = { x = scrollbarX, y = thumbY, width = SCROLLBAR_WIDTH, height = thumbHeight }
+	local trackRect = { x = scrollbarX, y = scrollbarY + 4, width = SCROLLBAR_WIDTH, height = trackHeight }
+	local isThumbHovered = isMouseInRect(scrollbarRect, mousePos)
+	local isTrackHovered = isMouseInRect(trackRect, mousePos)
+
+	-- Handle thumb drag start
+	if mousePressed and isThumbHovered then
+		scrollbarDrag.active = true
+		scrollbarDrag.offset = mousePos.y - thumbY
+	end
+
+	-- Handle track click
+	if mousePressed and isTrackHovered and not isThumbHovered then
+		local newThumbY = math.clamp(mousePos.y - thumbHeight / 2, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
+		local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
+		scrollTarget = percent * maxScroll
+		scrollbarDrag.active = true
+		scrollbarDrag.offset = mousePos.y - newThumbY
+	end
+
+	-- Handle dragging
+	if scrollbarDrag.active then
+		if mouseDown then
+			local newThumbY = math.clamp(mousePos.y - scrollbarDrag.offset, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
+			local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
+			scrollTarget = percent * maxScroll
+		else
+			scrollbarDrag.active = false
+		end
+	end
+
+	-- Recalculate thumbY after potential drag
+	thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
 
 	-- Track
 	rl.DrawRectangleRounded(
@@ -745,6 +1059,7 @@ local function drawScrollbar(windowData)
 	)
 
 	-- Thumb
+	local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.5, 0.5, 0.5) or Color3.new(0.4, 0.4, 0.4)
 	rl.DrawRectangleRounded(
 		structs.Rectangle:new({
 			x = scrollbarX,
@@ -754,7 +1069,7 @@ local function drawScrollbar(windowData)
 		}),
 		0.5,
 		4,
-		Color3.new(0.4, 0.4, 0.4):ToRaylib(0)
+		thumbColor:ToRaylib(0)
 	)
 end
 
@@ -833,7 +1148,7 @@ explorerWindow.stepped = function(windowData)
 
 	local services = getServicesInOrder()
 	for _, child in ipairs(services) do
-		DrawTree(child, 0, windowData.x - 50, windowData.y + 60, windowData.width)
+		DrawTree(child, 0, windowData.x - 50, windowData.y + 60, windowData.width, false)
 	end
 
 	rl.EndScissorMode()

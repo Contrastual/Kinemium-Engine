@@ -1471,10 +1471,13 @@ return {
 					local horiz = Vector3.new(rootVelocity.X, 0, rootVelocity.Z)
 					local speed = horiz:Magnitude()
 
-					local waterRayParams = RaycastParams.new()
+					if not c.waterRayParams then
+						c.waterRayParams = RaycastParams.new()
+						c.waterRayParams.IgnoreWater = false
+					end
+					local waterRayParams = c.waterRayParams
 					waterRayParams.FilterDescendantsInstances = c.rayParams.FilterDescendantsInstances
 					waterRayParams.FilterType = c.rayParams.FilterType
-					waterRayParams.IgnoreWater = false
 
 					local inWater = false
 					local terrain = workspace:FindFirstChild("Terrain")
@@ -1491,7 +1494,7 @@ return {
 					end
 					if not inWater then
 						local waterHit = workspace:Raycast(
-							c.currentPos + Vector3.new(0, h.HipHeight * 2, 0),
+							Vector3.new(c.currentPos.X, c.currentPos.Y + h.HipHeight * 2, c.currentPos.Z),
 							Vector3.new(0, -h.HipHeight * 3, 0),
 							waterRayParams
 						)
@@ -1537,20 +1540,20 @@ return {
 					char.WorldPivot = root.CFrame
 
 					local animator = getAnimator(h, true, createObject)
-					local animContext = {
-						clock = c.animClock,
-						stride = c.animStride,
-						dt = dt,
-						airborne = not c.isGrounded,
-						lean = c.smoothTilt,
-						landBob = c.landBob,
-						lookVector = c.lookXZ,
-						speed = speed,
-						state = animState,
-						stance = h.Stance, -- read from adapter-delivered value
-						walkSpeed = h.WalkSpeed,
-						verticalVelocity = isSeated(h) and 0 or c.verticalVelocity,
-					}
+					if not c.animContext then c.animContext = {} end
+					local animContext = c.animContext
+					animContext.clock = c.animClock
+					animContext.stride = c.animStride
+					animContext.dt = dt
+					animContext.airborne = not c.isGrounded
+					animContext.lean = c.smoothTilt
+					animContext.landBob = c.landBob
+					animContext.lookVector = c.lookXZ
+					animContext.speed = speed
+					animContext.state = animState
+					animContext.stance = h.Stance
+					animContext.walkSpeed = h.WalkSpeed
+					animContext.verticalVelocity = isSeated(h) and 0 or c.verticalVelocity
 					local pose = animator and animator:StepAnimation(h, animContext) or {}
 
 					local ikCallback = rawget(h, "_ikCallback")
@@ -1613,10 +1616,13 @@ return {
 
 				c.isGrounded = false
 
-				local waterRayParams = RaycastParams.new()
+				if not c.waterRayParams then
+					c.waterRayParams = RaycastParams.new()
+					c.waterRayParams.IgnoreWater = false
+				end
+				local waterRayParams = c.waterRayParams
 				waterRayParams.FilterDescendantsInstances = c.rayParams.FilterDescendantsInstances
 				waterRayParams.FilterType = c.rayParams.FilterType
-				waterRayParams.IgnoreWater = false
 
 				local inWater = false
 				local terrain = workspace:FindFirstChild("Terrain")
@@ -1633,7 +1639,7 @@ return {
 				end
 				if not inWater then
 					local waterHit = workspace:Raycast(
-						c.currentPos + Vector3.new(0, h.HipHeight * 2, 0),
+						Vector3.new(c.currentPos.X, c.currentPos.Y + h.HipHeight * 2, c.currentPos.Z),
 						Vector3.new(0, -h.HipHeight * 3, 0),
 						waterRayParams
 					)
@@ -1862,20 +1868,20 @@ return {
 
 				char.WorldPivot = rootCF
 				local animator = getAnimator(h, true, createObject)
-				local animContext = {
-					clock = c.animClock,
-					stride = c.animStride,
-					dt = dt,
-					airborne = not c.isGrounded,
-					lean = c.smoothTilt,
-					landBob = c.landBob,
-					lookVector = c.lookXZ,
-					speed = speed,
-					state = c.state,
-					stance = h.Stance,
-					walkSpeed = h.WalkSpeed,
-					verticalVelocity = isSeated(h) and 0 or c.verticalVelocity,
-				}
+				if not c.animContext then c.animContext = {} end
+				local animContext = c.animContext
+				animContext.clock = c.animClock
+				animContext.stride = c.animStride
+				animContext.dt = dt
+				animContext.airborne = not c.isGrounded
+				animContext.lean = c.smoothTilt
+				animContext.landBob = c.landBob
+				animContext.lookVector = c.lookXZ
+				animContext.speed = speed
+				animContext.state = c.state
+				animContext.stance = h.Stance
+				animContext.walkSpeed = h.WalkSpeed
+				animContext.verticalVelocity = isSeated(h) and 0 or c.verticalVelocity
 				local pose = animator and animator:StepAnimation(h, animContext) or {}
 
 				local ikCallback = rawget(h, "_ikCallback")

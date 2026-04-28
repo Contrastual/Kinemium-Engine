@@ -2,8 +2,8 @@ local Color3 = require("@Color3")
 local GuiObject = require("@GuiObject")
 local raylib = require("@Raylib")
 local structs = raylib.structs
-local Vector2 = require("@Vector2")
 local UDim = require("@UDim")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()
@@ -204,7 +204,7 @@ return {
 					object._dragOffsetY = mousePos.y - thumbY
 					object._velocity = 0 -- stop momentum when dragging
 					object._timeSinceLastScroll = 0
-					raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
+					MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
 				end
 
 				-- Click on track to jump (if not clicking thumb)
@@ -229,7 +229,7 @@ return {
 				-- Stop dragging
 				if lib.IsMouseButtonReleased(0) == 1 then
 					object._draggingThumb = false
-					raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+					MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 				end
 
 				-- Drag update

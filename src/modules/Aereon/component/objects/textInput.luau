@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -65,9 +55,9 @@ return function(objects, data)
 
 		local borderColor = config.focused and config.focusColor or color3.new(0.3, 0.3, 0.3)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(config.backgroundColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, config.backgroundColor:ToRaylib(0))
 
-		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 2, c3tr(borderColor, 0))
+		raylib.lib.DrawRectangleRoundedLinesEx(rect:translate(r), 0.2, 8, 2, borderColor:ToRaylib(0))
 
 		local displayText = config.text
 		local textColor = config.textColor
@@ -85,12 +75,12 @@ return function(objects, data)
 			vector.create(textX, textY),
 			config.fontSize,
 			config.spacing,
-			c3tr(textColor, 0)
+			textColor:ToRaylib(0)
 		)
 
 		if config.focused and math.floor(config.cursorBlink * 2) % 2 == 0 then
 			local textWidth = raylib.lib.MeasureTextEx(config.font, config.text, config.fontSize, config.spacing).x
-			raylib.lib.DrawRectangle(textX + textWidth + 2, textY, 2, config.fontSize, c3tr(config.textColor, 0))
+			raylib.lib.DrawRectangle(textX + textWidth + 2, textY, 2, config.fontSize, config.textColor:ToRaylib(0))
 		end
 
 		if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then

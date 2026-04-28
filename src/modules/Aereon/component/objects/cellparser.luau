@@ -4,7 +4,7 @@ return function(objects, config)
 	local raylib = require("@raylib")
 	local MergedCell = require("./cellItem")
 
-	local arect = require("@Arect")(raylib.lib)
+	local arect = require("@arect")
 
 	local defaults = {
 		x = config.x or 0,

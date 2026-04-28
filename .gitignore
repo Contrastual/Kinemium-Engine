@@ -9,4 +9,5 @@ output.txt
 output.log
 zunedebug.exe
 zunedb.exe
+src/projects.toml
 .devin

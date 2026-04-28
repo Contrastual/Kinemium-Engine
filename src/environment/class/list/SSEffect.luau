@@ -1,4 +1,3 @@
-local Enum = require("@EnumMap")
 local ffi = zune.ffi
 
 local propTable = {

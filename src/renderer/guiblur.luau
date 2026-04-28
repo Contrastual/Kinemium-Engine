@@ -28,9 +28,23 @@ function blurmod.Init(width, height)
 	local directionLoc = lib.GetShaderLocation(blurShader, "direction")
 	local radiusLoc = lib.GetShaderLocation(blurShader, "blurRadius")
 
-	local WorkspaceCapture = lib.LoadRenderTexture(width, height)
-	local blurH = lib.LoadRenderTexture(width, height)
-	local blurV = lib.LoadRenderTexture(width, height)
+	local WorkspaceCapture
+	local blurH
+	local blurV
+
+	local function rebuildTargets(targetWidth, targetHeight)
+		width = math.max(1, math.floor(targetWidth))
+		height = math.max(1, math.floor(targetHeight))
+
+		WorkspaceCapture = lib.LoadRenderTexture(width, height)
+		blurH = lib.LoadRenderTexture(width, height)
+		blurV = lib.LoadRenderTexture(width, height)
+
+		wrapper.WorkspaceCapture = WorkspaceCapture
+		wrapper.blurV = blurV
+	end
+
+	rebuildTargets(width, height)
 
 	wrapper.enabled = true
 	wrapper.WorkspaceCapture = WorkspaceCapture
@@ -39,6 +53,21 @@ function blurmod.Init(width, height)
 
 	function wrapper:SetBlurRadius(radius)
 		self.blurRadius = radius
+	end
+
+	function wrapper:Resize(targetWidth, targetHeight)
+		targetWidth = targetWidth or width
+		targetHeight = targetHeight or height
+
+		if targetWidth == width and targetHeight == height then
+			return
+		end
+
+		lib.UnloadRenderTexture(WorkspaceCapture)
+		lib.UnloadRenderTexture(blurH)
+		lib.UnloadRenderTexture(blurV)
+
+		rebuildTargets(targetWidth, targetHeight)
 	end
 
 	function wrapper:BeginCapture()

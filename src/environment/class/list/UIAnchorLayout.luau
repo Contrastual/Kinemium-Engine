@@ -4,7 +4,7 @@ local UDim = require("@UDim")
 
 -- UIAnchorLayout: each child declares its own anchor constraints via
 -- a UIAnchor modifier child, similar to CSS absolute positioning with
--- top/right/bottom/left/center anchoring.
+-- top/right/bottom/left/center anchoring
 --
 -- UIAnchor properties (set on a child of the element you want to anchor):
 --   AnchorTop    = UDim  -- distance from parent top edge (nil = unconstrained)
@@ -17,7 +17,7 @@ local UDim = require("@UDim")
 -- When both opposite edges are constrained (e.g. AnchorLeft + AnchorRight),
 -- the child is stretched to fill between them and its Size.X is ignored.
 -- When only one edge is constrained, the child keeps its own Size and
--- is pinned to that edge.
+-- is pinned to that edge
 
 local propTable = {
 	Name = "UIAnchorLayout",
@@ -37,7 +37,8 @@ local propTable = {
 				return obj.AbsoluteSize
 			end
 			if obj:IsA("ScreenGui") then
-				return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
+				local dpiScale = lib.GetWindowScaleDPI()
+				return Vector2.new(lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y)
 			else
 				local parentSize = GetAbsoluteSize(obj.Parent)
 				return obj.Size:ToPixels(parentSize)

@@ -32,16 +32,18 @@ end
 
 local ext = ""
 
-local function copyLibraries(ext, bin, path)
+local function getLibraries(ext, path)
+	local libs = {}
 	for _, f in pairs(zune.fs.entries(path)) do
 		if f.kind == "directory" then
-			copyLibraries(ext, bin, zjoin(path, f.name))
+			for _, lib in pairs(getLibraries(ext, zjoin(path, f.name))) do
+				table.insert(libs, lib)
+			end
 		elseif f.kind == "file" and zpath.globMatch(f.name, "*." .. ext) then
-			local lib = zpath.join(path, f.name)
-			print("Copying " .. f.name)
-			zune.fs.copy(lib, zjoin(bin, f.name), true)
+			table.insert(libs, zpath.join(path, f.name))
 		end
 	end
+	return libs
 end
 
 local b_windows = flagExists("windows")
@@ -92,11 +94,12 @@ local function buildExecutable(name, exec_ext, lib_ext)
 	local l_args = table.clone(b_args)
 	local l_exec = zpath.join(dir, EXECUTABLE_NAME .. exec_ext)
 
-	print("Copying libraries")
-	copyLibraries(lib_ext, dir, zpath.join(root, "external"))
+	print("Embedding libraries")
+	local libs = getLibraries(lib_ext, zpath.join(root, "external"))
+	for _, lib in pairs(libs) do
+		table.insert(l_args, lib)
+	end
 
-	print("Copying assets")
-	zune.fs.copy(zjoin(root, "assets"), zjoin(dir, "assets"), true)
 	table.insert(l_args, "--out=" .. l_exec)
 
 	print("Bundling: zune " .. table.concat(l_args, " "))

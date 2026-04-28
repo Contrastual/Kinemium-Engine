@@ -1,15 +1,25 @@
 local Vector2 = require("@Vector2")
+
 local Enum = require("@EnumMap")
+
 local UDim = require("@UDim")
 
 local propTable = {
+
 	FillDirection = Enum.FillDirection.Horizontal,
+
 	Padding = UDim.new(0, 5),
+
 	SortOrder = Enum.SortOrder.LayoutOrder,
+
 	HorizontalAlignment = Enum.HorizontalAlignment.Left,
+
 	VerticalAlignment = Enum.VerticalAlignment.Top,
+
 	ItemAlignment = Enum.VerticalAlignment.Top, -- Alignment of items within a row/column
+
 	Enabled = true,
+
 	Name = "UIFlowLayout",
 
 	render = function(lib, object, dt, structs)
@@ -18,6 +28,7 @@ local propTable = {
 		end
 
 		local parent = object.Parent
+
 		if not parent then
 			return
 		end
@@ -26,28 +37,36 @@ local propTable = {
 			if obj.AbsoluteSize then
 				return obj.AbsoluteSize
 			end
+
 			if obj:IsA("ScreenGui") then
 				return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
 			end
+
 			local parentSize = GetAbsoluteSize(obj.Parent)
+
 			return obj.Size:ToPixels(parentSize)
 		end
 
 		local parentSize = GetAbsoluteSize(parent)
 
 		local paddingX, paddingY = 0, 0
+
 		for _, child in ipairs(parent:GetChildren()) do
 			if child.ClassName == "UIPadding" then
 				local px = child.Padding:ToPixels(parentSize)
+
 				paddingX += px.X
+
 				paddingY += px.Y
 			end
 		end
 
 		local containerSize =
-			Vector2.new(math.max(0, parentSize.X - paddingX * 2), math.max(0, parentSize.Y - paddingY * 2))
+			
+Vector2.new(math.max(0, parentSize.X - paddingX * 2), math.max(0, parentSize.Y - paddingY * 2))
 
 		local children = {}
+
 		for _, child in ipairs(parent:GetChildren()) do
 			if child ~= object and child.Visible and child.ClassName ~= "UIPadding" then
 				table.insert(children, child)
@@ -65,20 +84,25 @@ local propTable = {
 			+ object.Padding.Offset
 
 		local rows = {}
+
 		local currentRow = { children = {}, size = Vector2.new(0, 0) }
+
 		table.insert(rows, currentRow)
 
 		local isHorizontal = object.FillDirection == Enum.FillDirection.Horizontal
 
 		for _, child in ipairs(children) do
 			local size = child.Size:ToPixels(containerSize)
-			
+
 			if isHorizontal then
 				if currentRow.size.X + size.X > containerSize.X and #currentRow.children > 0 then
 					currentRow = { children = {}, size = Vector2.new(0, 0) }
+
 					table.insert(rows, currentRow)
 				end
+
 				table.insert(currentRow.children, { child = child, size = size })
+
 				currentRow.size = Vector2.new(
 					currentRow.size.X + size.X + (#currentRow.children > 1 and paddingPx or 0),
 					math.max(currentRow.size.Y, size.Y)
@@ -86,9 +110,12 @@ local propTable = {
 			else
 				if currentRow.size.Y + size.Y > containerSize.Y and #currentRow.children > 0 then
 					currentRow = { children = {}, size = Vector2.new(0, 0) }
+
 					table.insert(rows, currentRow)
 				end
+
 				table.insert(currentRow.children, { child = child, size = size })
+
 				currentRow.size = Vector2.new(
 					math.max(currentRow.size.X, size.X),
 					currentRow.size.Y + size.Y + (#currentRow.children > 1 and paddingPx or 0)
@@ -97,6 +124,7 @@ local propTable = {
 		end
 
 		local totalSize = Vector2.new(0, 0)
+
 		for i, row in ipairs(rows) do
 			if isHorizontal then
 				totalSize = Vector2.new(
@@ -112,6 +140,7 @@ local propTable = {
 		end
 
 		local currentPos = isHorizontal and paddingY or paddingX
+
 		if isHorizontal then
 			if object.VerticalAlignment == Enum.VerticalAlignment.Center then
 				currentPos += (containerSize.Y - totalSize.Y) * 0.5
@@ -128,6 +157,7 @@ local propTable = {
 
 		for _, row in ipairs(rows) do
 			local rowCursor = isHorizontal and paddingX or paddingY
+
 			if isHorizontal then
 				if object.HorizontalAlignment == Enum.HorizontalAlignment.Center then
 					rowCursor += (containerSize.X - row.size.X) * 0.5
@@ -144,17 +174,22 @@ local propTable = {
 
 			for _, item in ipairs(row.children) do
 				local child = item.child
+
 				local size = item.size
+
 				rawset(child, "_LayoutControlled", true)
 
 				local itemOffset = 0
+
 				if isHorizontal then
 					if object.ItemAlignment == Enum.VerticalAlignment.Center then
 						itemOffset = (row.size.Y - size.Y) * 0.5
 					elseif object.ItemAlignment == Enum.VerticalAlignment.Bottom then
 						itemOffset = row.size.Y - size.Y
 					end
+
 					rawset(child, "_LayoutRelativePosition", Vector2.new(rowCursor, currentPos + itemOffset))
+
 					rowCursor += size.X + paddingPx
 				else
 					if object.ItemAlignment == Enum.HorizontalAlignment.Center then
@@ -162,7 +197,9 @@ local propTable = {
 					elseif object.ItemAlignment == Enum.HorizontalAlignment.Right then
 						itemOffset = row.size.X - size.X
 					end
+
 					rawset(child, "_LayoutRelativePosition", Vector2.new(currentPos + itemOffset, rowCursor))
+
 					rowCursor += size.Y + paddingPx
 				end
 			end
@@ -173,10 +210,14 @@ local propTable = {
 }
 
 return {
+
 	class = "UIFlowLayout",
+
 	render = propTable.render,
+
 	callback = function(instance)
 		instance:SetProperties(propTable)
+
 		return instance
 	end,
 }

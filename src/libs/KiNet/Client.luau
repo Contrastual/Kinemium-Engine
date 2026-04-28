@@ -15,7 +15,7 @@ local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
 -- Replay / clock-skew window for inbound messages (seconds). The previous
 -- value of 300s allowed a 5-minute replay; this is tightened to a window
 -- that still tolerates reasonable NTP drift.
-local MESSAGE_TIMEOUT = 10
+local MESSAGE_TIMEOUT = 30
 local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
 local MAX_RETRIES = 5
@@ -417,6 +417,11 @@ function Client:ReassembleFragments(fragmentData)
 			return nil
 		end
 
+		-- Large logical messages can spend meaningful time in fragmentation
+		-- and reassembly. Refresh the timestamp so validation measures the
+		-- timeout window from successful reassembly instead of initial encode.
+		decoded.timestamp = os.time()
+
 		return decoded
 	end
 
@@ -455,7 +460,9 @@ function Client:SendReliable(data)
 
 	task.spawn(function()
 		for i, fragment in ipairs(fragments) do
-			self:SendRaw(fragment)
+			if not self:SendRaw(fragment) then
+				break
+			end
 			if i % 200 == 0 then
 				task.wait()
 			end
@@ -464,6 +471,10 @@ function Client:SendReliable(data)
 end
 
 function Client:SendRaw(data)
+	if not self.Socket then
+		return false
+	end
+
 	local bypassRateLimit = type(data) == "table"
 		and (data.type == "ACK" or data.type == "HEARTBEAT" or data.type == "CONNECT" or data.type == "DISCONNECT" 
 			or data.type == "AUTH_SUCCESS" or data.type == "AUTH_FAILED" or data.type == "SHUTDOWN"
@@ -474,7 +485,8 @@ function Client:SendRaw(data)
 		return
 	end
 
-	data.timestamp = data.timestamp or os.time()
+	-- Always refresh timestamp at send time so retries cannot become stale.
+	data.timestamp = os.time()
 	data.sequence = self.MessageSequence
 	self.MessageSequence = self.MessageSequence + 1
 
@@ -522,8 +534,8 @@ function Client:ProcessReliableQueue()
 
 						task.spawn(function()
 							for i, fragment in ipairs(ackData.fragments) do
-								if self.Socket then
-									self:SendRaw(fragment)
+								if not self:SendRaw(fragment) then
+									break
 								end
 								if i % 200 == 0 then
 									task.wait()
@@ -670,7 +682,9 @@ function Client:Send(data, reliable)
 
 			task.spawn(function()
 				for i, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
-					self:SendRaw(fragment)
+					if not self:SendRaw(fragment) then
+						break
+					end
 					if i % 200 == 0 then
 						task.wait()
 					end

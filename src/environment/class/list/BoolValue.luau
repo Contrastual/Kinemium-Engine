@@ -1,5 +1,5 @@
 local propTable = {
-	Value = nil,
+	Value = false,
 }
 
 return {

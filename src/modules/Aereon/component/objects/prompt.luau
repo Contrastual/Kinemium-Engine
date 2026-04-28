@@ -1,7 +1,8 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
+local textButton = require("./textButton")
 
 local defaultFont = raylib.lib.GetFontDefault()
 
@@ -50,6 +51,7 @@ return function(objects, data)
 		closeButtonHover = 0,
 		buttonHoverStates = {},
 		isClosing = false,
+		buttonInstances = {},
 	}
 
 	local wrapper = {}
@@ -88,6 +90,29 @@ return function(objects, data)
 	wrapper.setButtons = function(buttons)
 		config.buttons = buttons
 		config.buttonHoverStates = {}
+		config.buttonInstances = {}
+		for i, btn in ipairs(buttons) do
+			config.buttonInstances[i] = textButton({}, {
+				x = 0,
+				y = 0,
+				width = btn.width or 100,
+				height = config.buttonHeight,
+				text = btn.text,
+				backgroundColor = btn.color or color3.new(0.22, 0.24, 0.28),
+				hoverColor = btn.hoverColor or color3.new(0.32, 0.34, 0.38),
+				pressColor = btn.pressColor or color3.new(0.18, 0.20, 0.24),
+				textColor = color3.new(1, 1, 1),
+				fontSize = 14,
+				font = config.font,
+				rounded = { 0.20, 8 },
+				onClick = function()
+					if btn.onClick then
+						btn.onClick()
+					end
+					wrapper.hide()
+				end,
+			})
+		end
 		return wrapper
 	end
 
@@ -121,9 +146,9 @@ return function(objects, data)
 			end
 		else
 			-- Animate in
-			config.animSlideY = config.animSlideY + (1 - config.animSlideY) * 0.14
-			config.animAlpha = config.animAlpha + (1 - config.animAlpha) * 0.16
-			config.animScale = config.animScale + (1 - config.animScale) * 0.20
+			config.animSlideY = config.animSlideY + (1 - config.animSlideY) * 0.14 -- slide speed
+			config.animAlpha = config.animAlpha + (1 - config.animAlpha) * 0.16 -- fade speed
+			config.animScale = config.animScale + (1 - config.animScale) * 0.20 -- scale speed
 		end
 
 		local screenW = raylib.lib.GetScreenWidth()
@@ -296,60 +321,17 @@ return function(objects, data)
 			config.borderColor:ToRaylib(0.55)
 		)
 
-		for i, btn in ipairs(config.buttons) do
+		-- Create button instances if they don't exist
+		if #config.buttonInstances == 0 and #config.buttons > 0 then
+			wrapper.setButtons(config.buttons)
+		end
+
+		-- Update and render buttons
+		for i, btnInstance in ipairs(config.buttonInstances) do
+			local btn = config.buttons[i]
 			local bw = btn.width or 100
-			local bRect = rect.new(btnX, btnY, bw, config.buttonHeight)
-			local isHovered = rect.MouseIsInRect(bRect)
-
-			config.buttonHoverStates[i] = config.buttonHoverStates[i] or 0
-			config.buttonHoverStates[i] = isHovered and math.min(config.buttonHoverStates[i] + dt * 12, 1)
-				or math.max(config.buttonHoverStates[i] - dt * 12, 0)
-
-			local h = config.buttonHoverStates[i]
-			local base = btn.color or color3.new(0.22, 0.24, 0.28)
-			local lit = color3.new(
-				math.min(base.R + 0.12 * h, 1),
-				math.min(base.G + 0.12 * h, 1),
-				math.min(base.B + 0.12 * h, 1)
-			)
-
-			-- Button shadow
-			raylib.lib.DrawRectangleRounded(
-				rect:translate(rect.new(bRect.x + 1, bRect.y + 2, bRect.width, bRect.height)),
-				0.20,
-				8,
-				color3.new(0, 0, 0):ToRaylib(0.15)
-			)
-
-			-- Button fill
-			raylib.lib.DrawRectangleRounded(rect:translate(bRect), 0.20, 8, lit:ToRaylib(0))
-
-			-- Subtle top highlight on button
-			raylib.lib.DrawRectangleRounded(
-				rect:translate(rect.new(bRect.x + 1, bRect.y + 1, bRect.width - 2, bRect.height / 2)),
-				0.20,
-				8,
-				color3.new(1, 1, 1):ToRaylib(1 - 0.06)
-			)
-
-			-- Label
-			local ts = raylib.lib.MeasureTextEx(config.font, btn.text, 14, 1)
-			raylib.lib.DrawTextEx(
-				config.font,
-				btn.text,
-				vector.create(btnX + (bw - ts.x) / 2, btnY + (config.buttonHeight - ts.y) / 2),
-				14,
-				1,
-				color3.new(1, 1, 1):ToRaylib(0)
-			)
-
-			if isHovered and raylib.lib.IsMouseButtonReleased(0) == 1 then
-				if btn.onClick then
-					btn.onClick()
-				end
-				wrapper.hide()
-			end
-
+			btnInstance.set("obj_rect", rect.new(btnX, btnY, bw, config.buttonHeight))
+			btnInstance.render(dt)
 			btnX = btnX + bw + config.buttonSpacing
 		end
 	end

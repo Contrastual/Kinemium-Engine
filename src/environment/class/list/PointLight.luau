@@ -1,11 +1,8 @@
 local Vector3 = require("@Vector3")
 local Color3 = require("@Color3")
-local Enum = require("@EnumMap")
-local CFrame = require("@CFrame")
 
 local r3d = require("@r3d")
 local rlib = r3d.lib
-local raylib = require("@raylib")
 
 local propTable = {
 	Color = Color3.new(1, 1, 1),
@@ -73,7 +70,12 @@ return {
 
 		renderer.Hook.new("Renderstep", function()
 			if instance.Parent and instance.Parent.CFrame then
-				instance.Position = instance.Parent.CFrame.Position
+				local newPos = instance.Parent.CFrame.Position
+				local dx, dy, dz =
+					newPos.X - instance.Position.X, newPos.Y - instance.Position.Y, newPos.Z - instance.Position.Z
+				if dx * dx + dy * dy + dz * dz > 0.0001 then
+					instance.Position = newPos
+				end
 			end
 		end)
 

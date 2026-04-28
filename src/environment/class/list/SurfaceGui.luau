@@ -23,6 +23,7 @@ local propTable = {
 	ZOffset = 0,
 	Size = UDim2.new(0, 800, 0, 600),
 	RenderOffset = Vector2.new(0, 0),
+	Texture = nil,
 	BaseClass = "UIContainer",
 }
 
@@ -84,6 +85,51 @@ local function getFaceCorners(cf, size, face)
 	return Vector3.new(0, 0, 0), Vector3.new(0, 0, 0), Vector3.new(0, 0, 0), Vector3.new(0, 0, 0)
 end
 
+local function resolveTextureSource(instance)
+	if type(instance.Texture) == "table" and instance.Texture.ClassName == "EditableImage" then
+		return instance.Texture
+	end
+	if type(instance.Texture) == "string" and instance.Texture ~= "" then
+		return instance.Texture
+	end
+	return nil
+end
+
+local function loadTextureFromPath(path)
+	if type(path) ~= "string" or path == "" then
+		return nil
+	end
+
+	local ok, data = pcall(zune.fs.readFileSync, path, true)
+	if not ok or not data then
+		return nil
+	end
+
+	local ext = lib.GetFileExtension(path)
+	local okLoad, tex = pcall(lib.LoadTextureFromMemory, ext, data, buffer.len(data))
+	if okLoad then
+		return tex
+	end
+
+	return nil
+end
+
+local function loadTextureFromEditable(editableImage)
+	if not editableImage or not editableImage._image then
+		return nil
+	end
+
+	if editableImage._dirty then
+		if editableImage._texture then
+			lib.UnloadTexture(editableImage._texture)
+		end
+		editableImage._texture = lib.LoadTextureFromImage(editableImage._image)
+		editableImage._dirty = false
+	end
+
+	return editableImage._texture
+end
+
 return {
 	class = "SurfaceGui",
 
@@ -95,10 +141,28 @@ return {
 		end
 
 		local rtx = nil
+		local rtxW = 0
+		local rtxH = 0
 		local render2dId = nil
 		local render3dId = nil
+		local staticTexture = nil
+		local lastTextureSource = nil
 
-		local function updateTextureSize()
+		local function resetRenderTexture(width, height)
+			local w = math.max(1, math.floor(width or 1))
+			local h = math.max(1, math.floor(height or 1))
+			if rtx then
+				lib.UnloadRenderTexture(rtx)
+			end
+			rtx = lib.LoadRenderTexture(w, h)
+			rtxW = w
+			rtxH = h
+			local tex = zune.mem.slice(rtx, structs.RenderTexture:offset("texture"), structs.Texture:size())
+			lib.SetTextureFilter(tex, const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
+			lib.SetTextureWrap(tex, const.TextureWrap.TEXTURE_WRAP_CLAMP)
+		end
+
+		local function getCanvasSize()
 			local w, h = 800, 600
 			if instance.SizingMode == Enum.SurfaceGuiSizingMode.FixedSize then
 				w = math.max(1, math.floor(instance.CanvasSize.X or 800))
@@ -111,31 +175,83 @@ return {
 					h = math.max(1, math.floor(fh * (instance.PixelsPerStud or 50)))
 				end
 			end
-
-			local tex = zune.mem.slice(rtx, structs.RenderTexture:offset("texture"), structs.Texture:size())
-			local texW = buffer.readi32(tex, 4)
-			local texH = buffer.readi32(tex, 8)
-			if not rtx or texW ~= w or texH ~= h then
-				if rtx then
-					lib.UnloadRenderTexture(rtx)
-				end
-				rtx = lib.LoadRenderTexture(w, h)
-				lib.SetTextureFilter(tex, const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
-				lib.SetTextureWrap(tex, const.TextureWrap.TEXTURE_WRAP_CLAMP)
-			end
-
-			instance.Size = UDim2.new(0, w, 0, h)
 			return w, h
 		end
 
-		updateTextureSize()
+		local function syncTexture(force)
+			if _G.IsHeadless then
+				return
+			end
+
+			local source = resolveTextureSource(instance)
+			local hasChildren = false
+			for _, child in pairs(instance:GetChildren()) do
+				if child.render then
+					hasChildren = true
+					break
+				end
+			end
+
+			if not force and source == lastTextureSource and not hasChildren then
+				if type(source) == "table" and source.ClassName == "EditableImage" then
+					if source._dirty or source._texture ~= lastTextureSource then
+						-- continue to rebuild
+					else
+						return
+					end
+				else
+					return
+				end
+			end
+
+			lastTextureSource = source
+
+			if hasChildren then
+				if staticTexture then
+					lib.UnloadTexture(staticTexture)
+					staticTexture = nil
+				end
+				local w, h = getCanvasSize()
+				if rtxW ~= w or rtxH ~= h then
+					resetRenderTexture(w, h)
+				end
+			elseif source then
+				if staticTexture then
+					lib.UnloadTexture(staticTexture)
+					staticTexture = nil
+				end
+				if type(source) == "table" and source.ClassName == "EditableImage" then
+					staticTexture = loadTextureFromEditable(source)
+				elseif type(source) == "string" then
+					staticTexture = loadTextureFromPath(source)
+				end
+			else
+				if staticTexture then
+					lib.UnloadTexture(staticTexture)
+					staticTexture = nil
+				end
+				local w, h = getCanvasSize()
+				if rtxW ~= w or rtxH ~= h then
+					resetRenderTexture(w, h)
+				end
+			end
+		end
+
+		resetRenderTexture(getCanvasSize())
 
 		render2dId = renderer.Pool.new("2d", function()
 			if not instance.Enabled then
 				return
 			end
 
-			updateTextureSize()
+			local w, h = getCanvasSize()
+			if w <= 0 or h <= 0 then
+				return
+			end
+
+			if rtxW ~= w or rtxH ~= h then
+				resetRenderTexture(w, h)
+			end
 
 			lib.BeginTextureMode(rtx)
 			lib.ClearBackground(const.BLANK)
@@ -150,7 +266,9 @@ return {
 		end)
 
 		render3dId = renderer.Pool.new("3d", function()
-			if not instance.Enabled or not rtx then
+			syncTexture(false)
+
+			if not instance.Enabled then
 				return
 			end
 
@@ -159,10 +277,26 @@ return {
 				return
 			end
 
-			local tl, tr, br, bl = getFaceCorners(adornee.CFrame, adornee.Size, instance.Face)
+			local texId = nil
+			if staticTexture then
+				texId = staticTexture.id
+			elseif rtx then
+				local tex = zune.mem.slice(rtx, structs.RenderTexture:offset("texture"), structs.Texture:size())
+				local texW = buffer.readi32(tex, 4)
+				local texH = buffer.readi32(tex, 8)
+				if texW <= 0 or texH <= 0 then
+					return
+				end
+				texId = buffer.readu32(tex, 0)
+			else
+				return
+			end
 
-			local tex = zune.mem.slice(rtx, structs.RenderTexture:offset("texture"), structs.Texture:size())
-			local texId = buffer.readu32(tex, 0)
+			if not texId then
+				return
+			end
+
+			local tl, tr, br, bl = getFaceCorners(adornee.CFrame, adornee.Size, instance.Face)
 
 			if instance.AlwaysOnTop then
 				lib.rlDisableDepthTest()
@@ -170,21 +304,16 @@ return {
 
 			lib.rlSetTexture(texId)
 			lib.rlBegin(7) -- GL_QUADS
-
 			lib.rlColor4ub(255, 255, 255, 255)
 
-			-- Render texture coordinates need Y flip usually
 			lib.rlTexCoord2f(0, 1)
 			lib.rlVertex3f(tl.X, tl.Y, tl.Z)
-
-			lib.rlTexCoord2f(0, 0)
-			lib.rlVertex3f(bl.X, bl.Y, bl.Z)
-
-			lib.rlTexCoord2f(1, 0)
-			lib.rlVertex3f(br.X, br.Y, br.Z)
-
 			lib.rlTexCoord2f(1, 1)
 			lib.rlVertex3f(tr.X, tr.Y, tr.Z)
+			lib.rlTexCoord2f(1, 0)
+			lib.rlVertex3f(br.X, br.Y, br.Z)
+			lib.rlTexCoord2f(0, 0)
+			lib.rlVertex3f(bl.X, bl.Y, bl.Z)
 
 			lib.rlEnd()
 			lib.rlSetTexture(0)
@@ -195,10 +324,8 @@ return {
 		end)
 
 		instance.Changed:Connect(function(prop)
-			if prop == "Enabled" then
-				if instance.Enabled then
-					updateTextureSize()
-				end
+			if prop == "Texture" then
+				syncTexture(true)
 			elseif
 				prop == "Adornee"
 				or prop == "Face"
@@ -206,7 +333,11 @@ return {
 				or prop == "PixelsPerStud"
 				or prop == "SizingMode"
 			then
-				updateTextureSize()
+				local w, h = getCanvasSize()
+				if rtxW ~= w or rtxH ~= h then
+					resetRenderTexture(w, h)
+				end
+				instance.Size = UDim2.new(0, w, 0, h)
 			end
 		end)
 
@@ -221,9 +352,12 @@ return {
 				lib.UnloadRenderTexture(rtx)
 				rtx = nil
 			end
+			if staticTexture then
+				lib.UnloadTexture(staticTexture)
+				staticTexture = nil
+			end
 		end)
 
-		-- Expose a method for children to get the relative mouse position on this SurfaceGui
 		instance.GetRelativeMousePosition = function()
 			local adornee = getAdornee(instance)
 			if not adornee or not adornee.CFrame or not adornee.Size then
@@ -240,12 +374,10 @@ return {
 
 			local tl, tr, br, bl = getFaceCorners(adornee.CFrame, adornee.Size, instance.Face)
 
-			-- Ray-plane intersection
 			local normal = (tr - tl):Cross(bl - tl):Unit()
 			local collision = lib.GetRayCollisionPlane(ray, tl, normal)
 
 			if collision.hit == 1 then
-				-- Check if within bounds and convert to UV
 				local p = Vector3.new(collision.point.x, collision.point.y, collision.point.z)
 				local v = p - tl
 				local xDir = (tr - tl)

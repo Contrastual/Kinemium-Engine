@@ -25,7 +25,7 @@ HttpService.InitRenderer = function(renderer, renderer_signal, game)
 				body = body,
 				timeout = opts.Timeout,
 				allow_redirects = opts.AllowRedirects,
-			})
+			}, opts.ReturnBuffer and true or false)
 		end)
 
 		if not success then
@@ -47,12 +47,12 @@ HttpService.InitRenderer = function(renderer, renderer_signal, game)
 
 	function HttpService:GetAsync(url, headers, opts)
 		local res = request("GET", url, nil, headers, opts)
-		return JSON.decode(res.Body), res
+		return res.Body, res
 	end
 
 	function HttpService:PostAsync(url, body, headers, opts)
 		local res = request("POST", url, body, headers, opts)
-		return JSON.decode(res.Body), res
+		return res.Body, res
 	end
 
 	function HttpService:JSONEncode(tbl)
@@ -73,6 +73,10 @@ HttpService.InitRenderer = function(renderer, renderer_signal, game)
 			end)
 		end
 		return generateGUID()
+	end
+
+	function HttpService:CreateSocket()
+		-- TODO: add Socket implementation (using zune.net)
 	end
 
 	function HttpService:Websocket(opts, accepted)

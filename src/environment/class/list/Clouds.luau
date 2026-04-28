@@ -11,6 +11,8 @@ return {
 	callback = function(instance, renderer)
 		propTable.render = function(effect, camera, lib) end
 
+		-- Handled by lighting
+
 		instance:SetProperties(propTable)
 		return instance
 	end,

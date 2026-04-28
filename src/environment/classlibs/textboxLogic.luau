@@ -1,6 +1,7 @@
 local logic = {}
 
 local Enum = require("@EnumMap")
+local MouseCursor = require("@Kinemium.MouseCursor")
 local signal = require("@Kinemium.signal")
 local raylib = require("@raylib")
 
@@ -106,7 +107,7 @@ function logic:Step(object, lib, renderer, callbackHover, callbackLeave)
 	end
 	if object.MouseIsInObject == true then
 		if object.ChangeCursorOnHover then
-			lib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_IBEAM.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_IBEAM.Value)
 		end
 
 		if callbackHover then
@@ -131,7 +132,7 @@ function logic:Step(object, lib, renderer, callbackHover, callbackLeave)
 		end
 
 		if object.ChangeCursorOnHover then
-			lib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 		end
 
 		if callbackLeave then

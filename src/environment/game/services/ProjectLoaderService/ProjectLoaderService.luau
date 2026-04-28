@@ -1,5 +1,4 @@
 local Instance = require("@Instance")
-local signal = require("@Kinemium.signal")
 
 local ProjectLoaderService = Instance.new("LogService")
 ProjectLoaderService.ExplorerHidden = true
@@ -30,7 +29,7 @@ local function buildProjectConfig(name, iconPath, description)
 		pointers = {
 			assets = "game.ReplicatedStorage",
 			server = "game.ServerScriptService",
-			client = "game.StarterPlayerScripts",
+			client = "game.StarterPlayer",
 			gui = "game.StarterGui",
 			objects = "game.Workspace",
 		},
@@ -79,7 +78,7 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 				icon = iconPath,
 				path = path,
 				name = name,
-				engine_version = "1.10.4",
+				engine_version = ENGINE_VERSION,
 				last_opened = os.time(),
 			}
 

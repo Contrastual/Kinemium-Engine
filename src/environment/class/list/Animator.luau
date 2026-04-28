@@ -94,7 +94,19 @@ return {
 		end
 
 		function instance:GetPose(target, context)
-			local pose = {}
+			local pose = instance._cachedPose
+			if not pose then
+				pose = {}
+				instance._cachedPose = pose
+			else
+				for k, v in pairs(pose) do
+					if type(v) == "table" and type(v.ToTable) ~= "function" then
+						table.clear(v)
+					else
+						pose[k] = nil
+					end
+				end
+			end
 
 			local defaultProvider = instance.DefaultProvider
 			if instance.UseDefaultAnimations ~= false and type(defaultProvider) == "function" then
@@ -120,7 +132,7 @@ return {
 		function instance:StepAnimation(target, context)
 			local runtimeContext
 			if type(context) == "table" then
-				runtimeContext = copy(context)
+				runtimeContext = context
 			else
 				runtimeContext = {}
 			end

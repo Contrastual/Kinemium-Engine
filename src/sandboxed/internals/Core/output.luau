@@ -10,7 +10,7 @@ local LogService = game:GetService("LogService")
 local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local Theme = game:GetService("StudioThemeService").SelectedTheme
-local arectlib = require("@Arect")(rl)
+local arectlib = require("@arect")
 local scrollOffset = 0
 
 local TextColor = Theme.TextColor:ToRaylib(Theme.TextTransparency)

@@ -89,7 +89,7 @@ function Aereon.theme(name, new)
 end
 
 function Aereon.rect()
-	return rect(raylib.lib)
+	return rect
 end
 
 function Aereon.getOnStep()

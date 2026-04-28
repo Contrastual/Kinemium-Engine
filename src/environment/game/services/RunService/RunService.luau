@@ -16,13 +16,17 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 
 local renderBindings = {}
+local sortedRenderBindings = {}
+local renderBindingsDirty = false
 
 function RunService:BindToRenderStep(name, priority, callback)
 	renderBindings[name] = { priority = priority, callback = callback }
+	renderBindingsDirty = true
 end
 
 function RunService:UnbindFromRenderStep(name)
 	renderBindings[name] = nil
+	renderBindingsDirty = true
 end
 
 local simulationBindings = {}
@@ -100,14 +104,18 @@ function RunService:GetPredictionStatus(context)
 end
 
 local function runRenderBindings(dt)
-	local sorted = {}
-	for name, data in pairs(renderBindings) do
-		table.insert(sorted, data)
+	if renderBindingsDirty then
+		table.clear(sortedRenderBindings)
+		for _, data in pairs(renderBindings) do
+			table.insert(sortedRenderBindings, data)
+		end
+		table.sort(sortedRenderBindings, function(a, b)
+			return a.priority < b.priority
+		end)
+		renderBindingsDirty = false
 	end
-	table.sort(sorted, function(a, b)
-		return a.priority < b.priority
-	end)
-	for _, binding in ipairs(sorted) do
+
+	for _, binding in ipairs(sortedRenderBindings) do
 		binding.callback(dt)
 	end
 end

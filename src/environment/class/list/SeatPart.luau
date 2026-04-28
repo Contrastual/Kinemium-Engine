@@ -1,7 +1,6 @@
 local Vector3 = require("@Vector3")
 local Part = require("./Part")
 local Enum = require("@EnumMap")
-local CFrame = require("@CFrame")
 
 local propTable = {
 	Disabled = false,

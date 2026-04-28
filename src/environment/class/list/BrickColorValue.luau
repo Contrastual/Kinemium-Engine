@@ -1,4 +1,4 @@
-local BrickColor = require("../../datatypes/BrickColor")
+local BrickColor = require("@BrickColor")
 
 local propTable = {
 	Value = BrickColor.Gray(),

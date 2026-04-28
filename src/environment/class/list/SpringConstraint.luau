@@ -1,5 +1,4 @@
 local _Vector3 = require("@Vector3")
-local Enum = require("@EnumMap")
 local _signal = require("@Kinemium.signal")
 local _state = require("@State")
 local Color3 = require("@Color3")

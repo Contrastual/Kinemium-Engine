@@ -440,9 +440,6 @@ enumTable.MultiplayerMode = {
 
 enumTable.Language = {
 	Luau = 1,
-	JavaScript = 2,
-	Python = 3,
-	WASM = 4,
 }
 
 enumTable.PredictionMode = {

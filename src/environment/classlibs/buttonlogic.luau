@@ -1,12 +1,13 @@
 local logic = {}
 
 local Enum = require("@EnumMap")
+local MouseCursor = require("@Kinemium.MouseCursor")
 local signal = require("@Kinemium.signal")
 
 function logic:Step(object, lib, callbackHover, callbackLeave)
 	if object.MouseIsInObject == true then
 		if object.ChangeCursorOnHover then
-			lib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_POINTING_HAND.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_POINTING_HAND.Value)
 		end
 
 		if object.AutoButtonColor then
@@ -24,7 +25,7 @@ function logic:Step(object, lib, callbackHover, callbackLeave)
 		object.MouseButton2Click:FireOncePerPress("RightMouse", right)
 	else
 		if object.ChangeCursorOnHover then
-			lib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 		end
 
 		if object.AutoButtonColor then

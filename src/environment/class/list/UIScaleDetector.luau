@@ -2,6 +2,7 @@ local Vector2 = require("@Vector2")
 local Vector3 = require("@Vector3")
 local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()
@@ -48,7 +49,8 @@ local function getParentMetrics(parent)
 	if parent.AbsoluteSize then
 		parentSize = parent.AbsoluteSize
 	elseif parent.Size and parent.Size.ToPixels then
-		parentSize = parent.Size:ToPixels(Vector2.new(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()))
+		local dpiScale = raylib.lib.GetWindowScaleDPI()
+		parentSize = parent.Size:ToPixels(Vector2.new(raylib.lib.GetRenderWidth() / dpiScale.x, raylib.lib.GetRenderHeight() / dpiScale.y))
 	end
 
 	return parentAbsPos, parentSize
@@ -168,10 +170,13 @@ return {
 
 				-- Clamp to screen
 				if instance.RespectScreenBounds then
-					left = math.clamp(left, 0, raylib.lib.GetScreenWidth())
-					top = math.clamp(top, 0, raylib.lib.GetScreenHeight())
-					right = math.clamp(right, 0, raylib.lib.GetScreenWidth())
-					bottom = math.clamp(bottom, 0, raylib.lib.GetScreenHeight())
+					local dpiScale = raylib.lib.GetWindowScaleDPI()
+					local screenW = raylib.lib.GetScreenWidth() / dpiScale.x
+					local screenH = raylib.lib.GetScreenHeight() / dpiScale.y
+					left = math.clamp(left, 0, screenW)
+					top = math.clamp(top, 0, screenH)
+					right = math.clamp(right, 0, screenW)
+					bottom = math.clamp(bottom, 0, screenH)
 				end
 
 				local newAbsW = right - left
@@ -200,12 +205,12 @@ return {
 					adornee.Size = newSize
 				end
 
-				raylib.lib.SetMouseCursor(CURSORS[instance.activeHandle])
+				MouseCursor.request(CURSORS[instance.activeHandle])
 
 				if raylib.lib.IsMouseButtonReleased(0) == 1 then
 					instance.isResizing = false
 					instance.activeHandle = nil
-					raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+					MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 				end
 
 				return
@@ -217,7 +222,7 @@ return {
 				local hr = getHandleRect(key, absPos, absSize)
 				if arect.MouseIsInRect(hr) then
 					hoveredHandle = key
-					raylib.lib.SetMouseCursor(CURSORS[key])
+					MouseCursor.request(CURSORS[key])
 
 					if raylib.lib.IsMouseButtonDown(0) == 1 and not instance.isResizing then
 						instance.isResizing = true
@@ -232,7 +237,7 @@ return {
 			end
 
 			if not hoveredHandle then
-				raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+				MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 			end
 		end
 

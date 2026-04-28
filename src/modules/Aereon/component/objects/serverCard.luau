@@ -32,7 +32,8 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 local color3 = require("@Color3")
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local T = {
 	-- surfaces
@@ -239,9 +240,9 @@ return function(objects, data)
 		if hHovered then
 			-- tint just the header area (clipped to top rounded corners when collapsed)
 			fillRounded(ox, oy, W, config.expanded and HEADER_H or H, RADIUS, col(T.cardHover))
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
 		else
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 		end
 
 		if hHovered and mouseClick then

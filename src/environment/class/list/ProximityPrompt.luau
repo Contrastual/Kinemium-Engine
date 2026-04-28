@@ -1,5 +1,6 @@
 local Enum = require("@EnumMap")
 local Vector2 = require("@Vector2")
+local signal = require("@Kinemium.signal")
 
 local propTable = {
 	ActionText = "Interact",
@@ -24,6 +25,8 @@ return {
 
 	callback = function(instance)
 		instance:SetProperties(propTable)
+
+		-- TODO: Implement functionality, inherit from BillBoard gui and use BillBoardGui functionality with custom GUI
 
 		instance.Triggered = signal.new()
 		instance.TriggerEnded = signal.new()

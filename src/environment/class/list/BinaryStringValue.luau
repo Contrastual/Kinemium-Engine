@@ -1,4 +1,6 @@
-local propTable = {}
+local propTable = {
+	BinaryString = "",
+}
 
 return {
 	class = "BinaryStringValue",

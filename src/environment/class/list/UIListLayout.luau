@@ -32,7 +32,8 @@ local propTable = {
 				return obj.AbsoluteSize
 			end
 			if obj:IsA("ScreenGui") then
-				return Vector2.new(lib.GetRenderWidth(), lib.GetRenderHeight())
+				local dpiScale = lib.GetWindowScaleDPI()
+				return Vector2.new(lib.GetRenderWidth() / dpiScale.x, lib.GetRenderHeight() / dpiScale.y)
 			end
 			local parentSize = GetAbsoluteSize(obj.Parent)
 			return obj.Size:ToPixels(parentSize)

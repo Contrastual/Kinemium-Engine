@@ -233,6 +233,10 @@ function StateRegistry.ApplyDelta(baseline, delta)
 	if not delta.__isDelta then
 		return StateRegistry.CloneState(delta)
 	end
+
+	if baseline == nil then
+		return nil
+	end
 	
 	local result = StateRegistry.CloneState(baseline)
 	for k, v in pairs(delta) do
@@ -275,11 +279,22 @@ function StateRegistry.StatesEqual(a, b)
 		return false
 	end
 
-	if vectorDistanceSquared(a.linear, b.linear) > 0.01 then
+	-- Compare velocities only if both states have them
+	if a.linear ~= nil and b.linear ~= nil then
+		if vectorDistanceSquared(a.linear, b.linear) > 0.01 then
+			return false
+		end
+	elseif a.linear ~= nil or b.linear ~= nil then
+		-- One has velocity, the other doesn't - not equal
 		return false
 	end
 
-	if vectorDistanceSquared(a.angular, b.angular) > 0.01 then
+	if a.angular ~= nil and b.angular ~= nil then
+		if vectorDistanceSquared(a.angular, b.angular) > 0.01 then
+			return false
+		end
+	elseif a.angular ~= nil or b.angular ~= nil then
+		-- One has angular velocity, the other doesn't - not equal
 		return false
 	end
 
@@ -301,21 +316,26 @@ StateRegistry.RegisterAdapter("BasePart", {
 
 	capture = function(object)
 		local cframe = getSafeCFrame(object.CFrame)
-		local linear = getSafeVector3(object.AssemblyLinearVelocity)
-		local angular = getSafeVector3(object.AssemblyAngularVelocity)
-
 		local authorityRoot = NetworkOwnership.GetAuthorityRoot(object)
 		local owner = authorityRoot and authorityRoot.NetworkOwner or object.NetworkOwner
 		local ownerNetId = owner and owner.NetworkId or nil
 
-		return {
+		local state = {
 			id = object.NetworkId,
 			type = "BasePart",
 			cframe = cframe:ToTable(),
-			linear = linear:ToTable(),
-			angular = angular:ToTable(),
 			ownerNetId = ownerNetId,
 		}
+
+		-- Only capture velocity for unanchored parts that can interact with physics
+		if object.Anchored == false then
+			local linear = getSafeVector3(object.AssemblyLinearVelocity)
+			local angular = getSafeVector3(object.AssemblyAngularVelocity)
+			state.linear = linear:ToTable()
+			state.angular = angular:ToTable()
+		end
+
+		return state
 	end,
 
 	apply = function(object, state)
@@ -343,11 +363,22 @@ StateRegistry.RegisterAdapter("BasePart", {
 			return false
 		end
 
-		if vectorDistanceSquared(a.linear, b.linear) > 0.001 then
+		-- Compare velocities only if both states have them
+		if a.linear ~= nil and b.linear ~= nil then
+			if vectorDistanceSquared(a.linear, b.linear) > 0.001 then
+				return false
+			end
+		elseif a.linear ~= nil or b.linear ~= nil then
+			-- One has velocity, the other doesn't - not equal
 			return false
 		end
 
-		if vectorDistanceSquared(a.angular, b.angular) > 0.001 then
+		if a.angular ~= nil and b.angular ~= nil then
+			if vectorDistanceSquared(a.angular, b.angular) > 0.001 then
+				return false
+			end
+		elseif a.angular ~= nil or b.angular ~= nil then
+			-- One has angular velocity, the other doesn't - not equal
 			return false
 		end
 

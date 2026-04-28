@@ -60,6 +60,8 @@ local function setSkyObject(r3d_sky)
 
 	local iden = lib.QuaternionIdentity()
 
+	print(3)
+
 	local envbackground = r3d.structs.R3D_EnvBackground:new({
 		sky = r3d_sky,
 		energy = 1.0,
@@ -67,10 +69,16 @@ local function setSkyObject(r3d_sky)
 		skyBlur = 0,
 	})
 
+	print(4)
+
 	local offset = r3d.structs.R3D_Environment:offset("background")
 	environment:write(offset, envbackground, 0, r3d.structs.R3D_EnvBackground:size())
 
+	print(5)
+
 	rlib.R3D_SetEnvironment(environment)
+
+	print(6)
 end
 
 local function loadSky(cubemapPath)
@@ -136,8 +144,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	if zune.platform.os == "linux" then
 		loadSky("./src/assets/sky/test/images/sky.png")
 	else
-		local cubemapSky = rlib.R3D_GenProceduralSky(100, skyObject)
-		setSkyObject(cubemapSky)
+		print(1)
+		local cloudShader = rlib.R3D_LoadSkyShader("./src/assets/sky/shaders/default.glsl")
+		print(cloudShader, 2)
+		local sky = rlib.R3D_GenCustomSky(512, cloudShader)
+		print(sky, 3)
+		setSkyObject(sky)
 	end
 	setAllEnvironmentEffects()
 
@@ -146,10 +158,9 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	rlib.R3D_SetLightColor(light, raylib.const.WHITE)
 	rlib.R3D_SetLightEnergy(light, 1.0)
 	rlib.R3D_SetLightActive(light, true)
-	rlib.R3D_SetShadowSoftness(light, 1.0)
+	rlib.R3D_SetShadowSoftness(light, 3)
 	rlib.R3D_SetShadowDepthBias(light, 0.001)
 	rlib.R3D_SetShadowSlopeBias(light, 0.01)
-	rlib.R3D_SetLightRange(light, 200)
 	rlib.R3D_EnableShadow(light)
 
 	local effectToEnvMap = {
@@ -163,6 +174,24 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		TonemapEffect = { offset = "tonemap", struct = r3d.structs.R3D_EnvTonemap },
 		ColorEffect = { offset = "color", struct = r3d.structs.R3D_EnvColor },
 	}
+	local highestBlur = 0
+	local blurCacheDirty = true
+
+	local function invalidateBlurCache()
+		blurCacheDirty = true
+	end
+
+	local function refreshBlurCache()
+		local maxBlur = 0
+		for _, blur in pairs(Lighting:QueryDescendants(">BlurEffect")) do
+			if blur.Enabled and (blur.Size or 0) > 0 then
+				maxBlur = math.max(maxBlur, blur.Size)
+			end
+		end
+
+		highestBlur = maxBlur
+		blurCacheDirty = false
+	end
 
 	local function applyEffectToEnv(effect)
 		local map = effectToEnvMap[effect.ClassName]
@@ -175,6 +204,12 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	end
 
 	local function handleLightingChild(child)
+		if child.ClassName == "BlurEffect" then
+			invalidateBlurCache()
+			child.Changed:Connect(function()
+				invalidateBlurCache()
+			end)
+		end
 		if effectToEnvMap[child.ClassName] then
 			applyEffectToEnv(child)
 			child.Changed:Connect(function()
@@ -221,14 +256,11 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	end)
 
 	renderer.Pool.new("3d", function()
-		local highestBlur = 0
-		for i, blur in pairs(Lighting:QueryDescendants(">BlurEffect")) do
-			if blur.Enabled then
-				highestBlur = math.max(highestBlur, blur.Size)
-			end
+		if blurCacheDirty then
+			refreshBlurCache()
 		end
 
-		if highestBlur then
+		if highestBlur > 0 then
 			renderer.Blur.blurRadius = highestBlur
 			renderer.Blur:DrawFullBlur(const.WHITE)
 		end
@@ -247,6 +279,11 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		handleLightingChild(child)
 	end
 	Lighting.ChildAdded:Connect(handleLightingChild)
+	Lighting.DescendantRemoving:Connect(function(child)
+		if child.ClassName == "BlurEffect" then
+			invalidateBlurCache()
+		end
+	end)
 end
 
 return Lighting

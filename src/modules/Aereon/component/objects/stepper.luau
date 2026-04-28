@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -59,14 +49,14 @@ return function(objects, data)
 					stepY + config.size / 2 - 1,
 					config.spacing - config.size,
 					2,
-					c3tr(stepColor, 0)
+					stepColor:ToRaylib(0)
 				)
 			end
 
 			raylib.lib.DrawCircleV(
 				vector.create(stepX + config.size / 2, stepY + config.size / 2),
 				config.size / 2,
-				c3tr(stepColor, 0)
+				stepColor:ToRaylib(0)
 			)
 
 			local stepText = tostring(i)
@@ -78,7 +68,7 @@ return function(objects, data)
 				vector.create(stepX + config.size / 2 - textWidth / 2, stepY + config.size / 2 - fontSize / 2),
 				fontSize,
 				config.fontSpacing,
-				c3tr(config.textColor, 0)
+				config.textColor:ToRaylib(0)
 			)
 		end
 	end

@@ -10,6 +10,9 @@ return {
 	callback = function(instance, renderer, game)
 		Part.callback(instance, renderer, game)
 		instance:SetProperties(propTable)
+
+		-- TODO: Implement functionality, use custom repeating mesh
+
 		return instance
 	end,
 

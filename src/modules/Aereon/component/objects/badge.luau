@@ -1,17 +1,5 @@
 local raylib = require("@raylib")
-local structs = raylib.structs
-
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -42,7 +30,7 @@ return function(objects, data)
 
 		local badgeRect = rect.new(config.x, config.y, badgeWidth, badgeHeight)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(badgeRect), 0.5, 8, c3tr(config.backgroundColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(badgeRect), 0.5, 8, config.backgroundColor:ToRaylib(0))
 
 		local textX = config.x + (badgeWidth - textWidth) / 2
 		local textY = config.y + 3
@@ -53,7 +41,7 @@ return function(objects, data)
 			vector.create(textX, textY),
 			config.fontSize,
 			config.spacing,
-			c3tr(config.textColor, 0)
+			config.textColor:ToRaylib(0)
 		)
 	end
 

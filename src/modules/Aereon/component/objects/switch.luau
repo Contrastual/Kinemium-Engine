@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -53,7 +43,7 @@ return function(objects, data)
 			config.offColor.B + (config.onColor.B - config.offColor.B) * config.animProgress
 		)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, c3tr(currentColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.5, 8, currentColor:ToRaylib(0))
 
 		local handleSize = r.height - 6
 		local handleMinX = r.x + 3
@@ -65,7 +55,7 @@ return function(objects, data)
 			structs.Rectangle:new({ x = handleX, y = handleY, width = handleSize, height = handleSize }),
 			0.5,
 			8,
-			c3tr(config.handleColor, 0)
+			config.handleColor:ToRaylib(0)
 		)
 
 		if rect.MouseIsInRect(r) and raylib.lib.IsMouseButtonReleased(0) == 1 then

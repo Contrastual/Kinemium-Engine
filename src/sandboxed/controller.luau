@@ -18,6 +18,7 @@ local CAM_ZOOM_MIN = 0.1
 local CAM_ZOOM_MAX = 50
 local CAM_ZOOM_MUL = 1.15
 local CAM_LERP = 10
+local CAM_SENS_FP = 0.005
 
 local ZERO = Vector3.new(0, 0, 0)
 
@@ -26,11 +27,10 @@ local function flushDelta()
 end
 
 local CharacterModel
-print("controller started")
 while not Players.LocalPlayer do
 	task.wait()
 end
-print("controller got player")
+
 local player = Players.LocalPlayer
 
 if game.MultiplayerMode == Enum.MultiplayerMode.SinglePlayer and not RunService:IsClient() then
@@ -136,6 +136,20 @@ game.StopCameraInput = true
 
 bindCharacter(character, humanoid)
 
+local cursorDisabled = false
+
+local function setCursorDisabled(disabled)
+	if disabled == cursorDisabled then
+		return
+	end
+	cursorDisabled = disabled
+	if disabled then
+		UserInputService:DisableCursor()
+	else
+		UserInputService:EnableCursor()
+	end
+end
+
 UserInputService.MouseWheel:Connect(function(input)
 	local delta = input and input.Delta or 0
 	if delta > 0 then
@@ -146,7 +160,7 @@ UserInputService.MouseWheel:Connect(function(input)
 end)
 
 RunService.RenderStepped:Connect(function(dt)
-	dt = math.min(dt, 0.1)
+	local delta = UserInputService:GetMouseDelta()
 
 	if
 		not character
@@ -162,6 +176,7 @@ RunService.RenderStepped:Connect(function(dt)
 
 		bindCharacter(nextCharacter, nextHumanoid)
 	end
+
 	rootPart = humanoid.RootPart or rootPart
 	if not rootPart or rootPart.Parent == nil then
 		return
@@ -171,14 +186,74 @@ RunService.RenderStepped:Connect(function(dt)
 	if not camera then
 		return
 	end
+
+	local head = character:FindFirstChild("Head")
+	if not head then
+		return
+	end
+
+	local isFirstPerson = zoomDist <= 0.5
+	local camRot = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0)
 	local rmb = UserInputService:IsMouseButtonDown(Enum.MouseButton.Right)
-	if rmb then
-		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-		local delta = UserInputService:GetMouseDelta()
+
+	local sens = isFirstPerson and CAM_SENS_FP or CAM_SENS
+
+	if isFirstPerson or rmb then
+		setCursorDisabled(true)
+		yaw = yaw - math.rad(delta.X * sens)
+		pitch = math.clamp(pitch - math.rad(delta.Y * sens), math.rad(CAM_MIN_Y), math.rad(CAM_MAX_Y))
+	else
+		setCursorDisabled(false)
+		flushDelta()
+	end
+
+	if isFirstPerson then
+		local firstPersonPos = head.CFrame.Position
+		smoothCamPos = firstPersonPos
+
+		camera.CFrame = CFrame.new(firstPersonPos) * camRot
+		rootPart.CFrame = CFrame.new(rootPart.Position) * CFrame.fromEulerAnglesYXZ(yaw, 0, 0)
+
+		for _, part in pairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 1
+			end
+		end
+
+		humanoid.TurnSpeed = 999
+		humanoid:Face(Vector3.new(math.sin(yaw), 0, -math.cos(yaw)))
+	else
+		local focusPos = head.CFrame.Position
+		local camOffset = camRot * Vector3.new(0, 0, zoomDist)
+		local targetCamPos = focusPos + camOffset
+
+		local alpha = math.min(1, dt * CAM_LERP)
+		smoothCamPos = (smoothCamPos or targetCamPos):Lerp(targetCamPos, alpha)
+
+		local rayVector = smoothCamPos - focusPos
+		local finalCamPos = smoothCamPos
+		if rayVector:Magnitude() > 1e-4 then
+			local camHit = workspace:Raycast(focusPos, rayVector, rayParams)
+			if camHit then
+				finalCamPos = focusPos + rayVector:Unit() * math.max(camHit.Distance - 0.3, 0.1)
+			end
+		end
+
+		camera.CFrame = CFrame.new(finalCamPos, focusPos)
+		for _, part in pairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 0
+			end
+		end
+
+		humanoid.TurnSpeed = 18
+		humanoid:ClearFacingDirection()
+	end
+
+	if isFirstPerson or rmb then
 		yaw = yaw - math.rad(delta.X * CAM_SENS)
 		pitch = math.clamp(pitch - math.rad(delta.Y * CAM_SENS), math.rad(CAM_MIN_Y), math.rad(CAM_MAX_Y))
 	else
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		flushDelta()
 	end
 
@@ -196,7 +271,7 @@ RunService.RenderStepped:Connect(function(dt)
 		moveInput += Vector3.new(1, 0, 0)
 	end
 
-	if UserInputService:IsKeyReleased(Enum.KeyCode.Space) then
+	if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
 		humanoid:RequestJump()
 	end
 
@@ -208,38 +283,4 @@ RunService.RenderStepped:Connect(function(dt)
 	local cameraBasis = CFrame.fromEulerAnglesYXZ(yaw, 0, 0)
 	humanoid:MoveRelative(moveInput, cameraBasis)
 	humanoid:SetSprinting(UserInputService:IsKeyDown(Enum.KeyCode.LeftShift))
-
-	local head = character:FindFirstChild("Head")
-	if not head then
-		return
-	end
-	local focusPos = head.CFrame.Position
-
-	local isFirstPerson = zoomDist <= 0.5
-	local targetCamPos
-	if zoomDist <= 0.5 then
-		targetCamPos = focusPos
-	else
-		local camOffset = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0) * Vector3.new(0, 0, zoomDist)
-		targetCamPos = focusPos + camOffset
-	end
-	local alpha = math.min(1, dt * CAM_LERP)
-	smoothCamPos = (smoothCamPos or targetCamPos):Lerp(targetCamPos, alpha)
-
-	if zoomDist <= 0.5 then
-		head.Transparency = 1
-	else
-		head.Transparency = 0
-	end
-
-	local rayVector = smoothCamPos - focusPos
-	local finalCamPos = smoothCamPos
-	if rayVector:Magnitude() > 1e-4 then
-		local camHit = workspace:Raycast(focusPos, rayVector, rayParams)
-		if camHit then
-			finalCamPos = focusPos + rayVector:Unit() * math.max(camHit.Distance - 0.3, 0.1)
-		end
-	end
-
-	camera.CFrame = CFrame.new(finalCamPos, focusPos)
 end)

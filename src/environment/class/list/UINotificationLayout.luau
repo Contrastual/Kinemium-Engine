@@ -1,7 +1,6 @@
 local Enum = require("@EnumMap")
 local UDim2 = require("@UDim2")
 local UDim = require("@UDim")
-local Color3 = require("@Color3")
 local Signal = require("@Kinemium.signal")
 
 local propTable = {
@@ -33,8 +32,9 @@ local propTable = {
 		end
 
 		local notifications = rawget(object, "_notifications")
-		local screenW = lib.GetRenderWidth()
-		local screenH = lib.GetRenderHeight()
+		local dpiScale = lib.GetWindowScaleDPI()
+		local screenW = lib.GetRenderWidth() / dpiScale.x
+		local screenH = lib.GetRenderHeight() / dpiScale.y
 
 		local marginX = object.MarginX.Scale * screenW + object.MarginX.Offset
 		local marginY = object.MarginY.Scale * screenH + object.MarginY.Offset

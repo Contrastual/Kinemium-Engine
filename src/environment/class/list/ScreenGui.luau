@@ -1,8 +1,4 @@
-local Color3 = require("@Color3")
 local UDim2 = require("@UDim2")
-local raylib = require("@raylib")
-local lib = raylib.lib
-local renderpool = {}
 local Vector2 = require("@Vector2")
 
 local proptble = {
@@ -36,8 +32,9 @@ return {
 				renderWidth = 1024
 				renderHeight = 1024
 			else
-				renderWidth = lib.GetRenderWidth()
-				renderHeight = lib.GetRenderHeight()
+				local dpiScale = lib.GetWindowScaleDPI()
+				renderWidth = lib.GetRenderWidth() / dpiScale.x
+				renderHeight = lib.GetRenderHeight() / dpiScale.y
 			end
 
 			if not instance.OverrideScreenSize then

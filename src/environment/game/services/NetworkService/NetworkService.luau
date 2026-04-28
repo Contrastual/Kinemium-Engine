@@ -368,6 +368,19 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end, nil, channel, kind, payload, reliable)
 		end
 
+		local function broadcastFiltered(channel, kind, payload, reliable, filterFn)
+			local envelope = Protocol.MakeEnvelope(channel, kind, payload, currentTick)
+			envelope.reliable = reliable == true
+			recordTraffic("sent", envelope, reliable == true)
+			KiNet.Server:SendFiltered(envelope, reliable == true, filterFn)
+		end
+
+		local function sendToMultipleClients(sessions, channel, kind, payload, reliable)
+			for _, session in ipairs(sessions) do
+				sendToClient(session, channel, kind, payload, reliable)
+			end
+		end
+
 		local function sendToServer(channel, kind, payload, reliable)
 			if not NetworkService.IsClientConnected or not KiNet.Client.Socket then
 				return
@@ -715,6 +728,12 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end,
 			Broadcast = function(self, channel, kind, payload, reliable)
 				broadcast(channel, kind, payload, reliable)
+			end,
+			BroadcastFiltered = function(self, channel, kind, payload, reliable, filterFn)
+				broadcastFiltered(channel, kind, payload, reliable, filterFn)
+			end,
+			SendToMultipleClients = function(self, sessions, channel, kind, payload, reliable)
+				sendToMultipleClients(sessions, channel, kind, payload, reliable)
 			end,
 			GetCurrentTick = function()
 				return currentTick

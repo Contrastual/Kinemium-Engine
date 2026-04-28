@@ -37,7 +37,9 @@ return {
 		instance:SetProperties(propTable)
 
 		local function updateVolume()
-			if not instance.IsLoaded then return end
+			if not instance.IsLoaded then
+				return
+			end
 			local groupVol = instance.SoundGroup and instance.SoundGroup.Volume or 1.0
 			instance._effectiveVolume = instance.Volume * groupVol * instance._fadeVolume
 			if instance.IsStream then
@@ -48,7 +50,9 @@ return {
 		end
 
 		local function updatePitch()
-			if not instance.IsLoaded then return end
+			if not instance.IsLoaded then
+				return
+			end
 			if instance.IsStream then
 				raylib.lib.SetMusicPitch(instance._raylibSound, instance.Pitch)
 			else
@@ -65,12 +69,12 @@ return {
 				end
 				instance._raylibSound = nil
 			end
-			
+
 			if instance.SoundId == "" then
 				instance.IsLoaded = false
 				return
 			end
-			
+
 			if instance.IsStream then
 				instance._raylibSound = raylib.lib.LoadMusicStream(instance.SoundId)
 				-- MusicStreams are pointer/objects, but in FFI they return valid if loaded
@@ -134,13 +138,21 @@ return {
 					fadeTo(0.0, fadeDuration)
 					task.delay(fadeDuration, function()
 						if self.Playing then
-							if self.IsStream then raylib.lib.StopMusicStream(self._raylibSound) else raylib.lib.StopSound(self._raylibSound) end
+							if self.IsStream then
+								raylib.lib.StopMusicStream(self._raylibSound)
+							else
+								raylib.lib.StopSound(self._raylibSound)
+							end
 							self.Playing = false
 							self.TimePosition = 0
 						end
 					end)
 				else
-					if self.IsStream then raylib.lib.StopMusicStream(self._raylibSound) else raylib.lib.StopSound(self._raylibSound) end
+					if self.IsStream then
+						raylib.lib.StopMusicStream(self._raylibSound)
+					else
+						raylib.lib.StopSound(self._raylibSound)
+					end
 					self.Playing = false
 					self.TimePosition = 0
 				end
@@ -152,11 +164,19 @@ return {
 				if fadeDuration and fadeDuration > 0 then
 					fadeTo(0.0, fadeDuration)
 					task.delay(fadeDuration, function()
-						if self.IsStream then raylib.lib.PauseMusicStream(self._raylibSound) else raylib.lib.PauseSound(self._raylibSound) end
+						if self.IsStream then
+							raylib.lib.PauseMusicStream(self._raylibSound)
+						else
+							raylib.lib.PauseSound(self._raylibSound)
+						end
 						self.Playing = false
 					end)
 				else
-					if self.IsStream then raylib.lib.PauseMusicStream(self._raylibSound) else raylib.lib.PauseSound(self._raylibSound) end
+					if self.IsStream then
+						raylib.lib.PauseMusicStream(self._raylibSound)
+					else
+						raylib.lib.PauseSound(self._raylibSound)
+					end
 					self.Playing = false
 				end
 			end
@@ -164,7 +184,11 @@ return {
 
 		instance.Resume = function(self, fadeDuration)
 			if self.IsLoaded then
-				if self.IsStream then raylib.lib.ResumeMusicStream(self._raylibSound) else raylib.lib.ResumeSound(self._raylibSound) end
+				if self.IsStream then
+					raylib.lib.ResumeMusicStream(self._raylibSound)
+				else
+					raylib.lib.ResumeSound(self._raylibSound)
+				end
 				self.Playing = true
 				fadeTo(1.0, fadeDuration)
 			end

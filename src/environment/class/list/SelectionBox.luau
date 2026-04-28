@@ -2,7 +2,7 @@ local Color3 = require("@Color3")
 
 local propTable = {
 	Adornee = nil,
-	Color3 = Color3.new(0.0666667, 0.611765, 0.941176), -- Roblox default blue selection
+	Color3 = Color3.new(0.0666667, 0.611765, 0.941176),
 	LineThickness = 0.05,
 	SurfaceColor3 = Color3.new(0.0666667, 0.611765, 0.941176),
 	SurfaceTransparency = 1,

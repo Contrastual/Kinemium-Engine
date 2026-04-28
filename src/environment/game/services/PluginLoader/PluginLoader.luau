@@ -3,21 +3,50 @@ local Instance = require("@Instance")
 local serde = zune.serde
 local ffi = zune.ffi
 local fs = zune.fs
+local libzip = require("@zip")
 
 local Enum = require("@EnumMap")
 
-local raylib = require("@raylib")
 local PluginLoader = Instance.new("PluginLoader")
 PluginLoader.ExplorerHidden = true
 
 local Schema = require("@Schema")
 
-local function fileExists(path)
-	if fs.stat(path).kind == "none" then
-		return false
-	else
-		return true
+local function parseSemver(v)
+	local major, minor, patch = v:match("^(%d+)%.(%d+)%.(%d+)$")
+	if not major then
+		return nil
 	end
+	return { major = tonumber(major), minor = tonumber(minor), patch = tonumber(patch) }
+end
+
+-- Supports: "1.2.3" (exact), "^1.2.3" (compatible), ">=1.2.3" (minimum)
+local function satisfiesVersion(wanted, got)
+	local gotV = parseSemver(got)
+	if not gotV then
+		return false
+	end
+
+	local op, vstr = wanted:match("^([%^><=~]*)(.+)$")
+	local wantedV = parseSemver(vstr)
+	if not wantedV then
+		return false
+	end
+
+	if op == "^" then
+		-- Same major, got >= wanted
+		return gotV.major == wantedV.major
+			and (gotV.minor > wantedV.minor or (gotV.minor == wantedV.minor and gotV.patch >= wantedV.patch))
+	elseif op == ">=" then
+		return gotV.major > wantedV.major
+			or (gotV.major == wantedV.major and gotV.minor > wantedV.minor)
+			or (gotV.major == wantedV.major and gotV.minor == wantedV.minor and gotV.patch >= wantedV.patch)
+	elseif op == "" or op == "=" then
+		-- Exact match
+		return gotV.major == wantedV.major and gotV.minor == wantedV.minor and gotV.patch == wantedV.patch
+	end
+
+	return false
 end
 
 local plugin_schema = Schema.new({
@@ -26,6 +55,7 @@ local plugin_schema = Schema.new({
 	version = Schema.stringPattern("^%d+%.%d+%.%d+$"),
 	description = Schema.optional(Schema.string()),
 	icon = Schema.optional(Schema.string()),
+	thumbnail = Schema.optional(Schema.string()),
 	homepage = Schema.optional(Schema.url()),
 	repository = Schema.optional(Schema.url()),
 	keywords = Schema.optional(Schema.arrayOf(Schema.string())),
@@ -40,129 +70,270 @@ local plugin_schema = Schema.new({
 })
 
 local loadedPlugins = {}
+local marketplaceCache = nil
+
+local function getMarketplace()
+	if not marketplaceCache then
+		marketplaceCache = PluginLoader.GetPluginsMarketplace()
+	end
+	return marketplaceCache
+end
+
 local kilang = require("@Kilang")
 
 PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 	PluginLoader:SetProperties({
-		LoadPlugin = function(pluginDir)
+
+		LoadPluginDir = function(path)
+			local manifest = fs.readFile(path .. "/manifest.json")
+			local json = serde.json.decode(manifest)
+			local main = fs.readFile(path .. "/" .. json.main, true)
+
+			local success, result = PluginLoader.LoadPluginCode({
+				["manifest.json"] = buffer.fromstring(manifest),
+				[json.main] = main,
+			})
+
+			print("Got result from plugin " .. json.id .. "\n" .. tostring(success) .. "\n" .. tostring(result))
+
+			return success, result
+		end,
+
+		LoadPluginCode = function(files)
+			repeat
+				task.wait()
+			until datamodel.Loaded == true
+
 			local success, result = pcall(function()
-				local manifest_path = pluginDir .. "/manifest.json"
-				if not fileExists(manifest_path) then
-					print("Manifest does not exist")
-					return
+				-- find manifest inside zip
+				local manifestRaw = files["manifest.json"]
+				if not manifestRaw then
+					print("Manifest does not exist in zip")
+					return false
 				end
 
-				local read = fs.readFile(manifest_path)
-				local json = serde.json.decode(read)
-
+				local json = serde.json.decode(buffer.tostring(manifestRaw))
 				if not json then
-					print("File did not decode to json")
-					return
+					print("Failed to decode manifest")
+					return false
 				end
 
-				--[[
-                {
-                    "name": "My Example Plugin",
-                    "id": "devcell.my-example-plugin",
-                    "version": "1.0.0",
-                    "description": "A simple test plugin.",
-                    "icon": "icon.png",
-                    "homepage": "https://github.com/Qquaded/Kinemium-Engine",
-                    "repository": "https://github.com/Qquaded/Kinemium-Engine",
-                    "keywords": [
-                        "test",
-                        "other"
-                    ],
-                    "author": "devcell",
-                    "license": "MIT",
-                    "main": "main.luau",
-                    "engine": {
-                        "minVersion": "1.10.7"
-                    },
-                    "dependencies": {},
-                    "permissions": []
-                }
-            --]]
-
-				local _plugin_name = json.name
-				local _plugin_icon = json.icon
-				local _plugin_id = json.id
-				local _plugin_version = json.version
-				local _plugin_description = json.description
-				local _plugin_homepage = json.homepage
-				local _plugin_repository = json.repository
-				local _plugin_keywords = json.keywords
-				local _plugin_author = json.author
-				local _plugin_license = json.license
-				local _plugin_engine = json.engine
-				local _plugin_dependencies = json.dependencies
-				local _plugin_permissions = json.permissions
+				local plugin_id = json.id
 				local plugin_boot = json.main
 
-				local plugin_main_file = pluginDir .. "/" .. plugin_boot
-
-				if loadedPlugins[_plugin_id] then
+				if loadedPlugins[plugin_id] then
 					print("Plugin already loaded")
-					return
+					return false
 				end
 
-				if _plugin_dependencies then
-					for dep in pairs(_plugin_dependencies) do
+				-- dependency check
+				if json.dependencies then
+					for dep in pairs(json.dependencies) do
 						if not loadedPlugins[dep] then
 							print("Missing dependency: " .. dep)
-							return
+							return false
 						end
 					end
 				end
 
+				-- schema validation
 				local ok, path, err = plugin_schema:validate(json)
 				if not ok then
 					print("Invalid manifest at", path, "-", err)
-					return
+					return false
 				end
 
-				if not fileExists(pluginDir .. "/" .. plugin_boot) then
-					print("Main file does not exist")
-					return
-				end
+				-- resolve deps
+				if json.dependencies then
+					for dep, versionWanted in pairs(json.dependencies) do
+						local existing = loadedPlugins[dep]
 
-				local plugin_boot_read = fs.readFile(plugin_main_file)
+						if existing then
+							local gotVersion = existing.manifest.version
+							if not satisfiesVersion(versionWanted, gotVersion) then
+								print(
+									`Dependency "{dep}" loaded as {gotVersion} but {plugin_id} requires {versionWanted}`
+								)
+								return
+							end
+						else
+							local marketplace = getMarketplace()
+							local depEntry = marketplace[dep]
 
-				local _, success, result = kilang:execute(plugin_boot_read, {
-					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-				})
+							if not depEntry then
+								print(`Missing dependency "{dep}" not found in marketplace`)
+								return
+							end
 
-				if not success then
-					print(`Failed to load plugin {_plugin_id}: {result}`)
-					return
-				else
-					if type(result) ~= "table" then
-						print(`Plugin {_plugin_id} does not return table`)
-						return
-					else
-						if type(result.activate) ~= "function" then
-							print(`Expected function for activate, Got {type(result.activate)}`)
-							return
+							if not satisfiesVersion(versionWanted, depEntry.manifest.version) then
+								print(
+									`Marketplace has "{dep}@{depEntry.manifest.version}" but {plugin_id} requires {versionWanted}`
+								)
+								return
+							end
+
+							local depSuccess, depResult = PluginLoader.DownloadPlugin(depEntry.manifest, true)
+							if not depSuccess then
+								print(`Failed to auto-install dependency "{dep}": {tostring(depResult)}`)
+								return
+							end
 						end
-
-						if type(result.deactivate) ~= "function" then
-							print(`Expected function for deactivate, Got {type(result.deactivate)}`)
-							return
-						end
-
-						result.activate({
-							Renderer = renderer,
-							Signal = signal,
-						})
-						loadedPlugins[_plugin_id] = {
-							manifest = json,
-							module = result,
-							path = pluginDir,
-						}
 					end
 				end
+
+				-- read main file directly from zip
+				local mainPath = plugin_boot
+				local plugin_boot_read = files[mainPath]
+
+				if not plugin_boot_read then
+					print("Main file does not exist in zip:", mainPath)
+					return false
+				end
+
+				local source = buffer.tostring(plugin_boot_read)
+
+				local plugin_require
+
+				local function plugin_run(source)
+					local _, success, result = kilang:execute(source, {
+						SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+					}, {
+						GetFileContents = function(fileName)
+							return files[fileName]
+						end,
+						require = plugin_require,
+					})
+
+					return success, result
+				end
+
+				local requireCache = {}
+
+				plugin_require = function(filePath)
+					if requireCache[filePath] ~= nil then
+						return requireCache[filePath]
+					end
+
+					if filePath:sub(1, 1) == "@" then
+						local rest = filePath:sub(2)
+
+						-- @engine/libname -> engine library via host require
+						local engineLib = rest:match("^engine/(.+)$")
+						if engineLib then
+							local result = require("@" .. engineLib)
+							requireCache[filePath] = result
+							return result
+						end
+
+						-- @pluginid -> inter-plugin require
+						local plugin = loadedPlugins[rest]
+						if plugin then
+							requireCache[filePath] = plugin.module
+							return plugin.module
+						end
+
+						-- fallback to host require
+						return require(filePath)
+					end
+
+					local normalized = filePath:gsub("^%./", "")
+					local file: buffer? = files[normalized]
+
+					if not file then
+						warn(`[PluginLoader] require("{filePath}") -> file not found in plugin bundle`)
+						return nil
+					end
+
+					local ext = normalized:match("%.([^%.]+)$")
+					if ext == "lua" or ext == "luau" then
+						local source = buffer.tostring(file)
+						local result = select(2, plugin_run(source))
+						requireCache[filePath] = result
+						return result
+					else
+						requireCache[filePath] = file
+						return file
+					end
+				end
+
+				local success, result = plugin_run(source)
+
+				if not success then
+					print(`Failed to load plugin {plugin_id}: {result}`)
+					return false
+				end
+
+				if type(result) ~= "table" then
+					print(`Plugin {plugin_id} does not return table`)
+					return false
+				end
+
+				if type(result.activate) ~= "function" then
+					print(`Expected function for activate, got {type(result.activate)}`)
+					return false
+				end
+
+				if type(result.deactivate) ~= "function" then
+					print(`Expected function for deactivate, got {type(result.deactivate)}`)
+					return false
+				end
+
+				result.activate({
+					Renderer = renderer,
+					Signal = signal,
+				})
+
+				loadedPlugins[plugin_id] = {
+					manifest = json,
+					module = result,
+					files = files, -- keep zip in memory
+				}
+
+				return true
 			end)
+
 			return success, result
+		end,
+
+		DownloadPlugin = function(pluginManifest, autoLoad)
+			local downloader = require("@Downloader")
+
+			local function repoToZip(url, refType, ref)
+				local user, repo = url:match("github%.com/([^/]+)/([^/]+)")
+				if not user or not repo then
+					return nil, "Invalid GitHub URL"
+				end
+
+				repo = repo:gsub("%.git$", "")
+
+				refType = refType or "branch"
+				ref = ref or "main"
+
+				local typePath = refType == "tag" and "tags" or "heads"
+
+				return ("https://github.com/%s/%s/archive/refs/%s/%s.zip"):format(user, repo, typePath, ref)
+			end
+
+			local dest = "./plugins/" .. pluginManifest.id .. ".kineplug"
+			local zip = repoToZip(pluginManifest.repository, "branch", "main")
+
+			local downloaded = downloader.download(zip, dest)
+
+			local decoded = libzip.read(downloaded :: buffer)
+			local normalized = {}
+
+			for path, data in pairs(decoded) do
+				local stripped = path:gsub("^[^/]+/", "")
+				normalized[stripped] = data
+			end
+
+			local success, result
+
+			if autoLoad then
+				success, result = PluginLoader.LoadPluginCode(normalized)
+			end
+
+			return success, result, normalized
 		end,
 
 		UnloadPlugin = function(pluginId)
@@ -185,53 +356,74 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 			return loadedPlugins
 		end,
 
+		GetPluginApi = function(id)
+			local plugin = loadedPlugins[id]
+			return plugin and plugin.module or nil
+		end,
+
 		GetPluginsMarketplace = function()
 			local HttpService = datamodel:GetService("HttpService")
 
-			local endpoint = ENGINE_ENDPOINT.MARKETPLACE
-
-			local data = HttpService:GetAsync(endpoint, {
+			local decoded = HttpService:GetAsync(ENGINE_ENDPOINT.MARKETPLACE, {
 				["User-Agent"] = "Kinemium-Engine",
 			})
 
+			decoded = HttpService:JSONDecode(decoded)
+
+			local base64 = zune.serde.base64
+
 			local list = {}
 
-			for _, plugin in ipairs(data.plugins or {}) do
-				local manifest, icon_data
-
-				for _, file in ipairs(plugin.files or {}) do
-					-- manifest.json
-					if file.path == "manifest.json" then
-						local decoded = serde.base64.decode(file.content)
-						local json = serde.json.decode(decoded)
-
-						if json then
-							manifest = json
-
-							-- icon loading (from same dump)
-							if json.icon then
-								for _, f in ipairs(plugin.files) do
-									if f.path == json.icon then
-										icon_data = buffer.fromstring(serde.base64.decode(f.content))
-										break
-									end
-								end
-							end
-						end
-					end
+			for _, entry in ipairs(decoded.plugins or {}) do
+				local manifest = entry.manifest
+				if not manifest or not manifest.id then
+					continue
 				end
 
-				if manifest then
-					list[manifest.id] = {
-						manifest = manifest,
-						icon = icon_data,
-					}
-				end
+				list[manifest.id] = {
+					manifest = manifest,
+					url = entry.url,
+					thumbnail = entry.thumbnail and base64.decode(
+						buffer.fromstring(entry.thumbnail:match("^data:[^;]+;base64,(.+)$") or entry.thumbnail)
+					),
+					icon = entry.icon
+						and base64.decode(buffer.fromstring(entry.icon:match("^data:[^;]+;base64,(.+)$") or entry.icon)),
+				}
 			end
 
 			return list
 		end,
 	})
+
+	task.spawn(function()
+		local entries = zune.fs.entries("./plugins")
+		for _, entry in pairs(entries) do
+			local path = "./plugins/" .. entry.name
+			if entry.kind == "directory" then
+				PluginLoader.LoadPluginDir(path)
+			elseif entry.kind == "file" and string.find(entry.name, ".kineplug") then
+				local contents = fs.readFile(path, true)
+				local decoded = libzip.read(contents)
+				local normalized = {}
+
+				for path, data in pairs(decoded) do
+					local stripped = path:gsub("^[^/]+/", "")
+					normalized[stripped] = data
+				end
+				PluginLoader.LoadPluginCode(normalized)
+			end
+		end
+	end)
+
+	task.spawn(function()
+		repeat
+			task.wait()
+		until datamodel.Loaded == true
+		local pluginArg = GetFlagValue("plugin")
+		if pluginArg then
+			PluginLoader.LoadPluginDir(pluginArg)
+		end
+	end)
 end
 
 return PluginLoader

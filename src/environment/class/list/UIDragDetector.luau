@@ -2,6 +2,7 @@ local Vector2 = require("@Vector2")
 local Vector3 = require("@Vector3")
 local UDim2 = require("@UDim2")
 local raylib = require("@raylib")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local aereon = require("@Aereon")
 local arect = aereon.rect()
@@ -25,7 +26,8 @@ local function getParentMetrics(parent)
 	if parent.AbsoluteSize then
 		parentSize = parent.AbsoluteSize
 	elseif parent.Size and parent.Size.ToPixels then
-		parentSize = parent.Size:ToPixels(Vector2.new(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight()))
+		local dpiScale = raylib.lib.GetWindowScaleDPI()
+		parentSize = parent.Size:ToPixels(Vector2.new(raylib.lib.GetRenderWidth() / dpiScale.x, raylib.lib.GetRenderHeight() / dpiScale.y))
 	end
 
 	return parentAbsPos, parentSize
@@ -58,15 +60,18 @@ return {
 						local newAbsY = mousePos.y - instance.dragOffset.Y
 
 						if instance.RespectScreenBounds then
+							local dpiScale = raylib.lib.GetWindowScaleDPI()
+							local screenW = raylib.lib.GetScreenWidth() / dpiScale.x
+							local screenH = raylib.lib.GetScreenHeight() / dpiScale.y
 							newAbsX = math.clamp(
 								newAbsX,
 								0,
-								raylib.lib.GetScreenWidth() - absoluteSize.X
+								screenW - absoluteSize.X
 							)
 							newAbsY = math.clamp(
 								newAbsY,
 								0,
-								raylib.lib.GetScreenHeight() - absoluteSize.Y
+								screenH - absoluteSize.Y
 							)
 						end
 
@@ -84,7 +89,7 @@ return {
 							relativeY - scaleYOffset
 						)
 
-						raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
+						MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_RESIZE_ALL)
 					end
 
 					local new = arect.new(absolutePosition.X, absolutePosition.Y, absoluteSize.X, absoluteSize.Y)
@@ -98,7 +103,7 @@ return {
 							instance.isDragging = true
 						elseif raylib.lib.IsMouseButtonReleased(0) == 1 then
 							instance.isDragging = false
-							raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+							MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 						end
 					end
 				end

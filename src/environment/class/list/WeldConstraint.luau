@@ -1,5 +1,3 @@
-local Vector3 = require("@Vector3")
-local CFrame = require("@CFrame")
 local NetworkOwnership = require("../../game/services/ReplicatorService/NetworkOwnership")
 
 local propTable = {

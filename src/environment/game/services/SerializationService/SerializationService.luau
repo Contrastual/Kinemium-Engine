@@ -49,7 +49,31 @@ local TYPE_DESERIALIZERS = {
 		end
 		return item
 	end,
+	Content = function(v)
+		-- Content payloads from imported blobs may arrive either as a raw URI
+		-- string, an instance reference, or a typed Content table. Normalize to
+		-- the engine-friendly shape to avoid warning spam and heavy log churn.
+		if type(v) ~= "table" then
+			return v
+		end
+
+		local objectRef = v.Object
+		if type(objectRef) == "table" and objectRef.__ref then
+			return objectRef
+		end
+		if objectRef ~= nil then
+			return objectRef
+		end
+
+		if type(v.Uri) == "string" then
+			return v.Uri
+		end
+
+		return nil
+	end,
 }
+
+local warnedUnknownTypeTags = {}
 
 for name, datatype in pairs(Datatypes) do
 	if datatype.FromTable then
@@ -234,7 +258,11 @@ local function deserialize_value(v)
 		if deserializer then
 			return deserializer(v)
 		else
-			warn("Unknown type tag during deserialization: " .. tostring(v.type))
+			local typeTag = tostring(v.type)
+			if not warnedUnknownTypeTags[typeTag] then
+				warn("Unknown type tag during deserialization: " .. typeTag)
+				warnedUnknownTypeTags[typeTag] = true
+			end
 			return v
 		end
 	end

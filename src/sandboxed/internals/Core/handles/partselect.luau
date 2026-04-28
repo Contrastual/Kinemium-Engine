@@ -67,12 +67,19 @@ RunService.RenderStepped:Connect(function()
 			draggedObject = nil
 			mouse.TargetFilter = {}
 			ishared.ForceMoveObject = true
+			ishared.MouseDragging = false
+			if ishared.Update3DHandles then
+				ishared.Update3DHandles()
+			end
 		end
 
 		return
 	end
 
 	if UserInputService:IsMouseButtonDown(Enum.MouseButton.Left) then
+		if ishared.isToolsActive then
+			return
+		end
 		if mouse.Target and mouse.Target:IsA("BasePart") then
 			if mouse.Target.Size.X > 200 or mouse.Target.Size.Y > 200 or mouse.Target.Size.Z > 200 then
 				return
@@ -80,19 +87,33 @@ RunService.RenderStepped:Connect(function()
 			if mouse.Target.Transparency > 0.3 then
 				return
 			end
+			if Selection.Get()[1] and Selection.Get()[1]:IsA("Model") then
+				if mouse.Target:IsDescendantOf(Selection.Get()[1]) then
+					return
+				end
+			end
 
 			dragging = true
 			draggedObject = mouse.Target
 			mouse.TargetFilter = { draggedObject }
 			rotationCF = draggedObject.CFrame - draggedObject.CFrame.Position
 			Selection.Add(draggedObject)
+			ishared.MouseDragging = true
 			ishared.ForceMoveObject = false
 		end
 	end
 
 	if mouse.Target then
+		if ishared.isToolsActive then
+			return
+		end
 		if mouse.Target.BaseClass ~= "BasePart" then
 			return
+		end
+		if Selection.Get()[1] and Selection.Get()[1]:IsA("Model") then
+			if mouse.Target:IsDescendantOf(Selection.Get()[1]) then
+				return
+			end
 		end
 		if mouse.Target.Size.X > 200 or mouse.Target.Size.Y > 200 or mouse.Target.Size.Z > 200 then
 			return

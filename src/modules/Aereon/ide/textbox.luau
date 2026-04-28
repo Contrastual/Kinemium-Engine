@@ -2,6 +2,7 @@ local rl = require("@raylib")
 local ideBuffer = require("./idebuffer")
 local EnumMap = require("@EnumMap")
 local Color3 = require("@Color3")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local structs = rl.structs
 local const = rl.const
@@ -194,7 +195,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.BorderTransparency = config.BorderTransparency or 0
 		self.TextColor = config.TextColor
 
-		-- Configuration
 		self.multiline = false
 		self.placeholder = config.placeholder or ""
 		self.fontSize = config.fontSize or 16
@@ -275,7 +275,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.keyRepeatConfig = {
 			initialDelay = config.keyRepeatInitialDelay or 0.5, -- seconds before acceleration starts
 			minInterval = config.keyRepeatMinInterval or 0.02, -- fastest repeat interval
-			acceleration = config.keyRepeatAcceleration or 0.85, -- multiply interval by this each repeat
+			acceleration = config.keyRepeatAcceleration or 0.01, -- multiply interval by this each repeat
 		}
 
 		-- Slider state
@@ -283,18 +283,17 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		self.sliderValue = config.defaultValue or config.sliderMin or 0
 
 		-- Theme
-		local default_theme = theme.ide
-			or {
-				BackgroundColor = Color3.new(0.07, 0.07, 0.07),
-				TextColor = Color3.new(1, 1, 1),
-				PlaceholderColor = Color3.new(0.5, 0.5, 0.5),
-				SelectionColor = Color3.new(0, 0.4, 0.8),
-				BorderColor = Color3.new(0.3, 0.3, 0.3),
-				currentLineColor = Color3.new(0.1, 0.1, 0.1),
-				ErrorColor = Color3.new(1, 0.2, 0.2),
-				MatchBracketColor = Color3.new(1, 1, 0),
-				SearchHighlightColor = Color3.new(1, 0.8, 0),
-			}
+		local default_theme = {
+			BackgroundColor = Color3.new(0.07, 0.07, 0.07),
+			TextColor = Color3.new(1, 1, 1),
+			PlaceholderColor = Color3.new(0.5, 0.5, 0.5),
+			SelectionColor = Color3.new(0, 0.4, 0.8),
+			BorderColor = Color3.new(0.3, 0.3, 0.3),
+			currentLineColor = Color3.new(0.1, 0.1, 0.1),
+			ErrorColor = Color3.new(1, 0.2, 0.2),
+			MatchBracketColor = Color3.new(1, 1, 0),
+			SearchHighlightColor = Color3.new(1, 0.8, 0),
+		}
 
 		self.theme = {
 			background = (config.backgroundColor or default_theme.BackgroundColor):ToRaylib(
@@ -313,7 +312,6 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			statusBarBackground = (config.statusBarBackgroundColor or Color3.new(0.05, 0.05, 0.05)):ToRaylib(0),
 			popupBackground = (config.popupBackgroundColor or Color3.new(0.1, 0.1, 0.1)):ToRaylib(0),
 			shadow = (config.shadowColor or Color3.new(0, 0, 0)):ToRaylib(self.shadowTransparency),
-			-- New theme colors
 			hyperlink = (config.hyperlinkColor or Color3.new(0.3, 0.5, 1)):ToRaylib(0),
 			scrollbar = (config.scrollbarColor or Color3.new(0.3, 0.3, 0.3)):ToRaylib(0),
 			scrollbarHover = (config.scrollbarHoverColor or Color3.new(0.4, 0.4, 0.4)):ToRaylib(0),
@@ -2104,7 +2102,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 		-- Set cursor
 		if isInBounds then
-			raylib.SetMouseCursor(EnumMap.KinemiumMouseCursor.MOUSE_CURSOR_IBEAM.Value)
+			MouseCursor.request(EnumMap.KinemiumMouseCursor.MOUSE_CURSOR_IBEAM.Value)
 		end
 
 		-- Handle keyboard input
@@ -2327,47 +2325,52 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 		end
 
+		local function getRepeatInterval(repeatCount)
+			if repeatCount <= 0 then
+				return self.keyRepeat.initialDelay
+			end
+
+			return math.max(
+				self.keyRepeat.minInterval,
+				self.keyRepeat.initialDelay * (self.keyRepeat.acceleration ^ repeatCount)
+			)
+		end
+
 		-- Backspace with acceleration
-		if raylib.IsKeyDown(const.KeyboardKey.KEY_BACKSPACE) == 1 then
+		local backspacePressed = raylib.IsKeyPressed(const.KeyboardKey.KEY_BACKSPACE) == 1
+		local backspaceDown = raylib.IsKeyDown(const.KeyboardKey.KEY_BACKSPACE) == 1
+		if backspacePressed or backspaceDown then
 			local currentTime = os.clock()
-			local timeSinceLast = currentTime - self.keyRepeat.lastBackspaceTime
 			local shouldDelete = false
 
 			-- Handle selection deletion on first press
-			if self.buffer.selection.active then
+			if self.buffer.selection.active and backspacePressed then
 				self:saveHistory()
 				self.buffer:deleteSelection()
+				self.keyRepeat.lastBackspaceTime = currentTime
+				self.keyRepeat.backspaceCount = 0
 				if self.onChange then
 					self.onChange(self:getText())
 				end
 				self:validate()
 				self:updateAutocomplete()
 			else
-				-- Initial delay before acceleration starts
-				if self.keyRepeat.backspaceCount == 0 then
-					if timeSinceLast > self.keyRepeat.initialDelay then
-						shouldDelete = true
-						self.keyRepeat.backspaceCount = 1
-					end
-				else
-					-- Calculate accelerated interval
-					local interval = self.keyRepeat.minInterval
-					for i = 1, self.keyRepeat.backspaceCount do
-						interval = interval / self.keyRepeat.acceleration
-					end
-					interval = math.max(interval, self.keyRepeat.minInterval)
-
-					if timeSinceLast > interval then
+				if backspacePressed then
+					shouldDelete = true
+					self.keyRepeat.backspaceCount = 0
+				elseif backspaceDown then
+					local interval = getRepeatInterval(self.keyRepeat.backspaceCount)
+					local timeSinceLast = currentTime - self.keyRepeat.lastBackspaceTime
+					if timeSinceLast >= interval then
 						shouldDelete = true
 						self.keyRepeat.backspaceCount = self.keyRepeat.backspaceCount + 1
 					end
 				end
 
-				self.keyRepeat.lastBackspaceTime = currentTime
-
 				if shouldDelete then
 					self:saveHistory()
 					self.buffer:backspace()
+					self.keyRepeat.lastBackspaceTime = currentTime
 					if self.onChange then
 						self.onChange(self:getText())
 					end
@@ -2376,50 +2379,45 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				end
 			end
 		else
-			-- Reset backspace count when key is released
+			-- Reset backspace repeat state when key is released
 			self.keyRepeat.backspaceCount = 0
+			self.keyRepeat.lastBackspaceTime = 0
 		end
 
 		-- Delete key with acceleration
-		if raylib.IsKeyDown(const.KeyboardKey.KEY_DELETE) == 1 then
+		local deletePressed = raylib.IsKeyPressed(const.KeyboardKey.KEY_DELETE) == 1
+		local deleteDown = raylib.IsKeyDown(const.KeyboardKey.KEY_DELETE) == 1
+		if deletePressed or deleteDown then
 			local currentTime = os.clock()
-			local timeSinceLast = currentTime - self.keyRepeat.lastDeleteTime
 			local shouldDelete = false
 
 			-- Handle selection deletion on first press
-			if self.buffer.selection.active then
+			if self.buffer.selection.active and deletePressed then
 				self:saveHistory()
 				self.buffer:deleteSelection()
+				self.keyRepeat.lastDeleteTime = currentTime
+				self.keyRepeat.deleteCount = 0
 				if self.onChange then
 					self.onChange(self:getText())
 				end
 				self:validate()
 			else
-				-- Initial delay before acceleration starts
-				if self.keyRepeat.deleteCount == 0 then
-					if timeSinceLast > self.keyRepeat.initialDelay then
-						shouldDelete = true
-						self.keyRepeat.deleteCount = 1
-					end
-				else
-					-- Calculate accelerated interval
-					local interval = self.keyRepeat.minInterval
-					for i = 1, self.keyRepeat.deleteCount do
-						interval = interval / self.keyRepeat.acceleration
-					end
-					interval = math.max(interval, self.keyRepeat.minInterval)
-
-					if timeSinceLast > interval then
+				if deletePressed then
+					shouldDelete = true
+					self.keyRepeat.deleteCount = 0
+				elseif deleteDown then
+					local interval = getRepeatInterval(self.keyRepeat.deleteCount)
+					local timeSinceLast = currentTime - self.keyRepeat.lastDeleteTime
+					if timeSinceLast >= interval then
 						shouldDelete = true
 						self.keyRepeat.deleteCount = self.keyRepeat.deleteCount + 1
 					end
 				end
 
-				self.keyRepeat.lastDeleteTime = currentTime
-
 				if shouldDelete then
 					self:saveHistory()
 					self.buffer:delete()
+					self.keyRepeat.lastDeleteTime = currentTime
 					if self.onChange then
 						self.onChange(self:getText())
 					end
@@ -2427,8 +2425,9 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				end
 			end
 		else
-			-- Reset delete count when key is released
+			-- Reset delete repeat state when key is released
 			self.keyRepeat.deleteCount = 0
+			self.keyRepeat.lastDeleteTime = 0
 		end
 
 		-- Escape key

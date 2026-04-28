@@ -7,7 +7,7 @@ local signal = require("@Kinemium.signal")
 local Plugin = Instance.new("Plugin")
 local lib = raylib.lib
 local structs = raylib.structs
-local arect = require("@arect")(lib)
+local arect = require("@arect")
 
 local NON_WIDGET_KEYS = {
 	notify = true,
@@ -469,7 +469,7 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 		local function attachFriendlyWidgetApi(widget, widgetType, events)
 			widget.Events = events or {}
 
-			for name, eventSignal in pairs(widget.Events) do
+			for name, eventSignal in pairs(widget.Events or {}) do
 				widget[name] = eventSignal
 			end
 
@@ -710,7 +710,6 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 				blurOnSubmit = config.blurOnSubmit,
 				clearOnEscape = config.clearOnEscape,
 				escapeBlurs = config.escapeBlurs,
-				onChange = config.onChange,
 				onSubmit = config.onSubmit,
 				onFocus = config.onFocus,
 				onBlur = config.onBlur,
@@ -776,10 +775,7 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 					textbox.fontSize = value or textbox.fontSize
 					return wrapper
 				end
-				if prop == "onChange" or prop == "onSubmit" or prop == "onFocus" or prop == "onBlur" then
-					textbox[prop] = value
-					return wrapper
-				end
+
 				if applyThemeColor(prop, value) then
 					return wrapper
 				end
@@ -876,6 +872,7 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 				order = options.order or options.zindex or normalizedConfig.zindex or 0,
 				destroyed = false,
 				_parentList = nil,
+				Events = events,
 			}
 
 			function widget:_mountTo(list)

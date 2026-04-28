@@ -15,7 +15,7 @@ function kilang:init(cam)
 	return CEnv
 end
 
-function kilang:execute(code, opts)
+function kilang:execute(code, opts, env_other)
 	opts = opts or {}
 	local superset = opts.superset or "kilang"
 
@@ -33,6 +33,10 @@ function kilang:execute(code, opts)
 		id = "stack" .. math.random(0, 9999)
 	end
 
+	for k, v in pairs(env_other or {}) do
+		sandboxer.environment[k] = v
+	end
+
 	sandboxer.environment.SecurityCapabilities = SecurityCapabilities
 
 	local thread, success, result = sandboxer.thread.fromCode(id, code, sandboxer.environment)
@@ -40,7 +44,7 @@ function kilang:execute(code, opts)
 		threads[id] = thread
 	end
 
-	return id, success, result
+	return id, success, result, thread
 end
 
 return kilang

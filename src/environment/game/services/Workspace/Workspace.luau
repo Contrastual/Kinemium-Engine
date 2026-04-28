@@ -18,6 +18,11 @@ local CHUNK_SIZE = 32
 local chunks = {}
 local chunkList = {}
 local largeParts = {}
+local TRANSPARENCY_EPSILON = 0.001
+
+local function isPartOpaque(part)
+	return (part.Transparency or 0) <= TRANSPARENCY_EPSILON
+end
 
 local function worldToChunk(pos)
 	if not pos then
@@ -59,7 +64,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		PhysicsEngine = Enum.PhysicsEngine.Default, -- jolt
 
 		-- rendering
-		MAX_VIEW_DISTANCE = 40000,
+		MAX_VIEW_DISTANCE = 2000,
 		UseGpuInstancing = true,
 		MinInstancesPerBatch = 2,
 		EnableViewFrustumCulling = true,
@@ -68,10 +73,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		VisibilityRefreshDotThreshold = 0.9925,
 		EnableDefaultPlayerMenu = true,
 
-		ChunkRebuildBudget = 12,
-		ChunkInstanceUpdateBudget = 32,
+		ChunkRebuildTimeLimit = 0.012,
 
-		LODEnabled = false,
+		LODEnabled = true,
 		LOD1Distance = 60,
 		LOD2Distance = 150,
 		LOD3Distance = 400,
@@ -80,12 +84,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		LOD3MinSize = 16,
 
 		IsInPool = function(part)
-			for i, v in pairs(pool) do
-				if v == part then
-					return true
-				end
-			end
-			return false
+			return pool[part.UniqueId] ~= nil
 		end,
 
 		GetPoolCount = function()
@@ -173,6 +172,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		rawset(part, "__workspaceChunk", chunk)
 		rawset(part, "__workspaceChunkKey", key)
 		rawset(part, "__workspaceChunkIndex", #chunk.parts)
+		rawset(part, "__workspaceOpaque", isPartOpaque(part))
 
 		if part.Size and math.max(part.Size.X, part.Size.Y, part.Size.Z) > CHUNK_SIZE then
 			largeParts[#largeParts + 1] = part
@@ -224,6 +224,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		rawset(part, "__workspaceChunk", nil)
 		rawset(part, "__workspaceChunkKey", nil)
 		rawset(part, "__workspaceChunkIndex", nil)
+		rawset(part, "__workspaceOpaque", nil)
 
 		local largeIdx = rawget(part, "__workspaceLargeIndex")
 		if largeIdx then
@@ -275,12 +276,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local conn = part.Changed:Connect(function(prop)
 			if prop == "Position" or prop == "CFrame" then
 				updatePartChunk(part)
-				-- Invalidate cached transform matrix and per-part raycast AABB
-				-- (position/rotation changed).
-				rawset(part, "__cachedMatrix", nil)
+				rawset(part, "__matrixDirty", true)
 				rawset(part, "__partAABB", nil)
-				-- For batched parts, mark the batch instance data as dirty so
-				-- the GPU buffer is refreshed with the new position/rotation.
 				local batch = rawget(part, "__workspaceBatch")
 				if batch then
 					batch.instancesDirty = true
@@ -289,11 +286,9 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 
 			if prop == "Size" then
-				rawset(part, "__cachedMaterial", nil)
-				rawset(part, "__cachedMatrix", nil)
+				rawset(part, "__materialDirty", true)
+				rawset(part, "__matrixDirty", true)
 				rawset(part, "__partAABB", nil)
-				-- Batched parts need GPU buffer refresh; singleParts use the
-				-- material/matrix cache which was just cleared above.
 				local batch = rawget(part, "__workspaceBatch")
 				if batch then
 					batch.instancesDirty = true
@@ -303,7 +298,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 					end
 				end
 			elseif prop == "Color" or prop == "Transparency" then
-				rawset(part, "__cachedMaterial", nil)
+				rawset(part, "__materialDirty", true)
+				if prop == "Transparency" then
+					local chunk = rawget(part, "__workspaceChunk")
+					local wasOpaque = rawget(part, "__workspaceOpaque")
+					local isOpaqueNow = isPartOpaque(part)
+					rawset(part, "__workspaceOpaque", isOpaqueNow)
+					if wasOpaque ~= isOpaqueNow then
+						markChunkDirty(chunk, true)
+						return
+					end
+				end
 				-- Same: only GPU update needed for batched parts.
 				local batch = rawget(part, "__workspaceBatch")
 				if batch then
@@ -315,8 +320,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				end
 			elseif prop == "Material" or prop == "Shape" or prop == "MeshObject" or prop == "Destroyed" then
 				markChunkDirty(rawget(part, "__workspaceChunk"), true)
-				rawset(part, "__cachedMaterial", nil)
-				rawset(part, "__cachedMatrix", nil)
+				rawset(part, "__materialDirty", true)
+				rawset(part, "__matrixDirty", true)
 			end
 		end)
 
@@ -339,8 +344,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	--
 	-- No trig at all inside the per-chunk loop; only five dot products.
 	local function chunkVisible(chunk, camPos, maxDist, frustum)
-		local toCenter = chunk.center - camPos
-		local distSq = toCenter:MagnitudeSquared()
+		local dx = chunk.center.X - camPos.X
+		local dy = chunk.center.Y - camPos.Y
+		local dz = chunk.center.Z - camPos.Z
+		local distSq = dx * dx + dy * dy + dz * dz
 		local r = chunk.boundsRadius + (chunk.maxPartSize or 0) * 0.866
 		local maxReach = maxDist + r
 		if distSq > maxReach * maxReach then
@@ -358,21 +365,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		end
 
 		-- Behind-camera rejection (no trig).
-		if frustum.forward:Dot(toCenter) < -r then
+		if (frustum.forward.X * dx + frustum.forward.Y * dy + frustum.forward.Z * dz) < -r then
 			return false
 		end
 
 		-- Four frustum-plane tests using precomputed inward normals.
-		if frustum.nRight:Dot(toCenter) < -r then
+		if (frustum.nRight.X * dx + frustum.nRight.Y * dy + frustum.nRight.Z * dz) < -r then
 			return false
 		end
-		if frustum.nLeft:Dot(toCenter) < -r then
+		if (frustum.nLeft.X * dx + frustum.nLeft.Y * dy + frustum.nLeft.Z * dz) < -r then
 			return false
 		end
-		if frustum.nTop:Dot(toCenter) < -r then
+		if (frustum.nTop.X * dx + frustum.nTop.Y * dy + frustum.nTop.Z * dz) < -r then
 			return false
 		end
-		if frustum.nBottom:Dot(toCenter) < -r then
+		if (frustum.nBottom.X * dx + frustum.nBottom.Y * dy + frustum.nBottom.Z * dz) < -r then
 			return false
 		end
 
@@ -387,6 +394,14 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local INSTANCE_ROTATION_STRIDE = 16 -- quat (f32 x4)
 	local INSTANCE_SCALE_STRIDE = 12 -- vec3 (f32 x3)
 	local INSTANCE_COLOR_STRIDE = 4 -- rgba8
+	local R3D_CULL_BACK = 1
+	local OFF_MATERIAL_ALBEDO = r3d.structs.R3D_Material:offset("albedo")
+	local OFF_MATERIAL_TRANSPARENCY_MODE = r3d.structs.R3D_Material:offset("transparencyMode")
+	local OFF_MATERIAL_CULL_MODE = r3d.structs.R3D_Material:offset("cullMode")
+	local OFF_MATERIAL_UVSCALE = r3d.structs.R3D_Material:offset("uvScale")
+	local OFF_ALBEDO_COLOR = r3d.structs.R3D_AlbedoMap:offset("color")
+	local SIZE_MATERIAL = r3d.structs.R3D_Material:size()
+	local SIZE_ALBEDO = r3d.structs.R3D_AlbedoMap:size()
 	local INSTANCE_FLAGS = bit32.bor(
 		const.R3D_INSTANCE_POSITION,
 		const.R3D_INSTANCE_ROTATION,
@@ -438,14 +453,18 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	local function visitSubtree(root, callback)
-		if not root then
-			return
-		end
-
-		callback(root)
-
-		for _, child in ipairs(root:GetChildren()) do
-			visitSubtree(child, callback)
+		local stack = { root }
+		local top = 1
+		while top > 0 do
+			local node = stack[top]
+			stack[top] = nil
+			top -= 1
+			callback(node)
+			local children = node:GetChildren()
+			for i = 1, #children do
+				top += 1
+				stack[top] = children[i]
+			end
 		end
 	end
 
@@ -487,7 +506,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	Workspace.DescendantAdded:Connect(function(v)
-		visitSubtree(v, registerWorkspaceObject)
+		local startTime = os.clock()
+		local count = 0
+		visitSubtree(v, function(child)
+			count += 1
+			registerWorkspaceObject(child)
+		end)
+		if count > 50 then
+			print(
+				string.format(
+					"[Workspace] Registered %d descendants in %.2f ms",
+					count,
+					(os.clock() - startTime) * 1000
+				)
+			)
+		end
 	end)
 
 	Workspace.DescendantRemoving:Connect(function(v)
@@ -591,23 +624,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	end
 
 	local function getInstancedMaterial(materialName)
-		-- local cached = instancedMaterialCache[materialName]
-		-- if cached then
-		-- 	return cached
-		-- end
-
-		-- local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
-		-- if not matData then
-		-- 	return nil
-		-- end
-
-		-- local material = buffer.create(r3d.structs.R3D_Material:size())
-		-- buffer.copy(material, 0, matData.material, 0, r3d.structs.R3D_Material:size())
-		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
-		-- buffer.writei32(material, r3d.structs.R3D_Material:offset("cullMode"), 1)
-
-		-- instancedMaterialCache[materialName] = material
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		if not matData then
+			return nil
+		end
 		return matData.material
 	end
 
@@ -641,9 +661,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		-- changes (invalidated via watchRenderablePart). For static/anchored maps
 		-- this eliminates the matrix decompose + multiply every frame.
 		local matrix = rawget(part, "__cachedMatrix")
-		if not matrix then
+		local isMatrixDirty = rawget(part, "__matrixDirty")
+		if not matrix or isMatrixDirty then
 			matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 			rawset(part, "__cachedMatrix", matrix)
+			rawset(part, "__matrixDirty", false)
 		end
 
 		-- Cache the combined material buffer per-part. Only rebuilt when Color,
@@ -651,30 +673,33 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		-- For a 1000-part map at 60fps this eliminates ~120,000 buffer.create()
 		-- calls per second down to 0 for static geometry.
 		local tmpMaterial = rawget(part, "__cachedMaterial")
-		if not tmpMaterial then
-			local tmpAlbedo = buffer.create(r3d.structs.R3D_AlbedoMap:size())
-			buffer.copy(
-				tmpAlbedo,
-				0,
-				matData.material,
-				r3d.structs.R3D_Material:offset("albedo"),
-				r3d.structs.R3D_AlbedoMap:size()
-			)
-			buffer.copy(
-				tmpAlbedo,
-				r3d.structs.R3D_AlbedoMap:offset("color"),
-				part.Color:ToRaylib(part.Transparency or 0)
+		local tmpAlbedo = rawget(part, "__cachedAlbedo")
+		local isMaterialDirty = rawget(part, "__materialDirty")
+		if not tmpMaterial or not tmpAlbedo or isMaterialDirty then
+			if not tmpAlbedo then
+				tmpAlbedo = buffer.create(SIZE_ALBEDO)
+				rawset(part, "__cachedAlbedo", tmpAlbedo)
+			end
+			buffer.copy(tmpAlbedo, 0, matData.material, OFF_MATERIAL_ALBEDO, SIZE_ALBEDO)
+			buffer.copy(tmpAlbedo, OFF_ALBEDO_COLOR, part.Color:ToRaylib(part.Transparency or 0))
+
+			if not tmpMaterial then
+				tmpMaterial = buffer.create(SIZE_MATERIAL)
+				rawset(part, "__cachedMaterial", tmpMaterial)
+			end
+			buffer.copy(tmpMaterial, 0, matData.material, 0, SIZE_MATERIAL)
+			buffer.copy(tmpMaterial, OFF_MATERIAL_ALBEDO, tmpAlbedo)
+			buffer.writei32(
+				tmpMaterial,
+				OFF_MATERIAL_TRANSPARENCY_MODE,
+				isPartOpaque(part) and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
 			)
 
-			tmpMaterial = buffer.create(r3d.structs.R3D_Material:size())
-			buffer.copy(tmpMaterial, 0, matData.material, 0, r3d.structs.R3D_Material:size())
-			buffer.copy(tmpMaterial, r3d.structs.R3D_Material:offset("albedo"), tmpAlbedo)
-			buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("transparencyMode"), 1)
-			buffer.writei32(tmpMaterial, r3d.structs.R3D_Material:offset("cullMode"), 1)
+			buffer.writei32(tmpMaterial, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
 
 			local size = part.Size
-			buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale"), size.X)
-			buffer.writef32(tmpMaterial, r3d.structs.R3D_Material:offset("uvScale") + 4, size.Z)
+			buffer.writef32(tmpMaterial, OFF_MATERIAL_UVSCALE, size.X)
+			buffer.writef32(tmpMaterial, OFF_MATERIAL_UVSCALE + 4, size.Z)
 
 			local materialShader = mtsh_sh[materialName]
 			local applyPerObject = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
@@ -682,14 +707,27 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				applyPerObject(part, tmpAlbedo, tmpMaterial)
 			end
 
-			rawset(part, "__cachedMaterial", tmpMaterial)
+			rawset(part, "__materialDirty", false)
 		end
 
-		renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix, function()
-			rlib.R3D_BeginCluster(r3dAABB)
-		end, function()
-			rlib.R3D_EndCluster()
-		end)
+		renderer.MeshPool.DrawMesh(mesh, tmpMaterial, matrix)
+	end
+
+	local globalPositionBuffer = buffer.create(1024 * INSTANCE_POSITION_STRIDE)
+	local globalRotationBuffer = buffer.create(1024 * INSTANCE_ROTATION_STRIDE)
+	local globalScaleBuffer = buffer.create(1024 * INSTANCE_SCALE_STRIDE)
+	local globalColorBuffer = buffer.create(1024 * INSTANCE_COLOR_STRIDE)
+	local globalBufferCapacity = 1024
+
+	local function ensureGlobalBufferCapacity(count)
+		if count > globalBufferCapacity then
+			local newCapacity = count * 2
+			globalPositionBuffer = buffer.create(newCapacity * INSTANCE_POSITION_STRIDE)
+			globalRotationBuffer = buffer.create(newCapacity * INSTANCE_ROTATION_STRIDE)
+			globalScaleBuffer = buffer.create(newCapacity * INSTANCE_SCALE_STRIDE)
+			globalColorBuffer = buffer.create(newCapacity * INSTANCE_COLOR_STRIDE)
+			globalBufferCapacity = newCapacity
+		end
 	end
 
 	local function uploadBatchInstances(batch)
@@ -783,10 +821,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				pcall(rlib.R3D_UnmapInstances, batch.instanceBuffer, mappedFlags)
 			end
 
-			local positionBuffer = buffer.create(count * INSTANCE_POSITION_STRIDE)
-			local rotationBuffer = buffer.create(count * INSTANCE_ROTATION_STRIDE)
-			local scaleBuffer = buffer.create(count * INSTANCE_SCALE_STRIDE)
-			local colorBuffer = buffer.create(count * INSTANCE_COLOR_STRIDE)
+			ensureGlobalBufferCapacity(count)
 
 			local parts = batch.parts
 			for i = 1, count do
@@ -800,33 +835,45 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				local alpha = math.clamp(math.floor(255 * (1 - (part.Transparency or 0))), 0, 255)
 
 				local pOffset = (i - 1) * INSTANCE_POSITION_STRIDE
-				buffer.writef32(positionBuffer, pOffset, position.X)
-				buffer.writef32(positionBuffer, pOffset + 4, position.Y)
-				buffer.writef32(positionBuffer, pOffset + 8, position.Z)
+				buffer.writef32(globalPositionBuffer, pOffset, position.X)
+				buffer.writef32(globalPositionBuffer, pOffset + 4, position.Y)
+				buffer.writef32(globalPositionBuffer, pOffset + 8, position.Z)
 
 				local rOffset = (i - 1) * INSTANCE_ROTATION_STRIDE
-				buffer.writef32(rotationBuffer, rOffset, qx)
-				buffer.writef32(rotationBuffer, rOffset + 4, qy)
-				buffer.writef32(rotationBuffer, rOffset + 8, qz)
-				buffer.writef32(rotationBuffer, rOffset + 12, qw)
+				buffer.writef32(globalRotationBuffer, rOffset, qx)
+				buffer.writef32(globalRotationBuffer, rOffset + 4, qy)
+				buffer.writef32(globalRotationBuffer, rOffset + 8, qz)
+				buffer.writef32(globalRotationBuffer, rOffset + 12, qw)
 
 				local sOffset = (i - 1) * INSTANCE_SCALE_STRIDE
-				buffer.writef32(scaleBuffer, sOffset, size.X)
-				buffer.writef32(scaleBuffer, sOffset + 4, size.Y)
-				buffer.writef32(scaleBuffer, sOffset + 8, size.Z)
+				buffer.writef32(globalScaleBuffer, sOffset, size.X)
+				buffer.writef32(globalScaleBuffer, sOffset + 4, size.Y)
+				buffer.writef32(globalScaleBuffer, sOffset + 8, size.Z)
 
 				local cOffset = (i - 1) * INSTANCE_COLOR_STRIDE
-				buffer.writeu8(colorBuffer, cOffset, r)
-				buffer.writeu8(colorBuffer, cOffset + 1, g)
-				buffer.writeu8(colorBuffer, cOffset + 2, b)
-				buffer.writeu8(colorBuffer, cOffset + 3, alpha)
+				buffer.writeu8(globalColorBuffer, cOffset, r)
+				buffer.writeu8(globalColorBuffer, cOffset + 1, g)
+				buffer.writeu8(globalColorBuffer, cOffset + 2, b)
+				buffer.writeu8(globalColorBuffer, cOffset + 3, alpha)
 			end
 
 			okUpload = pcall(function()
-				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_POSITION, 0, count, positionBuffer)
-				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_ROTATION, 0, count, rotationBuffer)
-				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_SCALE, 0, count, scaleBuffer)
-				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_COLOR, 0, count, colorBuffer)
+				rlib.R3D_UploadInstances(
+					batch.instanceBuffer,
+					const.R3D_INSTANCE_POSITION,
+					0,
+					count,
+					globalPositionBuffer
+				)
+				rlib.R3D_UploadInstances(
+					batch.instanceBuffer,
+					const.R3D_INSTANCE_ROTATION,
+					0,
+					count,
+					globalRotationBuffer
+				)
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_SCALE, 0, count, globalScaleBuffer)
+				rlib.R3D_UploadInstances(batch.instanceBuffer, const.R3D_INSTANCE_COLOR, 0, count, globalColorBuffer)
 			end)
 		end
 
@@ -861,6 +908,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		chunk.instanceDataDirty = false
 	end
 
+	local globalSeenTransforms = {}
+
 	local function rebuildChunkBatches(chunk)
 		unloadChunkBatches(chunk)
 		chunk.batches = {}
@@ -875,7 +924,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		-- The key encodes position and size to 0.01-stud precision and rotation
 		-- (via quaternion) to 0.001 precision. q and -q are the same rotation
 		-- so we normalise the sign before hashing.
-		local seenTransforms = {}
+		table.clear(globalSeenTransforms)
 
 		for i = 1, #chunk.parts do
 			local part = chunk.parts[i]
@@ -895,30 +944,22 @@ Workspace.InitRenderer = function(renderer, signal, game)
 					qx, qy, qz, qw = -qx, -qy, -qz, -qw
 				end
 				local f = math.floor
-				local key = f(pos.X * 100 + 0.5)
+				local key = f(pos.X * 10)
 					.. ","
-					.. f(pos.Y * 100 + 0.5)
+					.. f(pos.Y * 10)
 					.. ","
-					.. f(pos.Z * 100 + 0.5)
+					.. f(pos.Z * 10)
 					.. ","
-					.. f(sz.X * 100 + 0.5)
+					.. f(sz.X * 10)
 					.. ","
-					.. f(sz.Y * 100 + 0.5)
+					.. f(sz.Y * 10)
 					.. ","
-					.. f(sz.Z * 100 + 0.5)
-					.. ","
-					.. f(qx * 1000 + 0.5)
-					.. ","
-					.. f(qy * 1000 + 0.5)
-					.. ","
-					.. f(qz * 1000 + 0.5)
-					.. ","
-					.. f(qw * 1000 + 0.5)
-				if seenTransforms[key] then
+					.. f(sz.Z * 10)
+				if globalSeenTransforms[key] then
 					rawset(part, "__workspaceDuplicate", true)
 					continue
 				end
-				seenTransforms[key] = true
+				globalSeenTransforms[key] = true
 				rawset(part, "__workspaceDuplicate", false)
 			end
 
@@ -929,9 +970,14 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local mesh = nil
 			local meshKey = ""
 			if isMeshPart then
-				if part.MeshObject and part.MeshObject._meshgenHandle then
-					mesh = part.MeshObject._meshgenHandle
-					meshKey = "meshobj_" .. part.UniqueId
+				local meshObject = part.MeshObject
+				if meshObject and meshObject._meshgenHandle then
+					mesh = meshObject._meshgenHandle
+					-- Batch by the actual GPU mesh handle instead of per-object identity.
+					-- This lets repeated MeshParts that share the same uploaded mesh
+					-- collapse into one instanced batch even when their mesh objects
+					-- are distinct Luau instances.
+					meshKey = "meshobj_" .. tostring(mesh)
 				end
 			elseif shapeName then
 				local meshData = preloadedMeshes and preloadedMeshes[shapeName]
@@ -951,9 +997,11 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 			local materialShader = mtsh_sh[materialName]
 			local hasPerObjectShader = materialShader and (materialShader.Apply3Dbj or materialShader.Apply3DObj)
+			local isOpaque = isPartOpaque(part)
 			local canInstance = Workspace.UseGpuInstancing
 				and renderer.MeshPool.DrawMeshInstanced ~= nil
 				and not hasPerObjectShader
+				and isOpaque
 
 			if canInstance then
 				local key = meshKey .. "|" .. materialName
@@ -961,8 +1009,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				if not batch then
 					local instancedMaterial = getInstancedMaterial(materialName)
 					if not instancedMaterial then
-						rawset(part, "__cachedMaterial", nil)
-						rawset(part, "__cachedMatrix", nil)
+						rawset(part, "__materialDirty", true)
+						rawset(part, "__matrixDirty", true)
 						table.insert(chunk.singleParts, part)
 						continue
 					end
@@ -985,8 +1033,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				table.insert(batch.parts, part)
 			else
 				-- Clear caches when falling back to single draw (no instancing)
-				rawset(part, "__cachedMaterial", nil)
-				rawset(part, "__cachedMatrix", nil)
+				rawset(part, "__materialDirty", true)
+				rawset(part, "__matrixDirty", true)
 				rawset(part, "__workspaceBatch", nil)
 				table.insert(chunk.singleParts, part)
 			end
@@ -1011,7 +1059,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end
 		chunk.maxPartSize = maxPS
-		
+
 		local expansion = maxPS * 0.5
 		chunk.r3dAABB = structs.BoundingBox:new({
 			min = vector.create(chunk.aabbMin.X - expansion, chunk.aabbMin.Y - expansion, chunk.aabbMin.Z - expansion),
@@ -1208,15 +1256,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			lastVisibilityMaxDistance = Workspace.MAX_VIEW_DISTANCE
 		end
 
-		-- Per-frame streaming budgets: limit how many chunks are fully rebuilt
-		-- (structure + GPU buffers) or partially refreshed (instance data only)
+		-- Per-frame streaming budgets: limit how much time is spent fully rebuilding
+		-- chunks (structure + GPU buffers) or partially refreshing (instance data)
 		-- each frame. This prevents a single import from causing a multi-frame
-		-- GPU stall by spreading the work over several frames, exactly like
-		-- Roblox's streaming renderer.
-		local structureRebuildsDone = 0
-		local instanceUpdatesDone = 0
-		local rebuildBudget = Workspace.ChunkRebuildBudget or 12
-		local instanceBudget = Workspace.ChunkInstanceUpdateBudget or 32
+		-- GPU stall while still processing small updates instantly.
+		local rebuildTimeStart = os.clock()
+		local rebuildTimeLimit = Workspace.ChunkRebuildTimeLimit or 0.012
 
 		-- LOD parameters read once per frame.
 		local lodEnabled = Workspace.LODEnabled ~= false
@@ -1266,24 +1311,27 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local skipRebuild = lodLevel >= 3
 
 			-- Rebuild chunk structure (batch grouping + GPU buffer allocation)
-			-- only while within the per-frame budget. Chunks that miss the
+			-- only while within the per-frame time limit. Chunks that miss the
 			-- budget this frame will be rebuilt in a subsequent frame (they
 			-- continue to draw with whatever stale data they already have).
 			if not skipRebuild and (forceDirty or chunk.dirty) then
-				if structureRebuildsDone < rebuildBudget then
+				if os.clock() - rebuildTimeStart < rebuildTimeLimit then
 					rebuildChunkBatches(chunk)
-					structureRebuildsDone += 1
 				end
 			elseif not skipRebuild and chunk.instanceDataDirty then
-				if instanceUpdatesDone < instanceBudget then
+				if os.clock() - rebuildTimeStart < rebuildTimeLimit then
 					refreshChunkInstanceBuffers(chunk)
-					instanceUpdatesDone += 1
 				end
 			end
 
 			-- Always draw whatever data is currently ready for this chunk,
 			-- even if it hasn't been (re)built yet this frame.
 			local r3dAABB = chunk.r3dAABB
+			local clusterOpen = false
+			if r3dAABB then
+				local ok = pcall(rlib.R3D_BeginCluster, r3dAABB)
+				clusterOpen = ok
+			end
 
 			-- Single parts: apply LOD size filter before queuing each draw.
 			for singleIndex = 1, #chunk.singleParts do
@@ -1302,10 +1350,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				local batchPartCount = #batch.parts
 
 				if batchPartCount >= minBatch then
-					-- Pick the LOD-adjusted instance count for this chunk distance.
-					-- Batch parts are sorted largest-first at rebuild time, so
-					-- drawing only the first drawCount instances naturally retains
-					-- the most visually significant geometry.
 					local drawCount
 					if lodLevel == 0 then
 						drawCount = batch.count
@@ -1334,20 +1378,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						end
 					end
 
-					renderer.MeshPool.DrawMeshInstanced(
-						batch.mesh,
-						batch.material,
-						batch.instanceBuffer,
-						drawCount,
-						function()
-							rlib.R3D_BeginCluster(r3dAABB)
-						end,
-						function()
-							rlib.R3D_EndCluster()
-						end
-					)
+					renderer.MeshPool.DrawMeshInstanced(batch.mesh, batch.material, batch.instanceBuffer, drawCount)
 				else
-					-- Below instancing threshold — single draws with LOD filter.
 					for partIndex = 1, batchPartCount do
 						local part = batch.parts[partIndex]
 						if lodMinSize > 0 then
@@ -1359,6 +1391,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 						queueSinglePartDraw(part, r3dAABB)
 					end
 				end
+			end
+
+			if clusterOpen then
+				pcall(rlib.R3D_EndCluster)
 			end
 		end
 	end
@@ -1687,7 +1723,14 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end)
 
-		renderer.Pool.new("3d", drawChunks)
+		renderer.Pool.new("3d", function(...)
+			local _st = os.clock()
+			drawChunks(...)
+			local _dur = os.clock() - _st
+			if _dur > 0.05 then
+				print(string.format("[Workspace] drawChunks took %.2f ms", _dur * 1000))
+			end
+		end)
 	end
 end
 

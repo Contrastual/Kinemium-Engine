@@ -147,7 +147,7 @@ Ki-nem-yum!!
 - Webview
 - Luau
 - and most importantly.. Zune
-kv1.10.4
+kv1.10.7
 
 # Do you like cats?
 <img width="444" height="200" alt="Silly Cat.... Hello.... Random Person...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />

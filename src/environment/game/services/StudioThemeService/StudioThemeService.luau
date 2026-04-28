@@ -49,7 +49,7 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			SecondaryBackgroundColor = Color3.new(0.05, 0.05, 0.05),
 			ThirdBackgroundColor = Color3.new(0.15, 0.15, 0.15),
 			SecondaryBackgroundColorTransparency = 0,
-			Accent = Color3.new(1, 0.5490196078431373, 0),
+			Accent = Color3.new(1, 1, 1),
 			AccentTransparency = 0,
 			WindowBackgroundColor = Color3.new(0, 0, 0),
 			WindowBackgroundTransparency = 0.05,
@@ -121,6 +121,7 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		themes = themes,
 		SelectedTheme = themes.dark,
 	})
+
 end
 
 return StudioThemeService

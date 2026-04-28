@@ -15,6 +15,9 @@ return {
 
 	callback = function(instance)
 		instance:SetProperties(propTable)
+
+		-- TODO: Implement functionality using ParticleEmitter
+
 		return instance
 	end,
 

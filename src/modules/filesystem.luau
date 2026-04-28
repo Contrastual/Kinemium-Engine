@@ -47,6 +47,14 @@ function filesystem.createFolder(path, name)
 	return combined
 end
 
+function filesystem.createFile(path, name, data)
+	local combined = path .. "/" .. name
+	if not filesystem.exists(combined) then
+		zunefs.writeFile(combined, data)
+	end
+	return combined
+end
+
 function filesystem.exists(path)
 	return zunefs.stat(path).kind ~= "none"
 end

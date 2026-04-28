@@ -1,17 +1,7 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
 
 local defaultFont = raylib.lib.GetFontDefault()
@@ -63,7 +53,7 @@ return function(objects, data)
 				rect:translate(tooltipRect),
 				0.2,
 				8,
-				c3tr(config.backgroundColor, 1 - config.animAlpha)
+				config.backgroundColor:ToRaylib(1 - config.animAlpha)
 			)
 
 			raylib.lib.DrawTextEx(
@@ -72,7 +62,7 @@ return function(objects, data)
 				vector.create(tooltipX + config.padding, tooltipY + config.padding),
 				config.fontSize,
 				config.spacing,
-				c3tr(config.textColor, 1 - config.animAlpha)
+				config.textColor:ToRaylib(1 - config.animAlpha)
 			)
 		end
 	end

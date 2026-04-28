@@ -1,17 +1,9 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 local color3 = require("@Color3")
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
+
 
 return function(objects, data)
 	local config = {
@@ -78,10 +70,10 @@ return function(objects, data)
 			rect:translate(rect.new(config.x + 4, config.y + 4, config.width, config.height)),
 			0.2,
 			8,
-			c3tr(color3.new(0, 0, 0), 0.8 + 0.2 * drawAlpha)
+			color3.new(0:ToRaylib(0, 0), 0.8 + 0.2 * drawAlpha)
 		)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, c3tr(config.colors.background, drawAlpha))
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.2, 8, config.colors.background:ToRaylib(drawAlpha))
 
 		-- Type indicator bar
 		local typeColor = config.colors[config.type] or config.colors.info
@@ -89,13 +81,13 @@ return function(objects, data)
 			rect:translate(rect.new(config.x, config.y, 6, config.height)),
 			0.2,
 			8,
-			c3tr(typeColor, drawAlpha)
+			typeColor:ToRaylib(drawAlpha)
 		)
 
 		-- Icon (simplified representation)
 		local iconX = config.x + config.padding + 10
 		local iconY = config.y + config.height / 2
-		raylib.lib.DrawCircle(iconX, iconY, 6, c3tr(typeColor, drawAlpha))
+		raylib.lib.DrawCircle(iconX, iconY, 6, typeColor:ToRaylib(drawAlpha))
 
 		-- Text
 		raylib.lib.DrawText(
@@ -103,7 +95,7 @@ return function(objects, data)
 			iconX + 20,
 			config.y + (config.height - 16) / 2,
 			16,
-			c3tr(config.colors.text, drawAlpha)
+			config.colors.text:ToRaylib(drawAlpha)
 		)
 
 		-- Progress bar (timer)
@@ -114,7 +106,7 @@ return function(objects, data)
 				config.y + config.height - 4,
 				(config.width - 20) * progress,
 				2,
-				c3tr(typeColor, drawAlpha)
+				typeColor:ToRaylib(drawAlpha)
 			)
 		end
 	end

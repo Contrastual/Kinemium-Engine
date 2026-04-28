@@ -18,7 +18,9 @@ local httpServerViewer = require("@httpServerViewer")
 local filesystem = require("@filesystem")
 
 filesystem.createFolder(".", ".temp")
+filesystem.createFolder(".", "plugins")
 filesystem.createFolder("./src", "projects")
+filesystem.createFile("./src", "projects.toml", "")
 
 _G.ENGINE_PROFILER = require("@profiler")
 _G.ENGINE_VERSION = "1.10.7"
@@ -125,12 +127,6 @@ _G.printi = function(tbl)
 	end
 end
 
-_G.cfunc = function(code)
-	local compiled = ffi.c.compile(code)
-	local ptr = compiled:getSymbol("callbackFunc")
-	return ptr
-end
-
 -- DEPENDENCIES
 local sandboxer = require("./modules/sandboxer")
 local Instance = require("@Instance")
@@ -181,13 +177,23 @@ if _G.IsHeadless then
 	log("Loaded headless renderer")
 else
 	KiRend = require("@Kinemium.3d")
+	local autoScale3D = not FlagExists("native3d")
+	local max3DRenderPixels = tonumber(GetFlagValue("max3dpixels")) or 1280000
+	local min3DRenderScale = math.clamp(tonumber(GetFlagValue("min3dscale")) or 0.5, 0.1, 1)
 	renderer = KiRend.new({
 		width = 1000,
 		height = 800,
+		autoScale3D = autoScale3D,
+		max3DRenderPixels = if max3DRenderPixels > 0 then math.floor(max3DRenderPixels) else 0,
+		min3DRenderScale = min3DRenderScale,
 		maxFps = 0,
 		title = "Kinemium Engine",
 	})
 	log("Loaded GPU renderer")
+end
+
+if FlagExists("perfoverlay") then
+	renderer.ShowPerfOverlay = true
 end
 
 -- SETUP CAMERA

@@ -22,7 +22,7 @@ BrickColor.Gray = function()
 end
 
 BrickColor.DarkGray = function()
-	return BrickColorMap["Dark gray"].Color
+	return BrickColorMap["Dark grey"].Color
 end
 
 BrickColor.Black = function()
@@ -45,17 +45,32 @@ BrickColor.Blue = function()
 	return BrickColorMap.Lapis.Color
 end
 
-function BrickColor.new(name)
-	local data = BrickColorMap[name]
-	if not data then
-		error("BrickColor '" .. tostring(name) .. "' does not exist")
+function BrickColor.Random()
+	local keys = {}
+	for name in pairs(BrickColorMap) do
+		table.insert(keys, name)
 	end
+	local randomName = keys[math.random(1, #keys)]
+	return BrickColor.new(randomName)
+end
 
-	return setmetatable({
-		Name = name,
-		Number = data.id,
-		Color = data.Color,
-	}, BrickColor)
+function BrickColor.new(val)
+	if type(val) == "string" then
+		local data = BrickColorMap[val]
+		if not data then
+			error("BrickColor '" .. tostring(val) .. "' does not exist")
+		end
+
+		return setmetatable({
+			Name = val,
+			Number = data.id,
+			Color = data.Color,
+		}, BrickColor)
+	elseif type(val) == "table" and val.R and val.G and val.B then
+		return BrickColor.fromColor3(val)
+	else
+		error("Invalid argument to BrickColor.new")
+	end
 end
 
 function BrickColor.palette(id)
@@ -72,7 +87,7 @@ function BrickColor.fromColor3(c3)
 	local bestDist = math.huge
 
 	for name, data in pairs(BrickColorMap) do
-		local d = dist(c3, data.color)
+		local d = dist(c3, data.Color)
 		if d < bestDist then
 			bestDist = d
 			best = name

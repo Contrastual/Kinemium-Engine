@@ -1,17 +1,16 @@
-local a=require"@Kinemium.signal"
+local signal = require("@Kinemium.signal")
 
-return{
-class="UnreliableRemoteEvent",
-callback=function(b,c,d)
-local e=a.new()
-local f=a.new()
+return {
+	class = "UnreliableRemoteEvent",
+	callback = function(instance, properties)
+		local clientEvent = signal.new()
+		local serverEvent = signal.new()
 
-b:SetProperties{
-OnClientEvent=e,
-OnServerEvent=f,
+		instance:SetProperties({
+			OnClientEvent = clientEvent,
+			OnServerEvent = serverEvent,
+		})
 
-}
-
-return b
-end,
+		return instance
+	end,
 }

@@ -3,7 +3,6 @@ local Enum = require("@EnumMap")
 local _signal = require("@Kinemium.signal")
 local _state = require("@State")
 local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
 local NetworkOwnership = require("../../game/services/ReplicatorService/NetworkOwnership")
 
 local raylib = require("@raylib")
@@ -88,16 +87,8 @@ return {
 			local wAxis1 = part1.CFrame:VectorToWorldSpace(att1.Axis):Unit()
 			local wNormal1 = part1.CFrame:VectorToWorldSpace(att1.SecondaryAxis):Unit()
 
-			_activeConstraint = KinemiumPhysicsService.CreateSlider(
-				part0,
-				part1,
-				wPos0,
-				wAxis0,
-				wNormal0,
-				wPos1,
-				wAxis1,
-				wNormal1
-			)
+			_activeConstraint =
+				KinemiumPhysicsService.CreateSlider(part0, part1, wPos0, wAxis0, wNormal0, wPos1, wAxis1, wNormal1)
 
 			if _activeConstraint then
 				-- Initial state sync
@@ -158,11 +149,7 @@ return {
 				return
 			end
 			if instance.LimitsEnabled then
-				KinemiumPhysicsService.SetSliderLimits(
-					_activeConstraint,
-					instance.LowerLimit,
-					instance.UpperLimit
-				)
+				KinemiumPhysicsService.SetSliderLimits(_activeConstraint, instance.LowerLimit, instance.UpperLimit)
 			else
 				-- Huge range if disabled
 				KinemiumPhysicsService.SetSliderLimits(_activeConstraint, -1e6, 1e6)
@@ -225,17 +212,15 @@ return {
 				local highPos = wPos0 + (wAxis0 * instance.UpperLimit)
 
 				-- Draw ticks at limits
-				local perp = (math.abs(wAxis0.X) < 0.9 and _Vector3.new(1, 0, 0) or _Vector3.new(0, 1, 0)):Cross(wAxis0):Unit()
+				local perp = (math.abs(wAxis0.X) < 0.9 and _Vector3.new(1, 0, 0) or _Vector3.new(0, 1, 0))
+					:Cross(wAxis0)
+					:Unit()
 				local tickLen = 0.2
 
 				local function drawTick(center)
 					local s = center - (perp * tickLen)
 					local e = center + (perp * tickLen)
-					rl.DrawLine3D(
-						vector.create(s.X, s.Y, s.Z),
-						vector.create(e.X, e.Y, e.Z),
-						limitColor
-					)
+					rl.DrawLine3D(vector.create(s.X, s.Y, s.Z), vector.create(e.X, e.Y, e.Z), limitColor)
 				end
 
 				drawTick(lowPos)

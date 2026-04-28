@@ -1,6 +1,3 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local Enum = require("@EnumMap")
 local signal = require("@Kinemium.signal")
 
 local propTable = {
@@ -27,6 +24,8 @@ return {
 
 	callback = function(instance, renderer, game)
 		instance:SetProperties(propTable)
+
+		-- TODO: Softbody handled by UPS
 
 		renderer.EventBus:Fire("UpdateSoftBody", instance)
 

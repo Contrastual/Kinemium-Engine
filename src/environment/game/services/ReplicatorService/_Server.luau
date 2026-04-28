@@ -7,12 +7,19 @@ local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
 local PredictionBuffer = require("./PredictionBuffer")
 local CFrame = require("@CFrame")
 local InputActionService = require("../InputActionService/InputActionService")
+local AreaOfInterest = require("./AreaOfInterest")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
 local REPLICATION_TARGET_BYTES = 50 * 1024
 local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
-local MAX_SNAPSHOT_STATES_PER_MESSAGE = 96
+local MAX_SNAPSHOT_STATES_PER_MESSAGE = 16
+local INITIAL_INVENTORY_HANDSHAKE_TIMEOUT = 8
+local SNAPSHOT_MIN_SEND_INTERVAL_TICKS = 6
+local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
+local SNAPSHOT_MAX_UNACKED_TICKS = 2
+local MAX_CREATE_PAYLOAD_BYTES = 32 * 1024
+local DEBUG_REPLICATION_TRACE = true
 
 local function packArgs(...)
 	return table.pack(...)
@@ -65,6 +72,8 @@ function Server.init(context)
 	local humanoidRootDebugAt = {}
 	local remoteFunctionRequestId = 0
 	local pendingRemoteFunctionInvocations = {}
+	local pendingInitialInventorySync = {}
+	local initialSyncCompleted = {}
 
 	local readySessions = {}
 
@@ -533,16 +542,52 @@ function Server.init(context)
 					true
 				)
 			else
-				networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.PatchBatch, payload, true)
+				-- AoI-filtered broadcast: send each patch payload only to sessions
+				-- that are in range of at least one of the patched objects.
+				for _, session in ipairs(networkService:GetSessions()) do
+					local relevant = false
+					for _, entry in ipairs(payload.entries or {}) do
+						if
+							AreaOfInterest.ShouldReplicateNetId(
+								session,
+								entry.object,
+								lookup,
+								networkOwnership.GetWorldPosition,
+								networkOwnership
+							)
+						then
+							relevant = true
+							break
+						end
+					end
+					if relevant then
+						networkService:SendToClient(
+							session,
+							Protocol.Channels.Replication,
+							Protocol.Kinds.PatchBatch,
+							payload,
+							true
+						)
+					end
+				end
 			end
 		end
 	end
 
-	local function sendCreate(recipient, roots)
-		print("[DEBUG] sendCreate called for", roots and #roots or "nil", "roots")
+	local function debugTrace(message)
+		if not DEBUG_REPLICATION_TRACE then
+			return
+		end
+		print(`[Replicator][Server][Trace] {message}`)
+	end
+
+	local function sendCreate(recipient, roots, reason)
+		debugTrace(
+			`sendCreate reason={reason or "unspecified"} recipient={recipient and recipient.key or "broadcast"} roots={roots and #roots or 0}`
+		)
 		local serializable = collectSerializableRoots(roots)
 		if #serializable == 0 then
-			print("[DEBUG] sendCreate: 0 serializable roots")
+			debugTrace(`sendCreate reason={reason or "unspecified"} -> 0 serializable roots`)
 			return
 		end
 
@@ -556,9 +601,9 @@ function Server.init(context)
 				return
 			end
 
-			print("[DEBUG] serializing objects for batch of size", #batch)
+			debugTrace(`sendBatch reason={reason or "unspecified"} serializing size={#batch}`)
 			local serialized = serializeObjects(batch)
-			print("[DEBUG] serialized result:", serialized and "success" or "failed")
+			debugTrace(`sendBatch reason={reason or "unspecified"} serialized={serialized and "success" or "failed"}`)
 
 			if not serialized then
 				-- If the whole batch failed, try sending each root individually.
@@ -591,13 +636,54 @@ function Server.init(context)
 				return
 			end
 
+			-- Keep reliable Create payloads under a safe ceiling to avoid massive
+			-- fragmentation storms that can starve ACK/control traffic.
+			local payloadBytes = buffer.len(serialized)
+			if payloadBytes > MAX_CREATE_PAYLOAD_BYTES then
+				debugTrace(
+					`sendBatch reason={reason or "unspecified"} oversize bytes={payloadBytes} limit={MAX_CREATE_PAYLOAD_BYTES} batch={#batch}`
+				)
+				if #batch > 1 then
+					local midpoint = math.max(1, math.floor(#batch / 2))
+					local left = {}
+					local right = {}
+					for i = 1, midpoint do
+						table.insert(left, batch[i])
+					end
+					for i = midpoint + 1, #batch do
+						table.insert(right, batch[i])
+					end
+					sendBatch(left)
+					sendBatch(right)
+					return
+				end
+
+				local root = batch[1]
+				local children = root and root:GetChildren() or {}
+				if #children > 0 then
+					local splitChildren = {}
+					for _, child in ipairs(children) do
+						if child.CanReplicate ~= false and child.NetworkId ~= nil then
+							table.insert(splitChildren, child)
+						end
+					end
+					if #splitChildren > 0 then
+						debugTrace(
+							`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
+						)
+						sendBatch(splitChildren)
+						return
+					end
+				end
+			end
+
 			local rootNames = {}
 			for _, object in ipairs(batch) do
 				table.insert(rootNames, `{object.ClassName}:{object.Name}`)
 			end
 
 			print(
-				`[Replicator][Server] Create -> {recipientLabel}: objects={#batch}, bytes={buffer.len(serialized)}, names=[{table.concat(
+				`[Replicator][Server] Create -> {recipientLabel}: reason={reason or "unspecified"}, objects={#batch}, bytes={payloadBytes}, names=[{table.concat(
 					rootNames,
 					", "
 				)}]`
@@ -613,7 +699,36 @@ function Server.init(context)
 					true
 				)
 			else
-				networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.Create, payload, true)
+				-- AoI-filtered broadcast for runtime object creation.
+				-- Check which sessions should see any of the objects in this batch.
+				local allSessions = networkService:GetSessions()
+				local relevantSessions = {}
+				for _, session in ipairs(allSessions) do
+					local inRange = false
+					for _, obj in ipairs(batch) do
+						if
+							AreaOfInterest.ShouldReplicateToSession(
+								session,
+								obj,
+								networkOwnership.GetWorldPosition,
+								networkOwnership
+							)
+						then
+							inRange = true
+							break
+						end
+					end
+					if inRange then
+						table.insert(relevantSessions, session)
+					end
+				end
+				networkService:SendToMultipleClients(
+					relevantSessions,
+					Protocol.Channels.Replication,
+					Protocol.Kinds.Create,
+					payload,
+					true
+				)
 			end
 
 			batchesSent += 1
@@ -626,18 +741,10 @@ function Server.init(context)
 		end
 
 		if recipient then
-			-- Initial world state: send everything as one big batch so the client
-			-- processes it in a single handleCreate call instead of spawning dozens
-			-- of parallel coroutines that fight for CPU time.
-			-- KiNet handles fragmentation if it exceeds MTU_SIZE.
-			print("[DEBUG] Sending batch to recipient")
-			sendBatch(serializable)
-			print("[DEBUG] Done sending batch to recipient")
-		else
-			-- Runtime broadcast (new objects spawned during gameplay): use small
-			-- batches so each packet stays lightweight.
-			local ROOTS_PER_BATCH = 8
-			print("[DEBUG] Sending broadcast batches for", #serializable, "items")
+			-- Initial world state: avoid giant reliable payloads that fragment into
+			-- hundreds of packets and can starve ACK traffic on lossy links.
+			local ROOTS_PER_BATCH = 2
+			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching roots={#serializable}`)
 			for i = 1, #serializable, ROOTS_PER_BATCH do
 				local batch = {}
 				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
@@ -645,7 +752,20 @@ function Server.init(context)
 				end
 				sendBatch(batch)
 			end
-			print("[DEBUG] Done sending broadcast batches")
+			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching done`)
+		else
+			-- Runtime broadcast (new objects spawned during gameplay): use small
+			-- batches so each packet stays lightweight.
+			local ROOTS_PER_BATCH = 8
+			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching roots={#serializable}`)
+			for i = 1, #serializable, ROOTS_PER_BATCH do
+				local batch = {}
+				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
+					table.insert(batch, serializable[j])
+				end
+				sendBatch(batch)
+			end
+			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching done`)
 		end
 
 		sendPatchEntries(recipient, collectReferencePatchEntries(serializable))
@@ -710,10 +830,28 @@ function Server.init(context)
 		return roots
 	end
 
-	local function sendRemove(netId)
-		networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.Remove, {
-			object = netId,
-		}, true)
+	local function sendRemove(netId, object)
+		local payload = { object = netId }
+		-- AoI-filtered remove: only notify sessions that had this entity in range.
+		-- We still need to send to everyone if the object has no position (global entity)
+		-- or if we can't determine its position (already destroyed).
+		if object and not AreaOfInterest.IsGlobalEntity(object) then
+			local relevantSessions = AreaOfInterest.GetRelevantSessions(
+				object,
+				networkService:GetSessions(),
+				networkOwnership.GetWorldPosition,
+				networkOwnership
+			)
+			networkService:SendToMultipleClients(
+				relevantSessions,
+				Protocol.Channels.Replication,
+				Protocol.Kinds.Remove,
+				payload,
+				true
+			)
+		else
+			networkService:Broadcast(Protocol.Channels.Replication, Protocol.Kinds.Remove, payload, true)
+		end
 	end
 
 	local function sendTerrainSnapshot(recipient)
@@ -735,6 +873,112 @@ function Server.init(context)
 		for _, payload in ipairs(batches) do
 			enqueueTerrainPayload(recipient, Protocol.Kinds.TerrainSnapshot, payload)
 		end
+	end
+
+	local function sendWorldLoaded(session)
+		networkService:SendToClient(
+			session,
+			Protocol.Channels.Control,
+			Protocol.Kinds.WorldLoaded,
+			{ tick = networkService:GetCurrentTick() },
+			true
+		)
+	end
+
+	local function buildClientNetIdSet(payload)
+		local set = {}
+		if type(payload) ~= "table" then
+			return set
+		end
+
+		for _, netId in ipairs(payload.netIds or {}) do
+			if type(netId) == "number" then
+				set[netId] = true
+			end
+		end
+
+		return set
+	end
+
+	local function rootHasMissingObjects(root, clientNetIds)
+		local missing = false
+		visitTree(root, function(object)
+			if missing then
+				return
+			end
+			local netId = object.NetworkId
+			if netId ~= nil and object.CanReplicate ~= false and not clientNetIds[netId] then
+				missing = true
+			end
+		end)
+		return missing
+	end
+
+	local function sendInitialStateForSession(session, clientNetIds)
+		if not session or not session.key or initialSyncCompleted[session.key] then
+			return
+		end
+
+		local initialRoots = collectInitialRoots()
+		local rootsToReplicate = initialRoots
+
+		if clientNetIds ~= nil then
+			rootsToReplicate = {}
+			for _, root in ipairs(initialRoots) do
+				if rootHasMissingObjects(root, clientNetIds) then
+					table.insert(rootsToReplicate, root)
+				end
+			end
+		end
+
+		print(
+			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil})`
+		)
+		initialSyncCompleted[session.key] = true
+		pendingInitialInventorySync[session.key] = nil
+		sendCreate(session, rootsToReplicate, "initial_sync")
+		sendTerrainSnapshot(session)
+		sendWorldLoaded(session)
+		print(`[Replicator][Server] WorldLoaded sent to {session.key}`)
+	end
+
+	local function completeInitialSyncWithoutCreate(session)
+		if not session or not session.key or initialSyncCompleted[session.key] then
+			return
+		end
+
+		initialSyncCompleted[session.key] = true
+		pendingInitialInventorySync[session.key] = nil
+		clearTerrainQueue(session)
+		sendWorldLoaded(session)
+		warn(
+			`[Replicator][Server] Initial inventory unavailable for {session.key}; skipping initial Create fallback and continuing with live replication`
+		)
+	end
+
+	local function startInitialInventoryHandshake(session)
+		if not session or not session.key or initialSyncCompleted[session.key] then
+			return
+		end
+
+		pendingInitialInventorySync[session.key] = true
+		networkService:SendToClient(
+			session,
+			Protocol.Channels.Control,
+			Protocol.Kinds.ClientObjectInventoryRequest,
+			{ tick = networkService:GetCurrentTick() },
+			true
+		)
+
+		task.delay(INITIAL_INVENTORY_HANDSHAKE_TIMEOUT, function()
+			if not session or not session.key or initialSyncCompleted[session.key] or not pendingInitialInventorySync[session.key] then
+				return
+			end
+			warn(
+				`[Replicator][Server] Initial inventory handshake timed out for {session.key}`
+			)
+			completeInitialSyncWithoutCreate(session)
+		end)
 	end
 
 	injectRemoteEventHooks = function(object)
@@ -977,7 +1221,10 @@ function Server.init(context)
 				if object.Parent == nil then
 					return
 				end
-				sendCreate(nil, { object })
+			debugTrace(
+				`DescendantAdded root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)} descendants={#object:GetDescendants()}`
+			)
+			sendCreate(nil, { object }, "runtime_descendant_added")
 			end)
 		end
 	end)
@@ -987,8 +1234,10 @@ function Server.init(context)
 			return
 		end
 
+		-- Capture object reference before untracking so AoI can check its position
+		local netId = object.NetworkId
+		sendRemove(netId, object)
 		untrackTree(object)
-		sendRemove(object.NetworkId)
 	end)
 
 	networkService.ClientConnected:Connect(function(session)
@@ -1001,27 +1250,19 @@ function Server.init(context)
 			session.lastSentSnapshotTick = -1
 			clearTerrainQueue(session)
 			readySessions[session.key] = false -- not world-ready yet
-			local initialRoots = collectInitialRoots()
-			print(
-				`[Replicator][Server] Client connected {session.key}, sending initial world state ({#initialRoots} roots)`
-			)
-			sendCreate(session, initialRoots)
-			sendTerrainSnapshot(session)
-			networkService:SendToClient(
-				session,
-				Protocol.Channels.Control,
-				Protocol.Kinds.WorldLoaded,
-				{ tick = networkService:GetCurrentTick() },
-				true
-			)
-			print(`[Replicator][Server] WorldLoaded sent to {session.key}`)
+			AreaOfInterest.RegisterSession(session)
+			print(`[Replicator][Server] Client connected {session.key}, requesting client object inventory`)
+			startInitialInventoryHandshake(session)
 		end)
 	end)
 
 	networkService.ClientRemoved:Connect(function(session)
 		readySessions[session.key] = nil
+		pendingInitialInventorySync[session.key] = nil
+		initialSyncCompleted[session.key] = nil
 		clearTerrainQueue(session)
 		antiCheat:ClearSession(session)
+		AreaOfInterest.UnregisterSession(session)
 
 		for root in pairs(ownershipRoots) do
 			local owner = root and root.NetworkOwner or nil
@@ -1034,6 +1275,29 @@ function Server.init(context)
 
 	-- Mark a session as world-ready when the client confirms it has loaded the
 	-- initial world state.  Snapshots are held until this point.
+	networkService:RegisterMessageHandler(
+		Protocol.Channels.Control,
+		Protocol.Kinds.ClientObjectInventoryResponse,
+		function(session, payload)
+			if not session or not session.key then
+				return
+			end
+			if initialSyncCompleted[session.key] then
+				return
+			end
+
+			local clientNetIds = buildClientNetIdSet(payload)
+			local uniqueCount = 0
+			for _ in pairs(clientNetIds) do
+				uniqueCount += 1
+			end
+			debugTrace(
+				`ClientObjectInventoryResponse session={session.key} payloadCount={#(payload and payload.netIds or {})} uniqueCount={uniqueCount}`
+			)
+			sendInitialStateForSession(session, clientNetIds)
+		end
+	)
+
 	networkService:RegisterMessageHandler(
 		Protocol.Channels.Control,
 		Protocol.Kinds.ClientReady,
@@ -1075,7 +1339,8 @@ function Server.init(context)
 		Protocol.Kinds.SnapshotAck,
 		function(session, payload)
 			if session and payload.tick then
-				session.lastSnapshotAckTick = payload.tick
+				local ackTick = tonumber(payload.tick) or 0
+				session.lastSnapshotAckTick = math.max(session.lastSnapshotAckTick or 0, ackTick)
 			end
 		end
 	)
@@ -1446,7 +1711,7 @@ function Server.init(context)
 						state.cooldownUntil = now + config.transferCooldown
 					end
 				elseif canClaim then
-					-- Even if the object is stationary, if it has no owner, 
+					-- Even if the object is stationary, if it has no owner,
 					-- assign it to the nearest player so they can interact with it.
 					assignOwnership(root, bestPlayer, now)
 					state.cooldownUntil = now + config.transferCooldown
@@ -1492,57 +1757,87 @@ function Server.init(context)
 			if not readySessions[session.key] then
 				continue -- client is still loading the world; do not send snapshots yet
 			end
-			
+
 			local clientAckTick = session.lastSnapshotAckTick or 0
 			local lastSentTick = session.lastSentSnapshotTick or -1
+			if lastSentTick > clientAckTick + SNAPSHOT_MAX_UNACKED_TICKS then
+				continue
+			end
 			local changedStates = {}
 			local numStates = 0
+			local maxStatesForSession = math.max(1, MAX_SNAPSHOT_STATES_PER_MESSAGE)
 
 			for netId, history in pairs(objectStateHistory) do
 				local latestTickSequence = history.order[#history.order]
-				if not latestTickSequence then continue end
-				
+				if not latestTickSequence then
+					continue
+				end
+
 				if latestTickSequence > clientAckTick then
+					-- AoI filter: skip snapshots for objects outside this session's range
+					if
+						not AreaOfInterest.ShouldReplicateNetId(
+							session,
+							netId,
+							lookup,
+							networkOwnership.GetWorldPosition,
+							networkOwnership
+						)
+					then
+						continue
+					end
+
 					local baseline = history:GetAtOrBefore(clientAckTick)
 					local currentState = history:GetLatest()
-					
+
 					local delta = stateRegistry.ComputeDelta(baseline, currentState)
 					if delta then
 						table.insert(changedStates, delta)
 						numStates += 1
+						if numStates >= maxStatesForSession then
+							break
+						end
 					else
-						-- if latestTickSequence > clientAckTick but delta is nil, it means 
+						-- if latestTickSequence > clientAckTick but delta is nil, it means
 						-- this client already has this state effectively.
 					end
 				end
 			end
 
 			local lastOwnedSequence = session.lastAppliedOwnedStateSequence or 0
-			if numStates > 0 or lastSentTick ~= tick then
-				session.lastSentSnapshotTick = tick
-				local payloads = if numStates > 0
-					then buildListPayloads("states", changedStates, {
-						tick = tick,
-						baseTick = clientAckTick,
-						lastProcessedOwnedStateSequence = lastOwnedSequence,
-					}, MAX_SNAPSHOT_STATES_PER_MESSAGE, REPLICATION_TARGET_BYTES)
-					else {
-						{
-							tick = tick,
-							baseTick = clientAckTick,
-							lastProcessedOwnedStateSequence = lastOwnedSequence,
-							states = {},
-						},
-					}
+			local ticksSinceLastSent = tick - lastSentTick
+			local shouldSend = false
+			if numStates > 0 then
+				shouldSend = ticksSinceLastSent >= SNAPSHOT_MIN_SEND_INTERVAL_TICKS
+			elseif SNAPSHOT_IDLE_KEEPALIVE_TICKS > 0 then
+				shouldSend = ticksSinceLastSent >= SNAPSHOT_IDLE_KEEPALIVE_TICKS
+			else
+				shouldSend = false
+			end
 
-				for _, payload in ipairs(payloads) do
-					networkService:SendToClient(
-						session,
-						Protocol.Channels.Replication,
-						Protocol.Kinds.Snapshot,
-						payload,
-						false
-					)
+			if not shouldSend then
+				continue
+			end
+
+			session.lastSentSnapshotTick = tick
+			-- Keep each snapshot tick as one logical message so client baseline
+			-- assembly is atomic per tick and cannot lose states across chunks.
+			networkService:SendToClient(session, Protocol.Channels.Replication, Protocol.Kinds.Snapshot, {
+				tick = tick,
+				baseTick = clientAckTick,
+				lastProcessedOwnedStateSequence = lastOwnedSequence,
+				states = if numStates > 0 then changedStates else {},
+			}, false)
+		end
+	end
+
+	-- Update AoI positions for all sessions each tick from their character's position.
+	local function updateAoIPositions()
+		for _, session in ipairs(networkService:GetSessions()) do
+			if session.player then
+				local position = networkOwnership.GetPlayerFocusPosition(session.player)
+				if position then
+					AreaOfInterest.UpdateSessionPosition(session, position)
 				end
 			end
 		end
@@ -1552,6 +1847,7 @@ function Server.init(context)
 		if tick % math.max(math.floor((networkService.TickRate or 30) * OWNERSHIP_REBALANCE_INTERVAL), 1) == 0 then
 			rebalanceOwnership(os.clock())
 		end
+		updateAoIPositions()
 		applyPendingOwnedStateBatches()
 		flushDirtyPatches()
 		flushTerrainChunkUpdates()
@@ -1588,19 +1884,10 @@ function Server.init(context)
 			session.lastSentSnapshotTick = -1
 			clearTerrainQueue(session)
 			readySessions[session.key] = false
+			initialSyncCompleted[session.key] = nil
+			startInitialInventoryHandshake(session)
 
-			sendCreate(session, collectInitialRoots())
-			sendTerrainSnapshot(session)
-
-			networkService:SendToClient(
-				session,
-				Protocol.Channels.Control,
-				Protocol.Kinds.WorldLoaded,
-				{ tick = networkService:GetCurrentTick() },
-				true
-			)
-
-			print(`[Replicator][Server] Catch-up WorldLoaded sent to {session.key}`)
+			print(`[Replicator][Server] Catch-up inventory request sent to {session.key}`)
 		end
 	end)
 

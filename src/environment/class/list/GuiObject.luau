@@ -135,11 +135,8 @@ local function getContentMetrics(object, size)
 	end
 
 	local left, right, top, bottom = resolvePaddingBounds(object, size)
-	return vector.create(left, top, 0), vector.create(
-		math.max(0, size.X - left - right),
-		math.max(0, size.Y - top - bottom),
-		0
-	)
+	return vector.create(left, top, 0),
+		vector.create(math.max(0, size.X - left - right), math.max(0, size.Y - top - bottom), 0)
 end
 
 local function precomputeLayoutChildren(object, lib, dt, structs, renderer)
@@ -236,12 +233,11 @@ local function getAbsoluteDrawPos(object, lib, dt, structs, renderer, depth)
 		)
 	else
 		local pos = object.Position:ToPixels(parentContentSize)
-		drawPos =
-			vector.create(
-				parentAbsPos.X + parentPaddingOffset.X + pos.X - size.X * anchor.X,
-				parentAbsPos.Y + parentPaddingOffset.Y + pos.Y - size.Y * anchor.Y,
-				0
-			)
+		drawPos = vector.create(
+			parentAbsPos.X + parentPaddingOffset.X + pos.X - size.X * anchor.X,
+			parentAbsPos.Y + parentPaddingOffset.Y + pos.Y - size.Y * anchor.Y,
+			0
+		)
 	end
 
 	if parent and parent.ClassName == "ScrollingFrame" then
@@ -852,32 +848,32 @@ local propTable = {
 	ZIndex = 1,
 	AnchorPoint = ZERO_V,
 	MouseIsInObject = false,
-	GetBounds = function(self)
-		return getGuiMetrics(self)
+	GetBounds = function()
+		return getGuiMetrics()
 	end,
-	GetCenter = function(self)
-		local pos, size = getGuiMetrics(self)
+	GetCenter = function()
+		local pos, size = getGuiMetrics()
 		return Vector2.new(pos.X + size.X * 0.5, pos.Y + size.Y * 0.5)
 	end,
-	IsPointInside = function(self, point)
+	IsPointInside = function(point)
 		local resolvedPoint = resolveGuiPoint(point)
 		if not resolvedPoint then
 			return false
 		end
 
-		local pos, size = getGuiMetrics(self)
+		local pos, size = getGuiMetrics()
 		return resolvedPoint.X >= pos.X
 			and resolvedPoint.X <= pos.X + size.X
 			and resolvedPoint.Y >= pos.Y
 			and resolvedPoint.Y <= pos.Y + size.Y
 	end,
-	GetRelativePoint = function(self, point)
+	GetRelativePoint = function(point)
 		local resolvedPoint = resolveGuiPoint(point)
 		if not resolvedPoint then
 			return nil
 		end
 
-		local pos = getGuiMetrics(self)
+		local pos = getGuiMetrics()
 		return Vector2.new(resolvedPoint.X - pos.X, resolvedPoint.Y - pos.Y)
 	end,
 	CancelGuiTweens = function(self)
@@ -894,9 +890,8 @@ local propTable = {
 			end
 		end
 	end,
-	TweenPosition = function(self, endPosition, easingDirection, easingStyle, time, override, callback)
+	TweenPosition = function(endPosition, easingDirection, easingStyle, time, override, callback)
 		return playGuiTween(
-			self,
 			{ "Position" },
 			{ Position = endPosition },
 			easingDirection,
@@ -906,21 +901,11 @@ local propTable = {
 			callback
 		)
 	end,
-	TweenSize = function(self, endSize, easingDirection, easingStyle, time, override, callback)
-		return playGuiTween(
-			self,
-			{ "Size" },
-			{ Size = endSize },
-			easingDirection,
-			easingStyle,
-			time,
-			override,
-			callback
-		)
+	TweenSize = function(endSize, easingDirection, easingStyle, time, override, callback)
+		return playGuiTween({ "Size" }, { Size = endSize }, easingDirection, easingStyle, time, override, callback)
 	end,
-	TweenSizeAndPosition = function(self, endSize, endPosition, easingDirection, easingStyle, time, override, callback)
+	TweenSizeAndPosition = function(endSize, endPosition, easingDirection, easingStyle, time, override, callback)
 		return playGuiTween(
-			self,
 			{ "Size", "Position" },
 			{ Size = endSize, Position = endPosition },
 			easingDirection,
@@ -984,7 +969,7 @@ local propTable = {
 			renderer.Blur:DrawBlurredRegion(drawPos.X, drawPos.Y, size.X, size.Y, Color3.new(1, 1, 1):ToRaylib(0))
 		end
 
-		if gradient then
+		if gradient and gradient.ColorSequence then
 			local steps = 50
 			local stepHeight = size.Y / steps
 			local cornerRadius = shapeModifier

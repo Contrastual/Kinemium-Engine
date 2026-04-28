@@ -35,10 +35,7 @@ end
 
 function Connection:Fire(...)
 	if self.Connected and self._fn then
-		local ok, err = pcall(self._fn, ...)
-		if not ok then
-			print(err)
-		end
+		self._fn(...)
 	end
 end
 
@@ -329,5 +326,8 @@ end
 
 Signal.__type = "KinemiumSignal"
 Connection.__type = "KinemiumConnection"
+
+export type Signal = typeof(Signal.new())
+export type Connection = typeof(Connection.new(Signal.new(), function() end))
 
 return Signal

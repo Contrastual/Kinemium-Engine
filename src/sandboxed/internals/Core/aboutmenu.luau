@@ -8,7 +8,7 @@ local aereon = require("@Aereon")
 local raylib = require("@raylib")
 local rl = raylib.lib
 local gui = aereon.gui
-local rect = require("@arect")(rl)
+local rect = require("@arect")
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local renderer = KinemiumRaylib.GetRenderer()
 

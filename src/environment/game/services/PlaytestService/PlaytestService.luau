@@ -108,7 +108,12 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 					end)
 				end
 
-				client_process = Process.CreateKinemiumClientProcessEx(playerName, "127.0.0.1", 1234)
+				client_process = Process.CreateKinemiumClientProcessEx(
+					playerName,
+					"127.0.0.1",
+					1234,
+					{ "--blob", "./.temp/" .. gameName .. ".kine" }
+				)
 				client_logger = outputProcess("[CLIENT]", client_process, function(line)
 					PlaytestService.OnClientLog:Fire(line)
 				end)

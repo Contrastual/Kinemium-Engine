@@ -1,12 +1,9 @@
-local Vector3 = require("@Vector3")
-local Color3 = require("@Color3")
-local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 
 local propTable = {
 	Name = "LocalScript",
 	BaseClass = "ScriptContainer",
-	Source = [[]],
+	Source = [[print("Hello World!")]],
 	RunContext = Enum.RunContext.Client,
 	Language = Enum.Language.Luau,
 }

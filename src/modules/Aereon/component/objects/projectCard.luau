@@ -1,18 +1,9 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 local color3 = require("@Color3")
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local LayoutEngine = require("@LayoutEngine")
-
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 return function(objects, data)
 	local config = {
@@ -57,12 +48,13 @@ return function(objects, data)
 	wrapper.render = function(dt)
 		local r = config.obj_rect
 		config.isHovered = rect.MouseIsInRect(r)
+
 		local mousePressed = raylib.lib.IsMouseButtonPressed(0) == 1
 
 		if config.isHovered then
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
 		else
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 		end
 
 		local bgColor = config.isHovered and config.hoverColor or config.backgroundColor
@@ -73,17 +65,17 @@ return function(objects, data)
 			rect:translate(rect.new(r.x, r.y + 2, r.width, r.height)),
 			0.3,
 			8,
-			c3tr(color3.new(0, 0, 0), 0.65)
+			config.backgroundColor:ToRaylib(0.65)
 		)
 
 		-- accent bar
-		raylib.lib.DrawRectangle(r.x, r.y + 10, 3, r.height - 20, c3tr(config.accentColor, 0))
+		raylib.lib.DrawRectangle(r.x, r.y + 10, 3, r.height - 20, config.accentColor:ToRaylib(0))
 
 		raylib.lib.DrawRectangleRounded(
 			rect:translate(rect.new(r.x, r.y + lift, r.width, r.height)),
 			0.3,
 			8,
-			c3tr(bgColor, 0)
+			bgColor:ToRaylib(0)
 		)
 
 		local iconSize = r.height - 24
@@ -132,7 +124,7 @@ return function(objects, data)
 
 		local itIcon = get_item("icon")
 		local iconRect = rect.new(r.x + itIcon._x, r.y + itIcon._y, itIcon._actualWidth, itIcon._actualHeight)
-		raylib.lib.DrawRectangleRounded(rect:translate(iconRect), 0.25, 8, c3tr(color3.new(0.16, 0.16, 0.18), 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(iconRect), 0.25, 8, config.backgroundColor:ToRaylib(0.18))
 		if config.icon then
 			raylib.lib.DrawTexturePro(
 				config.icon.texture,
@@ -154,10 +146,10 @@ return function(objects, data)
 				vector.create(titleX, titleY),
 				18,
 				1,
-				c3tr(config.textColor, 0)
+				config.textColor:ToRaylib(0)
 			)
 		else
-			raylib.lib.DrawText(config.title, titleX, titleY, 18, c3tr(config.textColor, 0))
+			raylib.lib.DrawText(config.title, titleX, titleY, 18, config.textColor:ToRaylib(0))
 		end
 
 		local subY = titleY + 22
@@ -173,10 +165,10 @@ return function(objects, data)
 				vector.create(titleX, subY),
 				14,
 				1,
-				c3tr(config.dimTextColor, 0)
+				config.dimTextColor:ToRaylib(0)
 			)
 		else
-			raylib.lib.DrawText(tagString, titleX, subY, 14, c3tr(config.dimTextColor, 0))
+			raylib.lib.DrawText(tagString, titleX, subY, 14, config.dimTextColor:ToRaylib(0))
 		end
 
 		for child, item in pairs(childMap) do

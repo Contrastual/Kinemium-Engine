@@ -1,18 +1,9 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local function c3tr(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
-
-local rect = require("@arect")(raylib.lib)
+local rect = require("@arect")
 local color3 = require("@Color3")
+local MouseCursor = require("@Kinemium.MouseCursor")
 
 local defaultFont = raylib.lib.GetFontDefault()
 
@@ -37,9 +28,16 @@ return function(objects, data)
 
 	local function drawText(text, x, y, fontSize, spacing, color)
 		if config.font then
-			raylib.lib.DrawTextEx(config.font, text, vector.create(x, y), fontSize, spacing, c3tr(color, 0))
+			raylib.lib.DrawTextEx(
+				config.font,
+				text,
+				vector.create(x, y),
+				fontSize,
+				spacing,
+				config.textColor:ToRaylib(0)
+			)
 		else
-			raylib.lib.DrawText(text, x, y, fontSize, c3tr(color, 0))
+			raylib.lib.DrawText(text, x, y, fontSize, config.textColor:ToRaylib(0))
 		end
 	end
 
@@ -70,7 +68,7 @@ return function(objects, data)
 			config.animProgress = math.max(config.animProgress - dt * 8, 0)
 		end
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.15, 10, c3tr(config.borderColor, 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.15, 10, config.borderColor:ToRaylib(0))
 		raylib.lib.DrawRectangleRounded(
 			structs.Rectangle:new({
 				x = r.x + 1,
@@ -80,7 +78,7 @@ return function(objects, data)
 			}),
 			0.15,
 			10,
-			c3tr(config.backgroundColor, 0)
+			config.backgroundColor:ToRaylib(0)
 		)
 
 		if rect.MouseIsInRect(r) and not config.expanded then
@@ -93,7 +91,7 @@ return function(objects, data)
 				}),
 				0.15,
 				10,
-				c3tr(config.hoverColor, 0.7)
+				config.hoverColor:ToRaylib(0.7)
 			)
 		end
 
@@ -113,14 +111,14 @@ return function(objects, data)
 				vector.create(arrowX, arrowY + arrowSize / 2),
 				vector.create(arrowX + arrowSize, arrowY + arrowSize / 2),
 				vector.create(arrowX + arrowSize / 2, arrowY - arrowSize / 2),
-				c3tr(config.secondaryTextColor, 0)
+				config.secondaryTextColor:ToRaylib(0)
 			)
 		else
 			raylib.lib.DrawTriangle(
 				vector.create(arrowX, arrowY - arrowSize / 2),
 				vector.create(arrowX + arrowSize, arrowY - arrowSize / 2),
 				vector.create(arrowX + arrowSize / 2, arrowY + arrowSize / 2),
-				c3tr(config.secondaryTextColor, 0)
+				config.secondaryTextColor:ToRaylib(0)
 			)
 		end
 
@@ -128,9 +126,9 @@ return function(objects, data)
 			if raylib.lib.IsMouseButtonReleased(0) == 1 then
 				config.expanded = not config.expanded
 			end
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_POINTING_HAND)
 		else
-			raylib.lib.SetMouseCursor(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
+			MouseCursor.request(raylib.const.MouseCursor.MOUSE_CURSOR_DEFAULT)
 		end
 
 		if config.animProgress > 0.01 then
@@ -165,7 +163,7 @@ return function(objects, data)
 				}),
 				0.15,
 				10,
-				c3tr(color3.new(0, 0, 0), 0.3)
+				color3.new(0, 0, 0):ToRaylib(0.3)
 			)
 
 			raylib.lib.DrawRectangleRounded(
@@ -177,7 +175,7 @@ return function(objects, data)
 				}),
 				0.15,
 				10,
-				c3tr(config.borderColor, 0)
+				config.borderColor:ToRaylib(0)
 			)
 			raylib.lib.DrawRectangleRounded(
 				structs.Rectangle:new({
@@ -188,7 +186,7 @@ return function(objects, data)
 				}),
 				0.15,
 				10,
-				c3tr(config.backgroundColor, 0)
+				config.backgroundColor:ToRaylib(0)
 			)
 
 			for i, option in ipairs(config.options) do
@@ -209,7 +207,7 @@ return function(objects, data)
 							}),
 							0.12,
 							8,
-							c3tr(config.selectedColor, 0.5)
+							config.selectedColor:ToRaylib(0.5)
 						)
 					end
 
@@ -223,7 +221,7 @@ return function(objects, data)
 							}),
 							0.12,
 							8,
-							c3tr(config.hoverColor, 0)
+							config.hoverColor:ToRaylib(0)
 						)
 
 						if raylib.lib.IsMouseButtonReleased(0) == 1 then

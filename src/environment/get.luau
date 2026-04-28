@@ -11,7 +11,6 @@ local shared = {}
 return function(renderer, Kinemium_camera)
 	local mainDatamodel = DataModel.new(renderer)
 	local data = datatypes
-	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
 
 	data.Instance = {
 		new = function(class, parent)
@@ -143,17 +142,14 @@ return function(renderer, Kinemium_camera)
 		wait = zune.task.wait,
 		spawn = function(fn, ...)
 			local thread = zune.task.spawn(fn, ...)
-			ScriptRunnerService.RegisterUserThread(thread)
 			return thread
 		end,
 		defer = function(fn, ...)
 			local thread = zune.task.defer(fn, ...)
-			ScriptRunnerService.RegisterUserThread(thread)
 			return thread
 		end,
 		delay = function(dt, fn, ...)
 			local thread = zune.task.delay(dt, fn, ...)
-			ScriptRunnerService.RegisterUserThread(thread)
 			return thread
 		end,
 	}
@@ -197,8 +193,6 @@ return function(renderer, Kinemium_camera)
 
 	terrainObject.Parent = mainDatamodel:GetService("Workspace")
 
-	ScriptRunnerService.Initenvironment(data, mainDatamodel)
-
 	local LogService = mainDatamodel:GetService("LogService")
 
 	data.print = function(...)
@@ -229,40 +223,6 @@ return function(renderer, Kinemium_camera)
 
 	local requiredCache = {}
 
-	data.require = function(target)
-		if type(target) == "string" then
-			return require(target)
-		end
-
-		if type(target) ~= "table" then
-			error("require: expected ModuleScript or string, got " .. type(target), 2)
-		end
-
-		if target.ClassName ~= "ModuleScript" then
-			error(`require: cannot require {target.ClassName} '{target.Name}'; expected ModuleScript`, 2)
-		end
-
-		if requiredCache[target] then
-			return requiredCache[target]
-		end
-
-		if requiredCache[target] == false then
-			error(`require: circular dependency detected on '{target.Name}'`, 2)
-		end
-
-		requiredCache[target] = false
-
-		data.script = target
-		local returned = ScriptRunnerService.RunScript(target)
-
-		if returned == nil then
-			error(`require: ModuleScript '{target.Name}' did not return a value`, 2)
-		end
-
-		requiredCache[target] = returned
-		return returned
-	end
-
 	data.import = function(v)
 		local callerEnv = getfenv(2)
 		--print(callerEnv)
@@ -287,8 +247,6 @@ return function(renderer, Kinemium_camera)
 	data.zune = {}
 
 	local c_api = capi(data)
-
-	ScriptRunnerService.Environment = data
 
 	return data, c_api
 end

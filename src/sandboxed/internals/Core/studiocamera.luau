@@ -7,6 +7,9 @@ local raylib = require("@raylib")
 RunService.RenderStepped:Connect(function(a0: number)
 	local camera = workspace.Camera
 	if camera then
+		if ishared.EnableHomescreen == true then
+			return
+		end
 		if game.Stop3DInput == true then
 			return
 		end
