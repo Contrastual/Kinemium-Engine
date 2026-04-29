@@ -468,7 +468,6 @@ Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 			})
 			debugstep()
 			local worldId = box2d.lib.b2CreateWorld(wdef)
-			print("created world!")
 			if worldId == zune.ffi.null then
 				error("Failed to create Box2D world")
 			end
@@ -586,7 +585,6 @@ Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 				end
 			end
 			debugstep()
-			print("created world")
 			return worldId
 		end,
 	})

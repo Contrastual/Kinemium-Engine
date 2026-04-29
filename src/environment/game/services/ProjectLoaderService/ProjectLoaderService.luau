@@ -98,8 +98,6 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 				fs.makeDir(path .. "/.vscode", true)
 				fs.makeDir(path .. "/autosave", true)
 
-				print("1")
-
 				fs.writeFile(
 					path .. "/.vscode/settings.json",
 					zune.serde.json.encode(settings, {
@@ -107,15 +105,9 @@ ProjectLoaderService.InitRenderer = function(renderer, renderer_signal)
 					})
 				)
 
-				print("2")
-
 				local config = buildProjectConfig(name, iconPath, description)
-				print(3, config)
 				local encodedProject = serde.toml.encode(config)
-				print(4, encoded)
 				fs.writeFile(kprojFile, encodedProject)
-
-				print("5")
 			end)
 			print(success, result)
 

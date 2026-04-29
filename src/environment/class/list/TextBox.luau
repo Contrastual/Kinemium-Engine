@@ -138,9 +138,7 @@ local defaultFont = lib.GetFontDefault()
 
 propTable.render = function(_, object, dt, structs, renderer, datamodel)
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
-	if not datamodel then
-		return
-	end
+
 	if not object.Visible or not framePos or not frameSize then
 		return
 	end

@@ -76,7 +76,9 @@ function KiRend.new(config: KiRendConf)
 	end
 	lib.SetExitKey(0)
 
+	print("gonna init twin")
 	ok, err = pcall(rlib.R3D_Init, config.width, config.height)
+	print("finished init")
 	if not ok then
 		error("Failed to initialize R3D: " .. tostring(err))
 	end
@@ -803,7 +805,7 @@ function KiRend.new(config: KiRendConf)
 					if drawCall.Begin then
 						drawCall.Begin()
 					end
-					rlib.R3D_DrawMeshInstanced(drawCall.mesh, drawCall.material, drawCall.instances, drawCall.count)
+					--rlib.R3D_DrawMeshInstanced(drawCall.mesh, drawCall.material, drawCall.instances, drawCall.count)
 					if drawCall.End then
 						drawCall.End()
 					end

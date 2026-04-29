@@ -143,17 +143,9 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
 	})
 
-	print("1")
-	if zune.platform.os == "linux" then
-		loadSky("./src/assets/sky/test/images/sky.png")
-	else
-		print(1)
-		local cloudShader = rlib.R3D_LoadSkyShader("./src/assets/sky/shaders/default.glsl")
-		print(cloudShader, 2)
-		local sky = rlib.R3D_GenCustomSky(512, cloudShader)
-		print(sky, 3)
-		setSkyObject(sky)
-	end
+	local cloudShader = rlib.R3D_LoadSkyShader("./src/assets/sky/shaders/default.glsl")
+	local sky = rlib.R3D_GenCustomSky(512, cloudShader)
+	setSkyObject(sky)
 	setAllEnvironmentEffects()
 
 	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR

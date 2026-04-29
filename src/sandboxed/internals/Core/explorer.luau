@@ -11,7 +11,7 @@ local KineFileService = game:GetService("KineFileService")
 local RBXModelImporter = game:GetService("RBXModelImporter")
 local Selection = game:GetService("Selection")
 
-if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") then
+if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") or FlagExists("client") then
 	return
 end
 
