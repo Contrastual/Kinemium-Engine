@@ -197,6 +197,7 @@ end
 
 -- SETUP CAMERA
 local instancePointer = Instance.new("Camera")
+
 local Kinemium_camera = cam.callback(instancePointer, renderer)
 print(kilang.env)
 Kinemium_camera.Parent = kilang.env.Workspace

@@ -30,6 +30,7 @@ end
 ffi.dlopen(asmpPath, {})
 ffi.dlopen(dll .. raylibname, {})
 
+print(dll .. libname)
 local r3d: typeof(funcs) = ffi.dlopen(dll .. libname, funcs)
 
 return {

@@ -240,11 +240,6 @@ RunService.RenderStepped:Connect(function(dt)
 		end
 
 		camera.CFrame = CFrame.new(finalCamPos, focusPos)
-		for _, part in pairs(character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.Transparency = 0
-			end
-		end
 
 		humanoid.TurnSpeed = 18
 		humanoid:ClearFacingDirection()
