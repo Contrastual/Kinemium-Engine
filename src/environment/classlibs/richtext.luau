@@ -664,6 +664,19 @@ function RichText.DrawLayout(drawLib, object, framePos, frameSize, layout, spaci
 		for _, segment in ipairs(line.segments) do
 			local segmentTransparency = combineTransparency(object.TextTransparency, segment.transparency)
 			if segmentTransparency < 1 then
+				if not segment then
+					continue
+				end
+				if not segment.font then
+					continue
+				end
+				if not segment.text then
+					continue
+				end
+				if not segment.size then
+					continue
+				end
+
 				local segmentColor = segment.color:ToRaylib(segmentTransparency)
 
 				if drawStroke then

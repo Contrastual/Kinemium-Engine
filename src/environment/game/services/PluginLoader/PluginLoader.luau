@@ -194,9 +194,10 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 
 				local plugin_require
 
-				local function plugin_run(source)
+				local function plugin_run(source, path)
 					local _, success, result = kilang:execute(source, {
 						SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+						StackId = path,
 					}, {
 						GetFileContents = function(fileName)
 							return files[fileName]
@@ -247,7 +248,12 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 					local ext = normalized:match("%.([^%.]+)$")
 					if ext == "lua" or ext == "luau" then
 						local source = buffer.tostring(file)
-						local result = select(2, plugin_run(source))
+						local success, result = plugin_run(source, filePath)
+
+						if not success then
+							warn("[PluginLoader] Failed to load file: " .. tostring(filePath), result)
+							return nil
+						end
 						requireCache[filePath] = result
 						return result
 					else
@@ -256,7 +262,7 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 					end
 				end
 
-				local success, result = plugin_run(source)
+				local success, result = plugin_run(source, plugin_id)
 
 				if not success then
 					print(`Failed to load plugin {plugin_id}: {result}`)

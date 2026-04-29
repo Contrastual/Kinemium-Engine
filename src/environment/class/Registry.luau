@@ -1,5 +1,4 @@
 local _filesystem = require("../../modules/filesystem")
-local sandboxer = require("../../modules/sandboxer")
 local Instance = require("../class/Instance")
 local datatypes = require("../datatypes/getDatatypes")
 local zembed = require("@zembed")
@@ -7,8 +6,6 @@ local zembed = require("@zembed")
 local registry = {}
 local listOfClasses = {}
 local created = {}
-
-sandboxer.environment = datatypes
 
 local entries = {}
 

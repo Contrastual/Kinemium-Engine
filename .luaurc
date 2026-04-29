@@ -55,7 +55,6 @@
         "harfbuzz": "./src/external/harfbuzz",
         "Terrain": "./src/environment/game/runtime/Terrain",
         "Enum": "./src/environment/libraries/Enum",
-        "sandboxer": "./src/modules/sandboxer",
         "Aereon": "./src/modules/Aereon/main",
         "Region3int16": "./src/environment/datatypes/Region3int16",
         "profiler": "./src/modules/profiler",
