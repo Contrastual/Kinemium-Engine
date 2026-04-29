@@ -805,7 +805,7 @@ function KiRend.new(config: KiRendConf)
 					if drawCall.Begin then
 						drawCall.Begin()
 					end
-					--rlib.R3D_DrawMeshInstanced(drawCall.mesh, drawCall.material, drawCall.instances, drawCall.count)
+					rlib.R3D_DrawMeshInstanced(drawCall.mesh, drawCall.material, drawCall.instances, drawCall.count)
 					if drawCall.End then
 						drawCall.End()
 					end
