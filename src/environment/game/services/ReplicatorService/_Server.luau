@@ -77,6 +77,32 @@ function Server.init(context)
 
 	local readySessions = {}
 
+	local function isRuntimeCreateSuppressed()
+		if game.GetMetadata == nil then
+			return false
+		end
+
+		return (game:GetMetadata("__replicatorSuppressRuntimeCreate") or 0) > 0
+	end
+
+	local function isSessionEligibleForLiveCreate(session)
+		if not session or not session.key then
+			return false
+		end
+
+		return initialSyncCompleted[session.key] == true
+	end
+
+	local function hasLiveCreateRecipients()
+		for _, session in ipairs(networkService:GetSessions()) do
+			if isSessionEligibleForLiveCreate(session) then
+				return true
+			end
+		end
+
+		return false
+	end
+
 	local function isHumanoidRootObject(object)
 		if type(object) ~= "table" then
 			return false
@@ -307,6 +333,9 @@ function Server.init(context)
 
 	local function assignNetworkId(object)
 		if object.NetworkId ~= nil then
+			if type(object.NetworkId) == "number" and object.NetworkId >= nextNetId then
+				nextNetId = object.NetworkId + 1
+			end
 			return
 		end
 
@@ -452,7 +481,10 @@ function Server.init(context)
 			if stamped[object] then
 				return
 			end
-			stamped[object] = true
+			stamped[object] = {
+				NetworkId = object._props.NetworkId,
+				_parentID = object._props._parentID,
+			}
 			object._props.NetworkId = object.NetworkId
 			object._props._parentID = object.Parent and object.Parent.NetworkId
 		end
@@ -464,9 +496,9 @@ function Server.init(context)
 		-- Always restore _props even when serialization throws.
 		local ok, result = pcall(serializationService.SerializeInstancesAsync, objects)
 
-		for object in pairs(stamped) do
-			object._props.NetworkId = nil
-			object._props._parentID = nil
+		for object, previous in pairs(stamped) do
+			object._props.NetworkId = previous.NetworkId
+			object._props._parentID = previous._parentID
 		end
 
 		if not ok then
@@ -525,6 +557,13 @@ function Server.init(context)
 		end
 
 		return entries
+	end
+
+	local function isCharacterModel(object)
+		return object ~= nil
+			and object.ClassName == "Model"
+			and object.GetAttribute ~= nil
+			and type(object:GetAttribute("__characterUserId")) == "number"
 	end
 
 	local function sendPatchEntries(recipient, entries)
@@ -601,6 +640,43 @@ function Server.init(context)
 				return
 			end
 
+			local relevantSessions = nil
+			if not recipient then
+				-- Runtime broadcast: if no client has completed initial sync yet,
+				-- this creation will be covered by that client's initial/inventory
+				-- sync.  Avoid serializing huge blobs into a reliable queue that
+				-- cannot help anyone yet.
+				relevantSessions = {}
+				for _, session in ipairs(networkService:GetSessions()) do
+					if isSessionEligibleForLiveCreate(session) then
+						local inRange = false
+						for _, obj in ipairs(batch) do
+							if
+								AreaOfInterest.ShouldReplicateToSession(
+									session,
+									obj,
+									networkOwnership.GetWorldPosition,
+									networkOwnership
+								)
+							then
+								inRange = true
+								break
+							end
+						end
+						if inRange then
+							table.insert(relevantSessions, session)
+						end
+					end
+				end
+
+				if #relevantSessions == 0 then
+					debugTrace(
+						`sendBatch reason={reason or "unspecified"} broadcast skipped before serialize; no initial-sync-complete recipients`
+					)
+					return
+				end
+			end
+
 			debugTrace(`sendBatch reason={reason or "unspecified"} serializing size={#batch}`)
 			local serialized = serializeObjects(batch)
 			debugTrace(`sendBatch reason={reason or "unspecified"} serialized={serialized and "success" or "failed"}`)
@@ -643,7 +719,11 @@ function Server.init(context)
 				debugTrace(
 					`sendBatch reason={reason or "unspecified"} oversize bytes={payloadBytes} limit={MAX_CREATE_PAYLOAD_BYTES} batch={#batch}`
 				)
-				if #batch > 1 then
+				if #batch == 1 and isCharacterModel(batch[1]) then
+					debugTrace(
+						`sendBatch reason={reason or "unspecified"} keeping oversized character model {batch[1].Name} intact`
+					)
+				elseif #batch > 1 then
 					local midpoint = math.max(1, math.floor(#batch / 2))
 					local left = {}
 					local right = {}
@@ -656,23 +736,23 @@ function Server.init(context)
 					sendBatch(left)
 					sendBatch(right)
 					return
-				end
-
-				local root = batch[1]
-				local children = root and root:GetChildren() or {}
-				if #children > 0 then
-					local splitChildren = {}
-					for _, child in ipairs(children) do
-						if child.CanReplicate ~= false and child.NetworkId ~= nil then
-							table.insert(splitChildren, child)
+				else
+					local root = batch[1]
+					local children = root and root:GetChildren() or {}
+					if #children > 0 then
+						local splitChildren = {}
+						for _, child in ipairs(children) do
+							if child.CanReplicate ~= false and child.NetworkId ~= nil then
+								table.insert(splitChildren, child)
+							end
 						end
-					end
-					if #splitChildren > 0 then
-						debugTrace(
-							`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
-						)
-						sendBatch(splitChildren)
-						return
+						if #splitChildren > 0 then
+							debugTrace(
+								`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
+							)
+							sendBatch(splitChildren)
+							return
+						end
 					end
 				end
 			end
@@ -699,29 +779,6 @@ function Server.init(context)
 					true
 				)
 			else
-				-- AoI-filtered broadcast for runtime object creation.
-				-- Check which sessions should see any of the objects in this batch.
-				local allSessions = networkService:GetSessions()
-				local relevantSessions = {}
-				for _, session in ipairs(allSessions) do
-					local inRange = false
-					for _, obj in ipairs(batch) do
-						if
-							AreaOfInterest.ShouldReplicateToSession(
-								session,
-								obj,
-								networkOwnership.GetWorldPosition,
-								networkOwnership
-							)
-						then
-							inRange = true
-							break
-						end
-					end
-					if inRange then
-						table.insert(relevantSessions, session)
-					end
-				end
 				networkService:SendToMultipleClients(
 					relevantSessions,
 					Protocol.Channels.Replication,
@@ -754,6 +811,13 @@ function Server.init(context)
 			end
 			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching done`)
 		else
+			if not hasLiveCreateRecipients() then
+				debugTrace(
+					`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
+				)
+				return
+			end
+
 			-- Runtime broadcast (new objects spawned during gameplay): use small
 			-- batches so each packet stays lightweight.
 			local ROOTS_PER_BATCH = 8
@@ -774,17 +838,47 @@ function Server.init(context)
 	local function collectInitialRoots()
 		local roots = {}
 		local seen = {}
+		local seenNetIds = {}
+		local seenWorkspaceSingletons = {}
+		local workspaceSingletonClasses = {
+			Camera = true,
+			Terrain = true,
+		}
+		local workspaceInst = game:GetService("Workspace")
 
 		local function addRoot(object)
 			if not object or object.CanReplicate == false or object.NetworkId == nil or seen[object] then
 				return
 			end
+			if seenNetIds[object.NetworkId] then
+				return
+			end
+			if object.Parent == workspaceInst and workspaceSingletonClasses[object.ClassName] then
+				if seenWorkspaceSingletons[object.ClassName] then
+					return
+				end
+				seenWorkspaceSingletons[object.ClassName] = true
+			end
+			seenNetIds[object.NetworkId] = true
 			seen[object] = true
 			table.insert(roots, object)
 		end
 
+		local function addWorkspaceRoot(object)
+			if not object or object.CanReplicate == false or object.NetworkId == nil then
+				return
+			end
+
+			local ancestor = object
+			while ancestor.Parent and ancestor.Parent ~= workspaceInst do
+				ancestor = ancestor.Parent
+			end
+			if ancestor.Parent == workspaceInst then
+				addRoot(ancestor)
+			end
+		end
+
 		-- Include every top-level Workspace instance that contains replicated descendants (nested rigs, synced folders).
-		local workspaceInst = game:GetService("Workspace")
 		local trackedCount = 0
 		for netId in pairs(lookup) do
 			trackedCount += 1
@@ -792,16 +886,7 @@ function Server.init(context)
 		print(`[Replicator][Server] collectInitialRoots: lookup has {trackedCount} tracked objects`)
 		if workspaceInst then
 			for _, object in ipairs(workspaceInst:GetDescendants()) do
-				if object.CanReplicate == false or object.NetworkId == nil then
-					continue
-				end
-				local ancestor = object
-				while ancestor.Parent and ancestor.Parent ~= workspaceInst do
-					ancestor = ancestor.Parent
-				end
-				if ancestor.Parent == workspaceInst then
-					addRoot(ancestor)
-				end
+				addWorkspaceRoot(object)
 			end
 		end
 
@@ -914,7 +999,28 @@ function Server.init(context)
 		return missing
 	end
 
-	local function sendInitialStateForSession(session, clientNetIds)
+	local function rootCameFromBlob(root, fingerprint)
+		if type(fingerprint) ~= "string" or fingerprint == "" or root == nil then
+			return false
+		end
+
+		local hasReplicatedObject = false
+		local allFromBlob = true
+		visitTree(root, function(object)
+			if object.NetworkId == nil or object.CanReplicate == false then
+				return
+			end
+
+			hasReplicatedObject = true
+			if object.GetMetadata == nil or object:GetMetadata("__blobFingerprint") ~= fingerprint then
+				allFromBlob = false
+			end
+		end)
+
+		return hasReplicatedObject and allFromBlob
+	end
+
+	local function sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
 		if not session or not session.key or initialSyncCompleted[session.key] then
 			return
 		end
@@ -925,6 +1031,9 @@ function Server.init(context)
 		if clientNetIds ~= nil then
 			rootsToReplicate = {}
 			for _, root in ipairs(initialRoots) do
+				if rootCameFromBlob(root, clientBlobFingerprint) then
+					continue
+				end
 				if rootHasMissingObjects(root, clientNetIds) then
 					table.insert(rootsToReplicate, root)
 				end
@@ -932,12 +1041,16 @@ function Server.init(context)
 		end
 
 		print(
-			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil})`
+			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil}, blobMatch={clientBlobFingerprint == (game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil)})`
 		)
 		initialSyncCompleted[session.key] = true
 		pendingInitialInventorySync[session.key] = nil
 		sendCreate(session, rootsToReplicate, "initial_sync")
-		sendTerrainSnapshot(session)
+		if clientBlobFingerprint == nil then
+			sendTerrainSnapshot(session)
+		else
+			debugTrace(`Initial sync {session.key}: skipped terrain snapshot because blob fingerprints match`)
+		end
 		sendWorldLoaded(session)
 		print(`[Replicator][Server] WorldLoaded sent to {session.key}`)
 	end
@@ -1208,23 +1321,28 @@ function Server.init(context)
 		-- Sending a second Create for the individual child would flood the network
 		-- with duplicate objects.
 		local alreadyTracked = object.NetworkId ~= nil and lookup[object.NetworkId] == object
+		local suppressedAtAdd = isRuntimeCreateSuppressed()
 
 		trackTree(object)
 		if object.ClassName == "NetworkController" and object.Parent then
 			trackObject(object.Parent)
 		end
 
-		if not alreadyTracked then
+		if suppressedAtAdd then
+			debugTrace(
+				`DescendantAdded suppressed root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)}`
+			)
+		elseif not alreadyTracked then
 			task.spawn(function()
 				-- Guard: object may have been destroyed (e.g. Debris) before the
 				-- deferred send executes.
 				if object.Parent == nil then
 					return
 				end
-			debugTrace(
-				`DescendantAdded root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)} descendants={#object:GetDescendants()}`
-			)
-			sendCreate(nil, { object }, "runtime_descendant_added")
+				debugTrace(
+					`DescendantAdded root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)} descendants={#object:GetDescendants()}`
+				)
+				sendCreate(nil, { object }, "runtime_descendant_added")
 			end)
 		end
 	end)
@@ -1294,7 +1412,12 @@ function Server.init(context)
 			debugTrace(
 				`ClientObjectInventoryResponse session={session.key} payloadCount={#(payload and payload.netIds or {})} uniqueCount={uniqueCount}`
 			)
-			sendInitialStateForSession(session, clientNetIds)
+			local clientBlobFingerprint = type(payload) == "table" and payload.blobFingerprint or nil
+			local serverBlobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil
+			if clientBlobFingerprint ~= serverBlobFingerprint then
+				clientBlobFingerprint = nil
+			end
+			sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
 		end
 	)
 
@@ -1731,12 +1854,12 @@ function Server.init(context)
 
 	local function flushSnapshots(tick)
 		for netId, object in pairs(trackedStateObjects) do
-			if object.CanReplicate == false or object.Parent == nil then
+			if object.CanReplicate == false or object.Parent == nil or object.NetworkId == nil then
 				continue
 			end
 
 			local state = stateRegistry.Capture(object)
-			if not state then
+			if not state or state.id == nil then
 				continue
 			end
 

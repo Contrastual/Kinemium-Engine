@@ -31,7 +31,6 @@ end
 
 local backgroundColor = Theme.BackgroundColor:ToRaylib(Theme.BackgroundTransparency)
 local TextColor = Theme.TextColor:ToRaylib(Theme.TextTransparency)
-local SecondaryBackgroundColor = Theme.SecondaryBackgroundColor:ToRaylib(Theme.SecondaryBackgroundColorTransparency)
 local ImageColor = Theme.ImageColor:ToRaylib(Theme.ImageTransparency)
 
 export type elementTitle = string
@@ -197,16 +196,17 @@ local fileMenu = gui.menu({
 })
 
 local function create_window(title, frame)
-	repeat
-		task.wait()
-	until frame.AbsolutePosition and frame.AbsoluteSize
+	local initialPos = frame.AbsolutePosition or vector.create(0, 0)
+	local initialSize = frame.AbsoluteSize or vector.create(800, 170)
+
 	local myWindow = window.create({
 		title = title,
-		x = frame.AbsolutePosition.X,
-		y = frame.AbsolutePosition.Y,
-		width = frame.AbsoluteSize.X,
+		x = initialPos.X,
+		y = initialPos.Y,
+		width = initialSize.X,
 		DisableClipping = true,
-		height = frame.AbsoluteSize.Y,
+		height = initialSize.Y,
+		headerRender = false,
 
 		tabs = {
 			{
@@ -648,13 +648,15 @@ end
 
 fileMenu:hide()
 
-propback:Minimize()
+-- propback:Minimize()
 
 RunService.RenderStepped:Connect(function(a0: number)
-	propback.x = frame.AbsolutePosition.X
-	propback.y = frame.AbsolutePosition.Y
-	propback.width = frame.AbsoluteSize.X
-	propback.height = frame.AbsoluteSize.Y
+	if frame.AbsolutePosition and frame.AbsoluteSize then
+		propback.x = frame.AbsolutePosition.X
+		propback.y = frame.AbsolutePosition.Y
+		propback.width = frame.AbsoluteSize.X
+		propback.height = frame.AbsoluteSize.Y
+	end
 end)
 
 propback.stepped = function(propback)

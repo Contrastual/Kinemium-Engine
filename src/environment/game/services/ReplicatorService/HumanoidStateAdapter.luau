@@ -1,5 +1,6 @@
 local CFrame = require("@CFrame")
 local Vector3 = require("@Vector3")
+local Enum = require("@EnumMap")
 
 local HumanoidStateAdapter = {}
 
@@ -20,11 +21,16 @@ function HumanoidStateAdapter.matches(object)
 end
 
 function HumanoidStateAdapter.capture(humanoid)
+	local humanoidState = humanoid.State or 0
+	if type(humanoidState) == "table" then
+		humanoidState = humanoidState.Name or humanoidState.Value or 0
+	end
+
 	return {
 		type = "Humanoid",
 		id = humanoid.NetworkId,
 		stance = humanoid.Stance or "default",
-		state = humanoid.State or 0,
+		state = humanoidState,
 		sprinting = humanoid.Sprinting == true,
 		crouching = humanoid.Crouching == true,
 		velocity = humanoid.MoveVelocity and humanoid.MoveVelocity:ToTable() or nil,
@@ -37,7 +43,11 @@ function HumanoidStateAdapter.apply(humanoid, state)
 		humanoid.Stance = state.stance
 	end
 	if state.state ~= nil then
-		humanoid.State = state.state
+		if type(state.state) == "string" and Enum.HumanoidStateType and Enum.HumanoidStateType[state.state] then
+			humanoid.State = Enum.HumanoidStateType[state.state]
+		else
+			humanoid.State = state.state
+		end
 	end
 	if state.sprinting ~= nil then
 		humanoid.Sprinting = state.sprinting

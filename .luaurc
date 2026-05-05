@@ -66,6 +66,7 @@
         "ki3d": "./src/libs/KI3D",
         "kineshader": "./src/renderer/shader",
         "kispring": "./src/libs/spring",
+        "ShaderDatatype": "./src/environment/datatypes/Shader",
         "camera": "./src/environment/class/list/Camera",
         "Animator": "./src/environment/class/list/Animator",
         "InstanceRegistry": "./src/environment/class/Registry",

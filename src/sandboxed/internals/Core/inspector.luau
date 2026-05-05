@@ -632,35 +632,11 @@ local function buildBuckets(selected)
 		seen[cat] = true
 	end
 
-	local attrs = selected:GetAttributes()
-	if attrs and next(attrs) then
-		buckets["Attributes"] = {}
-		seen["Attributes"] = true
-		for name, val in pairs(attrs) do
-			table.insert(buckets["Attributes"], { propName = name, propValue = val, displayName = name })
-		end
-	end
-
-	local tags = selected:GetTags()
-	if tags and #tags > 0 then
-		buckets["Tags"] = {}
-		seen["Tags"] = true
-		for _, tag in ipairs(tags) do
-			table.insert(buckets["Tags"], { propName = tag, propValue = true, displayName = tag })
-		end
-	end
-
 	local order = {}
 	for _, cat in ipairs(CATEGORY_ORDER) do
 		if seen[cat] then
 			table.insert(order, cat)
 		end
-	end
-	if seen["Attributes"] then
-		table.insert(order, "Attributes")
-	end
-	if seen["Tags"] then
-		table.insert(order, "Tags")
 	end
 
 	for _, cat in ipairs(order) do
@@ -696,43 +672,6 @@ Selection.SelectionAdded:Connect(function(selected)
 			if type(comp) == "table" and comp._isDropdown then
 				overlapping[propName] = comp
 			end
-		end
-	end
-
-	local attrProxy = setmetatable({}, {
-		__index = function(_, k)
-			return selected:GetAttribute(k)
-		end,
-		__newindex = function(_, k, v)
-			selected:SetAttribute(k, v)
-		end,
-	})
-
-	for attrName, attrValue in pairs(selected:GetAttributes() or {}) do
-		local typeName = getPropTypeName(attrValue)
-		local dt = datatypes[typeName]
-		if dt then
-			local comp = dt.build(attrProxy, attrName, attrValue)
-			editorComps["_attr_" .. attrName] = { comp = comp, typeName = typeName, displayName = attrName }
-		end
-	end
-
-	local tagProxy = setmetatable({}, {
-		__index = function()
-			return true
-		end,
-		__newindex = function(_, k, v)
-			if v == false then
-				selected:RemoveTag(k)
-			end
-		end,
-	})
-
-	for _, tag in ipairs(selected:GetTags() or {}) do
-		local dt = datatypes["boolean"]
-		if dt then
-			local comp = dt.build(tagProxy, tag, true)
-			editorComps["_tag_" .. tag] = { comp = comp, typeName = "boolean", displayName = tag }
 		end
 	end
 end)
@@ -996,8 +935,14 @@ window.stepped = function(windowData)
 
 		local thumbRect = { x = sbX, y = thumbY, width = sbW, height = thumbH }
 		local trackRect = { x = sbX, y = trackY, width = sbW, height = trackH }
-		local isThumbHovered = mousePos.x >= sbX and mousePos.x <= sbX + sbW and mousePos.y >= thumbY and mousePos.y <= thumbY + thumbH
-		local isTrackHovered = mousePos.x >= sbX and mousePos.x <= sbX + sbW and mousePos.y >= trackY and mousePos.y <= trackY + trackH
+		local isThumbHovered = mousePos.x >= sbX
+			and mousePos.x <= sbX + sbW
+			and mousePos.y >= thumbY
+			and mousePos.y <= thumbY + thumbH
+		local isTrackHovered = mousePos.x >= sbX
+			and mousePos.x <= sbX + sbW
+			and mousePos.y >= trackY
+			and mousePos.y <= trackY + trackH
 
 		-- Handle thumb drag start
 		if mousePressed and isThumbHovered then
@@ -1029,7 +974,8 @@ window.stepped = function(windowData)
 		thumbY = winY + (scrollOffset / maxScrollOffset) * (winH - thumbH)
 
 		rl.DrawRectangle(sbX, winY, sbW, winH, Theme.SecondaryBackgroundColor:ToRaylib(0.6))
-		local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.4, 0.4, 0.4) or Color3.new(0.3, 0.3, 0.3)
+		local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.4, 0.4, 0.4)
+			or Color3.new(0.3, 0.3, 0.3)
 		rl.DrawRectangleRounded(
 			structs.Rectangle:new({ x = sbX, y = thumbY, width = sbW, height = thumbH }),
 			0.5,

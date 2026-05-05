@@ -157,6 +157,7 @@ local function controller()
 	local ray = RaycastParams.new()
 	ray.FilterType = Enum.RaycastFilterType.Exclude
 	ray.IgnoreWater = true
+	ray.RespectCanCollide = true
 	return {
 		animClock = 0,
 		animStride = 0,
@@ -334,7 +335,7 @@ local function partFor(name, parent, spec, isRoot, createInstance)
 		part.Anchored = if spec.Anchored ~= nil then spec.Anchored else true
 	end
 	if spec.CanCollide ~= nil or not existing then
-		part.CanCollide = if spec.CanCollide ~= nil then spec.CanCollide else false
+		part.CanCollide = if spec.CanCollide ~= nil then spec.CanCollide else isRoot ~= true
 	end
 	if spec.CastsShadow ~= nil or not existing then
 		part.CastsShadow = if spec.CastsShadow ~= nil then spec.CastsShadow else true
@@ -1784,33 +1785,25 @@ return {
 
 				if minHorizDist > 0.001 then
 					local hasBlockcast = type(workspace.Blockcast) == "function"
-					for _, binding in pairs(c.bindings) do
-						for _, seg in ipairs(binding.Segments) do
-							if seg.Part and seg.Part.Parent ~= nil then
-								local sweepHit
-								if hasBlockcast then
-									local cf = seg.Part.CFrame + Vector3.new(0, 0.05, 0)
-									local size = seg.Part.Size * 0.95
-									pcall(function()
-										sweepHit = workspace:Blockcast(cf, size, horizOffset, c.rayParams)
-									end)
-								end
-								if not sweepHit then
-									pcall(function()
-										sweepHit = workspace:Raycast(seg.Part.Position, horizOffset, c.rayParams)
-									end)
-								end
+					local sweepHit
+					if hasBlockcast then
+						local bodyHeight = math.max(h.HipHeight * 2.4, 2.5)
+						local bodySize = Vector3.new(2, bodyHeight, 1.25)
+						local bodyCenter = c.currentPos + Vector3.new(0, bodyHeight * 0.35, 0)
+						local bodyCF = CFrame.new(bodyCenter, bodyCenter + c.lookXZ)
+						pcall(function()
+							sweepHit = workspace:Blockcast(bodyCF, bodySize, horizOffset, c.rayParams)
+						end)
+					end
+					if not sweepHit then
+						pcall(function()
+							sweepHit = workspace:Raycast(c.currentPos, horizOffset, c.rayParams)
+						end)
+					end
 
-								if
-									sweepHit
-									and math.abs(sweepHit.Normal.Y) < 0.7
-									and sweepHit.Distance < minHorizDist
-								then
-									minHorizDist = sweepHit.Distance
-									slideNormal = sweepHit.Normal
-								end
-							end
-						end
+					if sweepHit and math.abs(sweepHit.Normal.Y) < 0.7 and sweepHit.Distance < minHorizDist then
+						minHorizDist = sweepHit.Distance
+						slideNormal = sweepHit.Normal
 					end
 				end
 

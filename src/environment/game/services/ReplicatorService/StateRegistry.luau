@@ -8,10 +8,7 @@ local StateRegistry = {}
 local adapters = {}
 local adapterOrder = {}
 
-local ok, HumanoidStateAdapter = require("./HumanoidStateAdapter")
-if ok and HumanoidStateAdapter then
-	StateRegistry.RegisterAdapter("Humanoid", HumanoidStateAdapter)
-end
+local humanoidAdapterOk, HumanoidStateAdapter = pcall(require, "./HumanoidStateAdapter")
 
 local function getSafeVector3(value)
 	if type(value) == "table" and type(value.ToTable) == "function" then
@@ -56,15 +53,22 @@ local function applyCFrameToObject(object, cframe)
 	end
 end
 
-local function cloneTable(tbl)
+local function cloneTable(tbl, seen)
 	if type(tbl) ~= "table" then
 		return tbl
 	end
 
-	local copy = {}
-	for key, value in pairs(tbl) do
-		copy[key] = cloneTable(value)
+	seen = seen or {}
+	if seen[tbl] then
+		return nil
 	end
+
+	local copy = {}
+	seen[tbl] = true
+	for key, value in pairs(tbl) do
+		copy[key] = cloneTable(value, seen)
+	end
+	seen[tbl] = nil
 	return copy
 end
 
@@ -108,6 +112,10 @@ function StateRegistry.RegisterAdapter(name, adapter)
 	if not table.find(adapterOrder, name) then
 		table.insert(adapterOrder, name)
 	end
+end
+
+if humanoidAdapterOk and HumanoidStateAdapter then
+	StateRegistry.RegisterAdapter("Humanoid", HumanoidStateAdapter)
 end
 
 function StateRegistry.ResolveAdapter(object)

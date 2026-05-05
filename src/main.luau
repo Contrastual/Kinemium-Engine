@@ -255,14 +255,16 @@ local function loadInternals()
 		end
 
 		if string.find(path, ".luau") or string.find(path, ".lua") then
-			local threadid, success, result = kilang:execute(code, {
-				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-				StackId = path,
-			})
+			task.spawn(function()
+				local threadid, success, result = kilang:execute(code, {
+					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+					StackId = path,
+				})
 
-			if not success and result ~= nil then
-				error(`Error loading internal {threadid}: {tostring(result)}`)
-			end
+				if not success and result ~= nil then
+					error(`Error loading internal {threadid}: {tostring(result)}`)
+				end
+			end)
 		elseif string.find(path, ".c") then
 			iodebug("Found C file!", path)
 			CEnv.runC(code)
@@ -295,14 +297,16 @@ function Kinemium:run()
 			superset = "typescript"
 		end
 
-		local id, success, result = kilang:execute(code, {
-			superset = superset,
-			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
-			StackId = path,
-		})
-		if not success then
-			evalError(`{id}: {tostring(result)}`)
-		end
+		task.spawn(function()
+			local id, success, result = kilang:execute(code, {
+				superset = superset,
+				SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
+				StackId = path,
+			})
+			if not success then
+				evalError(`{id}: {tostring(result)}`)
+			end
+		end)
 	end)
 end
 

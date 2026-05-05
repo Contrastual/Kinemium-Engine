@@ -86,6 +86,7 @@ local ENGINE_FONT_FILES = {
 	Ubuntu = "./src/assets/fonts/Ubuntu-Regular.ttf",
 	Arimo = "./src/assets/fonts/Arimo-Regular.ttf",
 	ArimoBold = "./src/assets/fonts/Arimo-Bold.ttf",
+	EvenStevens = "./src/assets/fonts/EvenStevens.ttf",
 	Unknown = DEFAULT_FONT_PATH,
 }
 

@@ -57,23 +57,18 @@ local box = textbox.new({
 	end,
 })
 
-local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
 
-local blacklisted = {
-	"Children",
-}
-
 local function create_window(title, frame)
-	repeat
-		task.wait()
-	until frame.AbsolutePosition and frame.AbsoluteSize
+	local initialPos = frame.AbsolutePosition or vector.create(0, 0)
+	local initialSize = frame.AbsoluteSize or vector.create(800, 200)
+
 	local myWindow = window.create({
 		title = title,
-		x = frame.AbsolutePosition.X,
-		y = frame.AbsolutePosition.Y,
-		width = frame.AbsoluteSize.X,
-		height = frame.AbsoluteSize.Y,
+		x = initialPos.X,
+		y = initialPos.Y,
+		width = initialSize.X,
+		height = initialSize.Y,
 		tabs = {
 			{
 				name = "Output",
@@ -182,6 +177,14 @@ local propback, frame =
 
 window.stepped = function(windowData)
 	if windowData.title == "Console" then
+		if (windowData.x == 0 and windowData.y == 0 and frame.AbsolutePosition and frame.AbsolutePosition.X ~= 0) then
+			if frame.AbsolutePosition and frame.AbsoluteSize then
+				windowData.x = frame.AbsolutePosition.X
+				windowData.y = frame.AbsolutePosition.Y
+				windowData.width = frame.AbsoluteSize.X
+				windowData.height = frame.AbsoluteSize.Y
+			end
+		end
 		if game.Context ~= Enum.GameContext.Editor then
 			return
 		end

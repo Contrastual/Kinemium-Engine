@@ -66,7 +66,8 @@ end
 local function setMaterialShaderField(matBuf: buffer, shaderPtr: any)
 	local off = r3dstructs.R3D_Material:offset("shader")
 	local staging = ffi.dupe(buffer.create(8))
-	staging:writeptr(0, shaderPtr)
+	local toptr = ffi.ptrFromAddress(shaderPtr)
+	staging:writeptr(0, toptr)
 	for i = 0, 7 do
 		buffer.writeu8(matBuf, off + i, staging:readu8(i))
 	end

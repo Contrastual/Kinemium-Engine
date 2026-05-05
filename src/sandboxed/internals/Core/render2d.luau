@@ -60,16 +60,15 @@ end)
 
 local window = aereon.window(game)
 
-repeat
-	task.wait()
-until frame.AbsolutePosition
+local initialPos = frame.AbsolutePosition or vector.create(0, 0)
+local initialSize = frame.AbsoluteSize or vector.create(800, 600)
 
 local ideWindow = window.create({
 	title = "Script Editor",
-	x = frame.AbsolutePosition.X,
-	y = frame.AbsolutePosition.Y,
-	width = frame.AbsoluteSize.X,
-	height = frame.AbsoluteSize.Y,
+	x = initialPos.X,
+	y = initialPos.Y,
+	width = initialSize.X,
+	height = initialSize.Y,
 	enabled = false,
 })
 

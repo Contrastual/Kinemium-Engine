@@ -36,6 +36,7 @@ function Client.init(context)
 
 	local lookup = {}
 	local singletonByClass = {}
+	local ignoredCreateNetIds = {}
 	local deferredReferencePatches = {}
 	local MAX_DEFERRED_PATCHES = 256
 	local DEFERRED_PATCH_TTL = 30 -- seconds; discard entries older than this
@@ -49,6 +50,10 @@ function Client.init(context)
 	local clientBaselineCache = {}
 	local MAX_BASELINE_CACHE_SIZE = 64  -- Limit cache size to prevent memory leaks
 	local workspace = game:GetService("Workspace")
+	local protectedWorkspaceSingletonClasses = {
+		Camera = true,
+		Terrain = true,
+	}
 	local ownedStateSequence = 0
 	local outboundOwnedPatchEntries = {}
 	local lastNoOwnedStateLogTick = -math.huge
@@ -187,6 +192,15 @@ function Client.init(context)
 		singletonByClass[className] = service
 	end
 
+	local localCamera = workspace:FindFirstChild("Camera")
+	if localCamera then
+		singletonByClass["Camera"] = localCamera
+	end
+	local localTerrain = getTerrain()
+	if localTerrain then
+		singletonByClass["Terrain"] = localTerrain
+	end
+
 	lookup[0] = game
 	lookup[1] = game:GetService("Workspace")
 	lookup[2] = game:GetService("Players")
@@ -221,12 +235,20 @@ function Client.init(context)
 	end
 
 	local function sendObjectInventoryToServer()
+		if game.GetMetadata and game:GetMetadata("__blobLoading") == true then
+			task.delay(0.25, sendObjectInventoryToServer)
+			return
+		end
+
 		local netIds = collectKnownNetworkIds()
 		print(`[Replicator][Client] Sending object inventory to server: {#netIds} netIds`)
 		networkService:SendToServer(
 			Protocol.Channels.Control,
 			Protocol.Kinds.ClientObjectInventoryResponse,
-			{ netIds = netIds },
+			{
+				netIds = netIds,
+				blobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil,
+			},
 			true
 		)
 	end
@@ -501,7 +523,9 @@ function Client.init(context)
 	end
 
 	local function assignCharacterToPlayer(player, character)
+		print(`[Replicator][Client] assignCharacterToPlayer: player=${player and player.Name or "nil"}, character=${character and character.Name or "nil"}`)
 		if not player or not character or player.Character == character then
+			print(`[Replicator][Client]   -> skipped`)
 			return
 		end
 
@@ -511,8 +535,10 @@ function Client.init(context)
 		end
 
 		player.Character = character
+		print(`[Replicator][Client]   -> player.Character SET`)
 		if player.CharacterAdded then
 			player.CharacterAdded:Fire(character)
+			print(`[Replicator][Client]   -> CharacterAdded fired`)
 		end
 	end
 
@@ -545,7 +571,9 @@ function Client.init(context)
 	end
 
 	local function syncPlayerCharacterBindingForModel(model)
+		print(`[Replicator][Client] syncCharBindingForModel: ${model and model.Name or "nil"} class=${model and model.ClassName or "?"}`)
 		if not model or model.ClassName ~= "Model" then
+			print(`[Replicator][Client]   -> skipped (not a Model)`)
 			return
 		end
 
@@ -596,12 +624,14 @@ function Client.init(context)
 	end
 
 	local function syncPlayerCharacterBindingForPlayer(player)
+		print(`[Replicator][Client] syncCharBindingForPlayer: ${player and player.Name or "nil"}`)
 		if not player then
 			return
 		end
 
 		local workspace = game:GetService("Workspace")
 		local character = findCharacterModelForPlayer(workspace, player)
+		print(`[Replicator][Client]   findCharacterModelForPlayer = ${character and character.Name or "nil"}`)
 		if character then
 			assignCharacterToPlayer(player, character)
 		end
@@ -649,9 +679,29 @@ function Client.init(context)
 			local netId = object._props.NetworkId
 			local parentNetId = object._props._parentID
 
-			if netId == nil or lookup[netId] then
+			if netId == nil or ignoredCreateNetIds[netId] or lookup[netId] then
 				skippedCount += 1
 				continue
+			end
+
+			if protectedWorkspaceSingletonClasses[object.ClassName] then
+				local existingSingleton = singletonByClass[object.ClassName]
+					or (parentNetId == 1 and workspace:FindFirstChild(object.Name))
+				if existingSingleton and existingSingleton.ClassName == object.ClassName then
+					singletonByClass[object.ClassName] = existingSingleton
+					if existingSingleton.NetworkId == nil then
+						singletonCount += 1
+						existingSingleton.NetworkId = netId
+						lookup[netId] = existingSingleton
+					else
+						ignoredCreateNetIds[netId] = true
+						skippedCount += 1
+						print(
+							`[Replicator][Client] Ignoring duplicate {object.ClassName} create for netId={netId}; preserving local singleton`
+						)
+					end
+					continue
+				end
 			end
 
 			if object.ClassName == "Player" then
@@ -713,7 +763,7 @@ function Client.init(context)
 			})
 
 			-- Progress report and yield every 50 objects to keep network alive
-			if i % 10 == 0 then
+			if i % 50 == 0 then
 				print(`[Replicator][Client]   Progress: {i}/{#deserialized} objects processed...`)
 				task.wait()
 			end
@@ -751,7 +801,7 @@ function Client.init(context)
 			if not tryParent(entry) then
 				table.insert(retryQueue, entry)
 			end
-			if i % 10 == 0 then
+			if i % 50 == 0 then
 				task.wait()
 			end
 		end
@@ -770,7 +820,7 @@ function Client.init(context)
 				table.insert(retryQueue, entry)
 			end
 			retryYieldCount += 1
-			if retryYieldCount % 10 == 0 then
+			if retryYieldCount % 50 == 0 then
 				task.wait()
 			end
 		end
@@ -954,9 +1004,16 @@ function Client.init(context)
 
 		for _, stateOrDelta in ipairs(payload.states or {}) do
 			local netId = stateOrDelta.id
+			if netId == nil then
+				warn(`[Replicator][Client] Dropping snapshot state without id at tick {payload.tick}`)
+				continue
+			end
 			local baseline = newBaselineMap[netId] or baselineMap[netId]
 			local fullState = stateRegistry.ApplyDelta(baseline, stateOrDelta)
 			if fullState ~= nil then
+				if fullState.id == nil then
+					fullState.id = netId
+				end
 				newBaselineMap[netId] = fullState
 				table.insert(statesToApply, fullState)
 			elseif stateOrDelta.__isDelta then
@@ -1161,6 +1218,11 @@ function Client.init(context)
 	end)
 
 	networkService:RegisterMessageHandler(Protocol.Channels.Replication, Protocol.Kinds.Remove, function(_, payload)
+		if ignoredCreateNetIds[payload.object] then
+			ignoredCreateNetIds[payload.object] = nil
+			return
+		end
+
 		local object = lookup[payload.object]
 		if object then
 			lookup[payload.object] = nil

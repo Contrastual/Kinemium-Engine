@@ -779,7 +779,7 @@ local funcs = {
 	},
 
 	R3D_LoadSurfaceShader = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	R3D_LoadSurfaceShaderFromMemory = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	R3D_LoadSurfaceShaderFromMemory = { returns = structs.R3D_SurfaceShader, args = { ffi.types.pointer } },
 	R3D_UnloadSurfaceShader = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_SetSurfaceShaderUniform = {
 		returns = ffi.types.void,

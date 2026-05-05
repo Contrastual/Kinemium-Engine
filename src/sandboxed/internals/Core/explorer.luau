@@ -101,37 +101,95 @@ local function getClassCategory(className)
 	end
 
 	-- UI
-	if lowerName:find("gui") or lowerName:find("screen") or lowerName:find("frame") or lowerName:find("text") or lowerName:find("button") or lowerName:find("scroll") or lowerName:find("image") or lowerName:find("textbox") or lowerName:find("viewport") or lowerName:find("billboard") or lowerName:find("surface") then
+	if
+		lowerName:find("gui")
+		or lowerName:find("screen")
+		or lowerName:find("frame")
+		or lowerName:find("text")
+		or lowerName:find("button")
+		or lowerName:find("scroll")
+		or lowerName:find("image")
+		or lowerName:find("textbox")
+		or lowerName:find("viewport")
+		or lowerName:find("billboard")
+		or lowerName:find("surface")
+	then
 		return "UI"
 	end
 
 	-- Effects
-	if lowerName:find("particle") or lowerName:find("light") or lowerName:find("beam") or lowerName:find("trail") or lowerName:find("fire") or lowerName:find("smoke") or lowerName:find("sparkles") or lowerName:find("constraint") then
+	if
+		lowerName:find("particle")
+		or lowerName:find("light")
+		or lowerName:find("beam")
+		or lowerName:find("trail")
+		or lowerName:find("fire")
+		or lowerName:find("smoke")
+		or lowerName:find("sparkles")
+		or lowerName:find("constraint")
+	then
 		return "Effects"
 	end
 
 	-- Scripting
-	if lowerName:find("script") or lowerName:find("module") or lowerName:find("bindable") or lowerName:find("remote") then
+	if
+		lowerName:find("script")
+		or lowerName:find("module")
+		or lowerName:find("bindable")
+		or lowerName:find("remote")
+	then
 		return "Scripting"
 	end
 
 	-- Objects
-	if lowerName:find("part") or lowerName:find("mesh") or lowerName:find("model") or lowerName:find("attachment") or lowerName:find("motor") or lowerName:find("weld") then
+	if
+		lowerName:find("part")
+		or lowerName:find("mesh")
+		or lowerName:find("model")
+		or lowerName:find("attachment")
+		or lowerName:find("motor")
+		or lowerName:find("weld")
+	then
 		return "Objects"
 	end
 
 	-- Data
-	if lowerName:find("value") or lowerName:find("object") or lowerName:find("bool") or lowerName:find("number") or lowerName:find("string") or lowerName:find("vector") or lowerName:find("color") or lowerName:find("cframe") or lowerName:find("udim") or lowerName:find("brick") then
+	if
+		lowerName:find("value")
+		or lowerName:find("object")
+		or lowerName:find("bool")
+		or lowerName:find("number")
+		or lowerName:find("string")
+		or lowerName:find("vector")
+		or lowerName:find("color")
+		or lowerName:find("cframe")
+		or lowerName:find("udim")
+		or lowerName:find("brick")
+	then
 		return "Data"
 	end
 
 	-- Audio
-	if lowerName:find("sound") or lowerName:find("audio") or lowerName:find("reverb") or lowerName:find("echo") or lowerName:find("distortion") or lowerName:find("flange") or lowerName:find("chorus") or lowerName:find("equalizer") then
+	if
+		lowerName:find("sound")
+		or lowerName:find("audio")
+		or lowerName:find("reverb")
+		or lowerName:find("echo")
+		or lowerName:find("distortion")
+		or lowerName:find("flange")
+		or lowerName:find("chorus")
+		or lowerName:find("equalizer")
+	then
 		return "Audio"
 	end
 
 	-- Animation
-	if lowerName:find("animation") or lowerName:find("animator") or lowerName:find("humanoid") or lowerName:find("character") then
+	if
+		lowerName:find("animation")
+		or lowerName:find("animator")
+		or lowerName:find("humanoid")
+		or lowerName:find("character")
+	then
 		return "Animation"
 	end
 
@@ -608,7 +666,10 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 
 	local totalItems = totalVisibleItems
 
-	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2 + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
+	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT
+		+ MENU_PADDING * 2
+		+ ADD_MENU_SEARCH_HEIGHT
+		+ ADD_MENU_TITLE_HEIGHT
 	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT + #categoryOrder * CATEGORY_HEADER_HEIGHT
 	local menuX = toggleX - ADD_MENU_WIDTH - 10
 	local menuY = btnY + 30
@@ -622,10 +683,22 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	)
 
 	-- Draw title
-	rl.DrawTextEx(vend, "Add Object", vector.create(menuX + MENU_PADDING, menuY + MENU_PADDING), 18, 1, ThemeColors.text)
+	rl.DrawTextEx(
+		vend,
+		"Add Object",
+		vector.create(menuX + MENU_PADDING, menuY + MENU_PADDING),
+		18,
+		1,
+		ThemeColors.text
+	)
 
 	local menuRect = { x = menuX, y = menuY, width = ADD_MENU_WIDTH, height = menuHeight }
-	local itemsRect = { x = menuX, y = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT, width = ADD_MENU_WIDTH, height = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT }
+	local itemsRect = {
+		x = menuX,
+		y = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT,
+		width = ADD_MENU_WIDTH,
+		height = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT,
+	}
 
 	-- Handle mouse wheel scrolling on items area
 	if isMouseInRect(itemsRect, mousePos) then
@@ -641,7 +714,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	local dt = rl.GetFrameTime()
 	local maxScroll = math.max(0, contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT))
 	addMenuScrollTarget[instance] = math.clamp(addMenuScrollTarget[instance], 0, maxScroll)
-	addMenuScroll[instance] = addMenuScroll[instance] + (addMenuScrollTarget[instance] - addMenuScroll[instance]) * math.min(dt * 18, 1)
+	addMenuScroll[instance] = addMenuScroll[instance]
+		+ (addMenuScrollTarget[instance] - addMenuScroll[instance]) * math.min(dt * 18, 1)
 
 	-- Draw search textbox
 	local searchBoxX = menuX + MENU_PADDING
@@ -734,7 +808,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 				local itemKey = instance.UniqueId .. class
 				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] or 0
 				local hoverTarget = isHovered and 1 or 0
-				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] + (hoverTarget - addMenuHoverAnim[itemKey]) * math.min(dt * 15, 1)
+				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey]
+					+ (hoverTarget - addMenuHoverAnim[itemKey]) * math.min(dt * 15, 1)
 
 				if addMenuHoverAnim[itemKey] > 0.01 then
 					rl.DrawRectangle(
@@ -773,7 +848,14 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 				end
 
 				-- Draw text
-				rl.DrawTextEx(vend, class, vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3), 17, 1, ThemeColors.text)
+				rl.DrawTextEx(
+					vend,
+					class,
+					vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3),
+					17,
+					1,
+					ThemeColors.text
+				)
 			end
 		end
 	end
@@ -791,9 +873,7 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		local thumbHeight =
 			math.max(20, (scrollbarTrackHeight * (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)) / contentHeight)
 		local maxScroll = contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)
-		local thumbY = scrollbarY
-			+ 2
-			+ (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
+		local thumbY = scrollbarY + 2 + (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
 
 		-- Track
 		rl.DrawRectangleRounded(
@@ -855,22 +935,10 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 
 			-- Vertical line - only go up to the middle for last child, otherwise go through entire node
 			local lineEndY = isLastChild and (btnY + NODE_HEIGHT / 2) or (btnY + NODE_HEIGHT)
-			rl.DrawLine(
-				lineX,
-				btnY,
-				lineX,
-				lineEndY,
-				lineColor:ToRaylib(0.3)
-			)
+			rl.DrawLine(lineX, btnY, lineX, lineEndY, lineColor:ToRaylib(0.3))
 
 			-- Horizontal line connecting to node
-			rl.DrawLine(
-				lineX,
-				btnY + NODE_HEIGHT / 2,
-				btnX - 2,
-				btnY + NODE_HEIGHT / 2,
-				lineColor:ToRaylib(0.3)
-			)
+			rl.DrawLine(lineX, btnY + NODE_HEIGHT / 2, btnX - 2, btnY + NODE_HEIGHT / 2, lineColor:ToRaylib(0.3))
 		end
 		-- Determine visual state
 		local isHovered = isMouseInRect(rectData, mousePos)
@@ -1024,7 +1092,8 @@ local function drawScrollbar(windowData)
 
 	-- Handle track click
 	if mousePressed and isTrackHovered and not isThumbHovered then
-		local newThumbY = math.clamp(mousePos.y - thumbHeight / 2, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
+		local newThumbY =
+			math.clamp(mousePos.y - thumbHeight / 2, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
 		local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
 		scrollTarget = percent * maxScroll
 		scrollbarDrag.active = true
@@ -1034,7 +1103,11 @@ local function drawScrollbar(windowData)
 	-- Handle dragging
 	if scrollbarDrag.active then
 		if mouseDown then
-			local newThumbY = math.clamp(mousePos.y - scrollbarDrag.offset, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
+			local newThumbY = math.clamp(
+				mousePos.y - scrollbarDrag.offset,
+				scrollbarY + 4,
+				scrollbarY + 4 + trackHeight - thumbHeight
+			)
 			local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
 			scrollTarget = percent * maxScroll
 		else
@@ -1059,7 +1132,8 @@ local function drawScrollbar(windowData)
 	)
 
 	-- Thumb
-	local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.5, 0.5, 0.5) or Color3.new(0.4, 0.4, 0.4)
+	local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.5, 0.5, 0.5)
+		or Color3.new(0.4, 0.4, 0.4)
 	rl.DrawRectangleRounded(
 		structs.Rectangle:new({
 			x = scrollbarX,

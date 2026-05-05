@@ -196,8 +196,6 @@ function shader.SetShaderUniform(shaderName: string, uniformName: string, value:
 end
 
 function shader.SetShaderValueRaw(shaderObj: buffer, uniformName: string, value: any, uniformType: number)
-	local location = lib.GetShaderLocation(shaderObj, uniformName)
-
 	local valuePtr
 	if type(value) == "number" then
 		if uniformType == const.ShaderUniformDataType.SHADER_UNIFORM_INT then
@@ -264,7 +262,7 @@ function shader.SetShaderValueRaw(shaderObj: buffer, uniformName: string, value:
 		valuePtr = value
 	end
 
-	lib.SetShaderValue(shaderObj, location, valuePtr, uniformType)
+	return valuePtr
 end
 
 function shader.SetShaderTextureRaw(shaderObject, uniformName: string, texture: any)

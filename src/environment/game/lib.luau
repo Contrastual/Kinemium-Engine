@@ -49,7 +49,6 @@ function DataModel.new(RENDERER, ...)
 
 	local serviceInitStart = os.clock()
 	for _, service in pairs(services) do
-		print(service.name)
 		local addServiceStart = os.clock()
 		local name
 		local path
@@ -132,13 +131,28 @@ function DataModel.new(RENDERER, ...)
 	end
 
 	function self:GetService(v)
+		local callerEnv = getfenv(2)
+		local caller_capabilities = callerEnv.SecurityCapabilities
+		local service = self.Services[v]
+
 		for found, data in pairs(aliases) do
 			local lower = string.lower(v)
 			if table.find(data, lower) then
-				return found
+				service = found
+				break
 			end
 		end
-		return self.Services[v]
+
+		if
+			service
+			and service._SecurityCapabilities
+			and caller_capabilities.Value ~= service._SecurityCapabilities.Value
+		then
+			error("Permission denied for getting service " .. v)
+			return nil
+		end
+
+		return service
 	end
 
 	function self:AddService(ServiceObject)

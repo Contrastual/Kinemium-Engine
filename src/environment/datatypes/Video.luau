@@ -6,7 +6,7 @@ local ffi = zune.ffi
 
 function Video.new(url, length, framerate)
 	--TODO: Implement functionality using FFmpeg
-	
+
 	return self
 end
 

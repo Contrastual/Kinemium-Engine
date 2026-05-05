@@ -126,7 +126,9 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 				if descendant.Enabled == false then
 					return
 				end
-				ScriptContext.MakeThreadObject(descendant)
+				task.spawn(function()
+					ScriptContext.MakeThreadObject(descendant)
+				end)
 			end
 
 			object.DescendantAdded:Connect(function(descendant)
@@ -134,7 +136,9 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 					if descendant.Enabled == false then
 						return
 					end
-					ScriptContext.MakeThreadObject(descendant)
+					task.spawn(function()
+						ScriptContext.MakeThreadObject(descendant)
+					end)
 				end
 			end)
 
