@@ -394,6 +394,9 @@ local function serialize_object(object, obj_visited)
 	local resultChildren = result.ch
 	local childCount = 0
 	for i = 1, #children do
+		if children[i].ClassName == "Camera" then
+			continue
+		end
 		local serialized_child = serialize_object(children[i], obj_visited)
 		if serialized_child then
 			childCount += 1
@@ -521,9 +524,6 @@ SerializationService.InitRenderer = function(renderer, renderer_signal, datamode
 				end
 			end
 
-			-- Resolve instance references (__ref → actual object)
-			-- Use a stack-based walk instead of GetDescendants() to avoid
-			-- building a large intermediate array.
 			for i = 1, instanceCount do
 				local stack = { instances[i] }
 				local stackSize = 1

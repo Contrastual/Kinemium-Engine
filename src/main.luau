@@ -129,7 +129,6 @@ end
 
 -- DEPENDENCIES
 local Instance = require("@Instance")
-local filesystem = require("./modules/filesystem")
 local Enum = require("@EnumMap")
 local kilang = require("@kilang")
 local task = zune.task
@@ -144,7 +143,6 @@ if FlagExists("client") then
 	_G.IsClient = true
 elseif FlagExists("server") then
 	_G.IsServer = true
-	_G.IsHeadless = true
 	log("Running engine in headless mode (Server).")
 end
 
@@ -179,6 +177,7 @@ else
 	local autoScale3D = not FlagExists("native3d")
 	local max3DRenderPixels = tonumber(GetFlagValue("max3dpixels")) or 1280000
 	local min3DRenderScale = math.clamp(tonumber(GetFlagValue("min3dscale")) or 0.5, 0.1, 1)
+
 	renderer = KiRend.new({
 		width = 1000,
 		height = 800,

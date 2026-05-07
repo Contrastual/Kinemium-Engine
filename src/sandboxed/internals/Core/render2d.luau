@@ -1,4 +1,8 @@
 -- devcell
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
 
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local EngineSignal = game.EngineSignal

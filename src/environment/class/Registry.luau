@@ -86,10 +86,14 @@ function registry.new(class, renderer, datamodel, force)
 
 	local instance = Instance.new(class)
 	local success, result = pcall(function()
-		found.callback(instance, renderer, datamodel)
+		return found.callback(instance, renderer, datamodel)
 	end)
 	if not success then
 		_G.warn(`CLASS: Failed to create {class}: {result}`)
+	end
+	if success and result ~= nil and result ~= instance then
+		-- callback returned an existing singleton instance; do not register the new one
+		return result
 	end
 	table.insert(created, instance)
 	return instance

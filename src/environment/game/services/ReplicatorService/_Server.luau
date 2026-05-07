@@ -8,6 +8,7 @@ local PredictionBuffer = require("./PredictionBuffer")
 local CFrame = require("@CFrame")
 local InputActionService = require("../InputActionService/InputActionService")
 local AreaOfInterest = require("./AreaOfInterest")
+local Enum = require("@EnumMap")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
@@ -841,7 +842,6 @@ function Server.init(context)
 		local seenNetIds = {}
 		local seenWorkspaceSingletons = {}
 		local workspaceSingletonClasses = {
-			Camera = true,
 			Terrain = true,
 		}
 		local workspaceInst = game:GetService("Workspace")
@@ -1041,7 +1041,9 @@ function Server.init(context)
 		end
 
 		print(
-			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil}, blobMatch={clientBlobFingerprint == (game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil)})`
+			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil}, blobMatch={clientBlobFingerprint == (game.GetMetadata and game:GetMetadata(
+				"__blobFingerprint"
+			) or nil)})`
 		)
 		initialSyncCompleted[session.key] = true
 		pendingInitialInventorySync[session.key] = nil
@@ -1084,12 +1086,15 @@ function Server.init(context)
 		)
 
 		task.delay(INITIAL_INVENTORY_HANDSHAKE_TIMEOUT, function()
-			if not session or not session.key or initialSyncCompleted[session.key] or not pendingInitialInventorySync[session.key] then
+			if
+				not session
+				or not session.key
+				or initialSyncCompleted[session.key]
+				or not pendingInitialInventorySync[session.key]
+			then
 				return
 			end
-			warn(
-				`[Replicator][Server] Initial inventory handshake timed out for {session.key}`
-			)
+			warn(`[Replicator][Server] Initial inventory handshake timed out for {session.key}`)
 			completeInitialSyncWithoutCreate(session)
 		end)
 	end
@@ -1306,6 +1311,9 @@ function Server.init(context)
 	end
 
 	for _, object in ipairs(game:GetDescendants()) do
+		if object.ClassName == "Camera" then
+			continue
+		end
 		trackObject(object)
 		registerOwnershipRoot(object)
 		monitor(object)
@@ -1315,6 +1323,10 @@ function Server.init(context)
 	end
 
 	game.DescendantAdded:Connect(function(object)
+		if object.ClassName == "Camera" then
+			return
+		end
+
 		-- If this object was already in lookup it means a *parent's* DescendantAdded
 		-- handler fired first, called trackTree on the parent (which tracked all
 		-- descendants), and already scheduled sendCreate for the whole tree.
@@ -1601,6 +1613,7 @@ function Server.init(context)
 	runService:BindToSimulation(function(dt)
 		local currentTick = runService:GetSimulationTick()
 		local workspace = game:GetService("Workspace")
+
 		if not (workspace.ServerAuthority and workspace.ServerAuthority.AuthorityMode == Enum.AuthorityMode.Server) then
 			return
 		end

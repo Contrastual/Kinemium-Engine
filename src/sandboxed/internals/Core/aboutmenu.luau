@@ -12,6 +12,11 @@ local rect = require("@arect")
 local vend = KinemiumFontService.GetDefaultFontSmall()
 local renderer = KinemiumRaylib.GetRenderer()
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
 local logoIcon = KinemiumIconLoader.ToTexture(logoPath)
 

@@ -3,6 +3,11 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.GetLib()
@@ -40,6 +45,8 @@ if FlagExists("headless") then
 	return
 end
 
+local ScriptContext = game:GetService("ScriptContext")
+
 local box = textbox.new({
 	multiline = false,
 	placeholder = "Enter Kilang code here..",
@@ -51,9 +58,7 @@ local box = textbox.new({
 	autocompleteProvider = syntax_autocomplete,
 
 	onSubmit = function(new)
-		kilang:execute(new, {
-			SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-		})
+		ScriptContext.RunSource(new)
 	end,
 })
 
@@ -177,7 +182,7 @@ local propback, frame =
 
 window.stepped = function(windowData)
 	if windowData.title == "Console" then
-		if (windowData.x == 0 and windowData.y == 0 and frame.AbsolutePosition and frame.AbsolutePosition.X ~= 0) then
+		if windowData.x == 0 and windowData.y == 0 and frame.AbsolutePosition and frame.AbsolutePosition.X ~= 0 then
 			if frame.AbsolutePosition and frame.AbsoluteSize then
 				windowData.x = frame.AbsolutePosition.X
 				windowData.y = frame.AbsolutePosition.Y

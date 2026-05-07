@@ -155,8 +155,12 @@ end
 StateRegistry.NIL_VALUE = "__KINET_NIL__"
 
 local function areTablesEffectivelyEqual(a, b)
-	if a == b then return true end
-	if type(a) ~= "table" or type(b) ~= "table" then return false end
+	if a == b then
+		return true
+	end
+	if type(a) ~= "table" or type(b) ~= "table" then
+		return false
+	end
 	for k, v in pairs(a) do
 		if b[k] ~= v then
 			if type(v) == "table" and type(b[k]) == "table" then
@@ -180,10 +184,10 @@ function StateRegistry.ComputeDelta(baseline, current)
 	if not baseline then
 		return StateRegistry.CloneState(current)
 	end
-	
+
 	local delta = { id = current.id, type = current.type, __isDelta = true }
 	local hasChanges = false
-	
+
 	-- Create a set of all keys from both tables for single-pass iteration
 	local allKeys = {}
 	for k in pairs(current) do
@@ -196,12 +200,12 @@ function StateRegistry.ComputeDelta(baseline, current)
 			allKeys[k] = true
 		end
 	end
-	
+
 	-- Single iteration through all keys
 	for k in pairs(allKeys) do
 		local v = current[k]
 		local bv = baseline[k]
-		
+
 		if v == nil then
 			-- Key exists in baseline but not current (deletion)
 			delta[k] = StateRegistry.NIL_VALUE
@@ -230,7 +234,7 @@ function StateRegistry.ComputeDelta(baseline, current)
 			hasChanges = true
 		end
 	end
-	
+
 	if hasChanges then
 		return delta
 	end
@@ -245,7 +249,7 @@ function StateRegistry.ApplyDelta(baseline, delta)
 	if baseline == nil then
 		return nil
 	end
-	
+
 	local result = StateRegistry.CloneState(baseline)
 	for k, v in pairs(delta) do
 		if k == "id" or k == "type" or k == "__isDelta" then
@@ -259,7 +263,7 @@ function StateRegistry.ApplyDelta(baseline, delta)
 			result[k] = v
 		end
 	end
-	
+
 	return result
 end
 

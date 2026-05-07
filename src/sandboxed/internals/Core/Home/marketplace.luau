@@ -1,3 +1,8 @@
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local raylib = require("@raylib")
 local lib = raylib.lib
 local aereon = import("@Aereon")

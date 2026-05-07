@@ -508,13 +508,21 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			print(`[NetworkService] ClientReady handler fired`)
 			if not session or not session.player then
 				warn("[NetworkService] ClientReady received but session or player is missing")
-				warn(`[NetworkService]   session={tostring(session)}, session.player={session and tostring(session.player) or "nil"}`)
+				warn(
+					`[NetworkService]   session={tostring(session)}, session.player={session and tostring(
+						session.player
+					) or "nil"}`
+				)
 				return
 			end
 			print(`[NetworkService] Client {session.key} is ready — loading character for {session.player.Name}`)
 			task.spawn(function()
 				local players = datamodel:GetService("Players")
-				print(`[NetworkService] Players service: {tostring(players)}, LoadCharacter type: {type(players and players.LoadCharacter)}`)
+				print(
+					`[NetworkService] Players service: {tostring(players)}, LoadCharacter type: {type(
+						players and players.LoadCharacter
+					)}`
+				)
 				if players and type(players.LoadCharacter) == "function" then
 					print(`[NetworkService] Calling Players:LoadCharacter for {session.player.Name}...`)
 					local ok, err = pcall(function()

@@ -16,7 +16,9 @@ if zembed.IsEmbedded() then
 end
 
 local settings = {
-	["luau-lsp.types.definitionFiles"] = { "" },
+	["luau-lsp.types.definitionFiles"] = {
+		["kinemium"] = "k.d.luau",
+	},
 }
 
 local function buildProjectConfig(name, iconPath, description)

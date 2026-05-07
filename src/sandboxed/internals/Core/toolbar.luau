@@ -1,11 +1,15 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local KinemiumFontService = game:GetService("KinemiumFontService")
 
 local ProjectLoaderService = game:GetService("ProjectLoaderService")
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.GetLib()
 local renderer = KinemiumRaylib.GetRenderer()

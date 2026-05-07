@@ -101,10 +101,16 @@ BlobLoader.InitRenderer = function(renderer, renderer_signal, datamodel)
 		datamodel:SetMetadata("__replicatorSuppressRuntimeCreate", count)
 	end
 
+	-- Classes that should never be merged or attached from a blob.
+	-- Camera is client-side only; merging serialized props corrupts it.
+	local SKIP_BLOB_CLASSES = {
+		Camera = true,
+	}
+
 	local MERGE_SINGLETON_CHILDREN = {
 		Workspace = {
-			Camera = true,
 			Terrain = true,
+			Camera = true,
 		},
 	}
 
@@ -146,13 +152,25 @@ BlobLoader.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 	local function attachChildren(sourceRoot, targetRoot)
 		for _, child in ipairs(sourceRoot:GetChildren()) do
+			-- Preserve singleton children that already exist in the live service.
+			-- Camera is handled here so the live singleton is kept and the blob copy
+			-- is discarded without destroying the real one.
 			local singletonChildren = MERGE_SINGLETON_CHILDREN[targetRoot.ClassName]
 			local childName = child.Name
 			local existing = singletonChildren and singletonChildren[child.ClassName] and targetRoot:FindFirstChild(childName)
 			if existing and existing.ClassName == child.ClassName then
-				mergeProps(child, existing)
+				if child.ClassName ~= "Camera" then
+					mergeProps(child, existing)
+				end
 				child:Destroy()
 				print("Merged ", childName)
+				continue
+			end
+
+			-- Skip classes that should never be replicated/merged (e.g. Camera outside Workspace)
+			if SKIP_BLOB_CLASSES[child.ClassName] then
+				child:Destroy()
+				print("Skipped (non-replicable) ", child.Name)
 				continue
 			end
 

@@ -10,7 +10,6 @@ local ffi = zune.ffi
 
 KinemiumFFI.InitRenderer = function(renderer, renderer_signal)
 	KinemiumFFI:SetProperties({
-		_SecurityCapabilities = Enum.SecurityCapabilities.Internals,
 
 		GetLib = function()
 			return ffi
@@ -18,7 +17,9 @@ KinemiumFFI.InitRenderer = function(renderer, renderer_signal)
 
 		ImportLibFromMemory = function(name, contents, funcs)
 			local path = `./.temp/{name}.{zune.ffi.suffix}`
-			fs.writeFile(path, contents)
+			if fs.stat(path).kind == "none" then
+				fs.writeFile(path, contents)
+			end
 
 			return ffi.dlopen(path, funcs)
 		end,
